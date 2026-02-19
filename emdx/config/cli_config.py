@@ -142,6 +142,38 @@ def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
     return alias
 
 
+def get_model_display_name(model: str | None, cli_tool: CliTool | None = None) -> str:
+    """Get a short display name for a model.
+
+    Reverse-resolves full model names to short aliases (e.g. "claude-opus-4-6" → "opus").
+    Falls back to the full model string if no alias matches.
+
+    Args:
+        model: Model name or alias (None uses default).
+        cli_tool: CLI tool context (defaults to Claude).
+
+    Returns:
+        Short display name like "opus" or "sonnet".
+    """
+    if cli_tool is None:
+        cli_tool = get_default_cli_tool()
+    config = CLI_CONFIGS[cli_tool]
+
+    if model is None:
+        model = config.default_model
+
+    # If it's already a known alias, return it
+    if model in MODEL_ALIASES:
+        return model
+
+    # Reverse lookup: find alias whose resolved name matches
+    for alias, cli_map in MODEL_ALIASES.items():
+        if cli_map.get(cli_tool.value) == model:
+            return alias
+
+    return model
+
+
 def get_available_models(cli_tool: CliTool) -> list[str]:
     """Get list of known models for a CLI tool.
 
