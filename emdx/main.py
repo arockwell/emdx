@@ -29,6 +29,7 @@ LAZY_SUBCOMMANDS = {
     "ai": "emdx.commands.ask:app",
     "distill": "emdx.commands.distill:app",
     "compact": "emdx.commands.compact:app",
+    "explore": "emdx.commands.explore:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -38,6 +39,7 @@ LAZY_HELP = {
     "ai": "AI-powered Q&A and semantic search",
     "distill": "Distill KB content into audience-aware summaries",
     "compact": "Compact related documents through AI-powered synthesis",
+    "explore": "Explore what your knowledge base knows",
 }
 
 
