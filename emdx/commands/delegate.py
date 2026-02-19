@@ -37,7 +37,7 @@ from pathlib import Path
 
 import typer
 
-from ..config.cli_config import get_model_display_name
+from ..config.cli_config import resolve_model_for_tag
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..database.documents import get_document, save_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
@@ -471,9 +471,8 @@ def _run_single(
     """Run a single task via UnifiedExecutor. Returns SingleResult."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
-    # Resolve model display name and add model tag
-    model_display = get_model_display_name(model)
-    model_tag = f"model:{model_display}"
+    # Resolve model and add tag with alias + version (e.g. model:opus/claude-opus-4-6)
+    model_tag = f"model:{resolve_model_for_tag(model)}"
     if model_tag not in tags:
         tags = [*tags, model_tag]
 

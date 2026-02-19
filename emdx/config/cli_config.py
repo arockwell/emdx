@@ -174,6 +174,31 @@ def get_model_display_name(model: str | None, cli_tool: CliTool | None = None) -
     return model
 
 
+def resolve_model_for_tag(model: str | None, cli_tool: CliTool | None = None) -> str:
+    """Resolve a model spec into a tag value with alias and full version.
+
+    Returns "alias/full-model-id" when an alias exists (e.g. "opus/claude-opus-4-6"),
+    or just the full model id when no alias maps to it.
+
+    Args:
+        model: Model name, alias, or None (uses default).
+        cli_tool: CLI tool context (defaults to Claude).
+    """
+    if cli_tool is None:
+        cli_tool = get_default_cli_tool()
+    config = CLI_CONFIGS[cli_tool]
+
+    if model is None:
+        model = config.default_model
+
+    display = get_model_display_name(model, cli_tool)
+    full = resolve_model_alias(model, cli_tool) if model in MODEL_ALIASES else model
+
+    if display != full:
+        return f"{display}/{full}"
+    return full
+
+
 def get_available_models(cli_tool: CliTool) -> list[str]:
     """Get list of known models for a CLI tool.
 
