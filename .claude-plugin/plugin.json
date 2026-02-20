@@ -1,0 +1,12 @@
+{
+  "name": "emdx",
+  "version": "0.17.0",
+  "description": "Knowledge base skills for Claude Code. Save research, delegate parallel work, and maintain session memory across conversations.",
+  "author": {
+    "name": "Alex Rockwell"
+  },
+  "homepage": "https://github.com/arockwell/emdx",
+  "repository": "https://github.com/arockwell/emdx",
+  "license": "MIT",
+  "keywords": ["knowledge-base", "research", "delegate", "persistence", "memory"]
+}
