@@ -96,6 +96,14 @@ bottom for adding items to groups.
 - `DocumentItem.has_children` field
 - `DocumentItem.load_children()` implementation
 
+**Superseded documents — hide, don't nest:**
+- Documents with `parent_id IS NOT NULL` (i.e., old versions that were superseded)
+  should be **filtered out** of the flat table, not shown as children
+- The data loader query should add `WHERE parent_id IS NULL` to only show
+  current/top-level documents
+- This is already the default behavior of `list_documents(parent_id=None)` —
+  just keep using it without the expand-children path
+
 ## Implementation Plan
 
 ### Phase 1: Replace Tree with DataTable (core UI change)
