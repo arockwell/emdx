@@ -71,6 +71,34 @@ def list_cmd() -> None:
 
 
 @app.command()
+def delete(
+    key: str = typer.Argument(..., help="Category key to delete (e.g. SEC)"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Delete even if open/active tasks exist"
+    ),
+) -> None:
+    """Delete a category and unlink associated tasks.
+
+    Tasks are NOT deleted — their epic_key/epic_seq are cleared.
+    Refuses to delete if open/active tasks exist unless --force is used.
+
+    Examples:
+        emdx task cat delete OLDCAT
+        emdx task cat delete OLDCAT --force
+    """
+    try:
+        result = categories.delete_category(key, force=force)
+        console.print(f"[green]Deleted category {key.upper()}[/green]")
+        if result["tasks_cleared"]:
+            console.print(f"[yellow]Unlinked {result['tasks_cleared']} task(s)[/yellow]")
+        if result["epics_cleared"]:
+            console.print(f"[yellow]Unlinked {result['epics_cleared']} epic(s)[/yellow]")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command()
 def adopt(
     key: str = typer.Argument(..., help="Category key to adopt tasks for"),
     name: str | None = typer.Option(None, "--name", "-n", help="Set category name"),
