@@ -404,3 +404,213 @@ def clear_index(
     count = service.clear_index()
 
     console.print(f"[green]Cleared {count} embeddings[/green]")
+
+
+@app.command("links")
+def show_links(
+    doc_id: int = typer.Argument(..., help="Document ID to show links for"),
+    depth: int = typer.Option(
+        1, "--depth", "-d", help="Traversal depth (1=direct, 2=two hops)"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """
+    Show document links (auto-detected and manual).
+
+    Displays all documents linked to the given document, with
+    similarity scores and link method.
+
+    Examples:
+        emdx ai links 42
+        emdx ai links 42 --depth 2
+        emdx ai links 42 --json
+    """
+    import json
+
+    from ..database import document_links
+
+    links = document_links.get_links_for_document(doc_id)
+
+    if json_output:
+        items = []
+        for link in links:
+            if link["source_doc_id"] == doc_id:
+                other_id = link["target_doc_id"]
+                other_title = link["target_title"]
+            else:
+                other_id = link["source_doc_id"]
+                other_title = link["source_title"]
+            items.append({
+                "doc_id": other_id,
+                "title": other_title,
+                "similarity": link["similarity_score"],
+                "method": link["method"],
+            })
+        print(json.dumps({"doc_id": doc_id, "links": items}, indent=2))
+        return
+
+    if not links:
+        console.print(f"[yellow]No links found for document #{doc_id}[/yellow]")
+        return
+
+    # Get source document title
+    from ..database import db
+
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT title FROM documents WHERE id = ?", (doc_id,)
+        )
+        row = cursor.fetchone()
+        source_title = row[0] if row else f"Document #{doc_id}"
+
+    console.print(f"[bold]Links for #{doc_id} '{source_title}':[/bold]\n")
+
+    table = Table()
+    table.add_column("ID", style="cyan", width=6)
+    table.add_column("Score", style="green", width=6)
+    table.add_column("Title", width=50)
+    table.add_column("Method", style="dim", width=8)
+
+    for link in links:
+        if link["source_doc_id"] == doc_id:
+            other_id = link["target_doc_id"]
+            other_title = link["target_title"]
+        else:
+            other_id = link["source_doc_id"]
+            other_title = link["source_title"]
+        score = f"{link['similarity_score']:.0%}"
+        table.add_row(str(other_id), score, other_title, link["method"])
+
+    console.print(table)
+
+    # Depth 2: show links of linked documents
+    if depth >= 2:
+        seen = {doc_id}
+        for link in links:
+            if link["source_doc_id"] == doc_id:
+                neighbor_id = link["target_doc_id"]
+            else:
+                neighbor_id = link["source_doc_id"]
+            seen.add(neighbor_id)
+
+        for link in links:
+            if link["source_doc_id"] == doc_id:
+                neighbor_id = link["target_doc_id"]
+                neighbor_title = link["target_title"]
+            else:
+                neighbor_id = link["source_doc_id"]
+                neighbor_title = link["source_title"]
+
+            hop2_links = document_links.get_links_for_document(neighbor_id)
+            hop2_new = []
+            for h in hop2_links:
+                if h["source_doc_id"] == neighbor_id:
+                    h_other = h["target_doc_id"]
+                else:
+                    h_other = h["source_doc_id"]
+                if h_other not in seen:
+                    hop2_new.append(h)
+                    seen.add(h_other)
+
+            if hop2_new:
+                console.print(
+                    f"\n[dim]  via #{neighbor_id} "
+                    f"'{neighbor_title}':[/dim]"
+                )
+                for h in hop2_new:
+                    if h["source_doc_id"] == neighbor_id:
+                        h_id = h["target_doc_id"]
+                        h_title = h["target_title"]
+                    else:
+                        h_id = h["source_doc_id"]
+                        h_title = h["source_title"]
+                    console.print(
+                        f"    [cyan]#{h_id}[/cyan] {h_title} "
+                        f"[dim]({h['similarity_score']:.0%})[/dim]"
+                    )
+
+
+@app.command("link")
+def create_link(
+    doc_id: int = typer.Argument(..., help="Document ID to create links for"),
+    all_docs: bool = typer.Option(
+        False, "--all", help="Backfill links for all indexed documents"
+    ),
+    threshold: float = typer.Option(
+        0.5, "--threshold", "-t", help="Minimum similarity (0-1)"
+    ),
+    max_links: int = typer.Option(
+        5, "--max", "-m", help="Maximum links per document"
+    ),
+) -> None:
+    """
+    Create semantic links for a document (or all documents).
+
+    Uses the embedding index to find similar documents and create
+    links. Requires ``emdx ai index`` to be run first.
+
+    Examples:
+        emdx ai link 42
+        emdx ai link 0 --all
+        emdx ai link 42 --threshold 0.6 --max 3
+    """
+    try:
+        from ..services.link_service import auto_link_all, auto_link_document
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    if all_docs:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Linking all documents...", total=None)
+            total = auto_link_all(threshold=threshold, max_links=max_links)
+            progress.update(task, completed=True)
+        console.print(f"[green]Created {total} links across all documents[/green]")
+    else:
+        result = auto_link_document(
+            doc_id, threshold=threshold, max_links=max_links
+        )
+        if result.links_created > 0:
+            console.print(
+                f"[green]Created {result.links_created} link(s) "
+                f"for document #{doc_id}[/green]"
+            )
+            for lid, score in zip(
+                result.linked_doc_ids, result.scores, strict=False
+            ):
+                console.print(f"  [cyan]#{lid}[/cyan] ({score:.0%})")
+        else:
+            console.print(
+                f"[yellow]No similar documents found above "
+                f"{threshold:.0%} threshold[/yellow]"
+            )
+
+
+@app.command("unlink")
+def remove_link(
+    source_id: int = typer.Argument(..., help="First document ID"),
+    target_id: int = typer.Argument(..., help="Second document ID"),
+) -> None:
+    """
+    Remove a link between two documents.
+
+    Removes the link in either direction between the two documents.
+
+    Examples:
+        emdx ai unlink 42 57
+    """
+    from ..database import document_links
+
+    deleted = document_links.delete_link(source_id, target_id)
+    if deleted:
+        console.print(
+            f"[green]Removed link between #{source_id} and #{target_id}[/green]"
+        )
+    else:
+        console.print(
+            f"[yellow]No link found between #{source_id} and #{target_id}[/yellow]"
+        )

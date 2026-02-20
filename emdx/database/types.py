@@ -179,6 +179,30 @@ class MostViewedDoc(TypedDict):
     access_count: int
 
 
+class DocumentLinkRow(TypedDict):
+    """A link between two documents from the document_links table."""
+
+    id: int
+    source_doc_id: int
+    target_doc_id: int
+    similarity_score: float
+    created_at: str | None
+    method: str
+
+
+class DocumentLinkDetail(TypedDict):
+    """A document link with joined document titles for display."""
+
+    id: int
+    source_doc_id: int
+    source_title: str
+    target_doc_id: int
+    target_title: str
+    similarity_score: float
+    created_at: str | None
+    method: str
+
+
 class DatabaseStats(TypedDict, total=False):
     """Statistics returned by get_stats."""
 

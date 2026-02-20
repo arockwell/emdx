@@ -73,6 +73,25 @@ class DatabaseForTesting:
         """
         )
 
+        # Create document_links table
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS document_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_doc_id INTEGER NOT NULL,
+                target_doc_id INTEGER NOT NULL,
+                similarity_score REAL NOT NULL DEFAULT 0.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                method TEXT NOT NULL DEFAULT 'auto',
+                FOREIGN KEY (source_doc_id)
+                    REFERENCES documents(id) ON DELETE CASCADE,
+                FOREIGN KEY (target_doc_id)
+                    REFERENCES documents(id) ON DELETE CASCADE,
+                UNIQUE(source_doc_id, target_doc_id)
+            )
+            """
+        )
+
         conn.commit()
 
         if self.db_path != ":memory:":
