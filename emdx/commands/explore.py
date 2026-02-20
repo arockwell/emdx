@@ -18,7 +18,9 @@ from typing import TYPE_CHECKING, Any, TypedDict
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from ..database import db
 
@@ -90,6 +92,7 @@ class ExploreOutput(TypedDict, total=False):
     topics: list[TopicCluster]
     singletons: list[SingletonDoc]
     tag_landscape: list[TagCount]
+    gaps: list[str]
     questions: list[TopicQuestions]
 
 
@@ -152,13 +155,17 @@ def _compute_tfidf(
     """Compute TF-IDF matrix and return (matrix, doc_ids, vectorizer).
 
     Returns the vectorizer so we can extract feature names for topic labels.
+    Title text is repeated to boost its weight in clustering and label extraction.
     """
     _require_sklearn()
 
     corpus = []
     doc_ids = []
     for doc in documents:
-        text = f"{doc['title']} {doc['content']}"
+        # Repeat title 3x to boost its weight — titles are human-curated
+        # summaries and produce better topic labels than code content
+        title = doc["title"]
+        text = f"{title} {title} {title} {doc['content']}"
         corpus.append(text)
         doc_ids.append(doc["id"])
 
@@ -231,6 +238,85 @@ def _find_clusters(
 # ── Topic label extraction ────────────────────────────────────────────
 
 
+# Terms that are too common in a coding KB to be useful as topic labels.
+# These dominate TF-IDF scores but carry no topical meaning.
+_CODE_NOISE_TERMS = frozenset(
+    {
+        # Python keywords/builtins
+        "py",
+        "self",
+        "str",
+        "int",
+        "def",
+        "return",
+        "none",
+        "true",
+        "false",
+        "class",
+        "import",
+        "list",
+        "dict",
+        "type",
+        "set",
+        "bool",
+        "float",
+        "args",
+        "kwargs",
+        "init",
+        "super",
+        "len",
+        "print",
+        "open",
+        "file",
+        "value",
+        "key",
+        "name",
+        "data",
+        "result",
+        "output",
+        "input",
+        # Common code patterns
+        "error",
+        "test",
+        "tests",
+        "line",
+        "lines",
+        "code",
+        "added",
+        "removed",
+        "fix",
+        "fixed",
+        "use",
+        "using",
+        "used",
+        "new",
+        "old",
+        "add",
+        "check",
+        "run",
+        "make",
+        "like",
+        "get",
+        "need",
+        "just",
+    }
+)
+
+
+def _is_noise_term(term: str) -> bool:
+    """Check if a term is code noise that shouldn't be a topic label."""
+    # Exact match against noise set
+    if term in _CODE_NOISE_TERMS:
+        return True
+    # Bare filenames (e.g., "models py", "explore py")
+    if term.endswith(" py") or term.endswith(".py"):
+        return True
+    # Pure numbers or timestamps (e.g., "07", "2025", "23")
+    if term.replace(" ", "").isdigit():
+        return True
+    return False
+
+
 def _extract_topic_labels(
     tfidf_matrix: Any,
     doc_ids: list[int],
@@ -241,7 +327,8 @@ def _extract_topic_labels(
     """Extract top TF-IDF terms for each cluster as topic labels.
 
     For each cluster, sum the TF-IDF vectors of its member documents
-    and pick the highest-weighted terms.
+    and pick the highest-weighted terms. Bigrams are boosted over unigrams
+    and common code tokens are filtered out.
     """
     import numpy as np
 
@@ -256,13 +343,24 @@ def _extract_topic_labels(
             continue
 
         # Sum TF-IDF vectors for the cluster
-        cluster_vector = np.asarray(
-            tfidf_matrix[indices].sum(axis=0)
-        ).flatten()
+        cluster_vector = np.asarray(tfidf_matrix[indices].sum(axis=0)).flatten()
 
-        # Get top terms
-        top_indices = cluster_vector.argsort()[::-1][:top_n]
-        top_terms = [str(feature_names[i]) for i in top_indices if cluster_vector[i] > 0]
+        # Score each term: boost bigrams 2x, filter noise
+        scored: list[tuple[float, str]] = []
+        for i in range(len(feature_names)):
+            score = cluster_vector[i]
+            if score <= 0:
+                continue
+            term = str(feature_names[i])
+            if _is_noise_term(term):
+                continue
+            # Bigrams are more descriptive — boost them
+            if " " in term:
+                score *= 2.0
+            scored.append((score, term))
+
+        scored.sort(reverse=True)
+        top_terms = [term for _, term in scored[:top_n]]
         labels.append(top_terms if top_terms else ["misc"])
 
     return labels
@@ -298,9 +396,7 @@ def _build_topic_clusters(
         top_tags = [t for t, _ in tag_counts.most_common(5)]
 
         # Collect projects
-        projects = sorted({
-            doc["project"] for doc in cluster_docs if doc["project"]
-        })
+        projects = sorted({doc["project"] for doc in cluster_docs if doc["project"]})
 
         # Date range
         dates = [doc["created_at"] for doc in cluster_docs if doc["created_at"]]
@@ -308,9 +404,7 @@ def _build_topic_clusters(
         oldest = min(dates) if dates else None
 
         # Staleness check
-        access_dates = [
-            doc["accessed_at"] for doc in cluster_docs if doc["accessed_at"]
-        ]
+        access_dates = [doc["accessed_at"] for doc in cluster_docs if doc["accessed_at"]]
         stale = False
         if access_dates:
             most_recent_access = max(access_dates)
@@ -327,20 +421,22 @@ def _build_topic_clusters(
         # Build label string
         label = ", ".join(terms[:3])
 
-        topics.append(TopicCluster(
-            label=label,
-            top_terms=terms,
-            doc_count=len(cluster_docs),
-            total_chars=sum(len(doc["content"]) for doc in cluster_docs),
-            doc_ids=cluster,
-            titles=[doc["title"] for doc in cluster_docs],
-            tags=top_tags,
-            projects=projects,
-            newest=newest,
-            oldest=oldest,
-            avg_views=round(avg_views, 1),
-            stale=stale,
-        ))
+        topics.append(
+            TopicCluster(
+                label=label,
+                top_terms=terms,
+                doc_count=len(cluster_docs),
+                total_chars=sum(len(doc["content"]) for doc in cluster_docs),
+                doc_ids=cluster,
+                titles=[doc["title"] for doc in cluster_docs],
+                tags=top_tags,
+                projects=projects,
+                newest=newest,
+                oldest=oldest,
+                avg_views=round(avg_views, 1),
+                stale=stale,
+            )
+        )
 
     return topics
 
@@ -360,10 +456,13 @@ def _generate_questions(topics: list[TopicCluster]) -> list[TopicQuestions]:
         tags_str = ", ".join(topic["tags"]) if topic["tags"] else "none"
 
         prompt = (
-            "Given the following documents in a knowledge base cluster, "
-            "generate 3-5 specific questions that someone could answer "
-            "using these documents. Return ONLY the questions, one per line, "
-            "no numbering or bullets.\n\n"
+            "A developer's knowledge base has a cluster of documents about "
+            "a topic. Based on the document titles below, generate 3-5 "
+            "practical questions that a developer working in this area "
+            "would ask — questions about HOW to do things, best practices, "
+            "or trade-offs. Focus on broadly useful knowledge, not questions "
+            "about the documents themselves or their metadata. "
+            "Return ONLY the questions, one per line, no numbering or bullets.\n\n"
             f"Topic terms: {topic['label']}\n"
             f"Tags: {tags_str}\n"
             f"Document titles:\n{titles_str}\n"
@@ -374,7 +473,8 @@ def _generate_questions(topics: list[TopicCluster]) -> list[TopicQuestions]:
             prompt=prompt,
             title=f"explore-questions: {topic['label']}",
             allowed_tools=[],
-            timeout_seconds=60,
+            timeout_seconds=120,
+            model="sonnet",
         )
 
         try:
@@ -385,20 +485,26 @@ def _generate_questions(topics: list[TopicCluster]) -> list[TopicQuestions]:
                     for line in result.output_content.strip().splitlines()
                     if line.strip() and not line.strip().startswith("#")
                 ]
-                results.append(TopicQuestions(
-                    topic=topic["label"],
-                    questions=questions[:5],
-                ))
+                results.append(
+                    TopicQuestions(
+                        topic=topic["label"],
+                        questions=questions[:5],
+                    )
+                )
             else:
-                results.append(TopicQuestions(
-                    topic=topic["label"],
-                    questions=[f"(generation failed: {result.output_content or 'no output'})"],
-                ))
+                results.append(
+                    TopicQuestions(
+                        topic=topic["label"],
+                        questions=[f"(generation failed: {result.output_content or 'no output'})"],
+                    )
+                )
         except Exception as e:
-            results.append(TopicQuestions(
-                topic=topic["label"],
-                questions=[f"(error: {e})"],
-            ))
+            results.append(
+                TopicQuestions(
+                    topic=topic["label"],
+                    questions=[f"(error: {e})"],
+                )
+            )
 
     return results
 
@@ -424,14 +530,14 @@ def _detect_gaps(
     thin = [t for t in topics if t["doc_count"] <= 2]
     if thin:
         for t in thin:
-            gaps.append(f"Thin coverage: \"{t['label']}\" has only {t['doc_count']} doc(s)")
+            gaps.append(f'Thin coverage: "{t["label"]}" has only {t["doc_count"]} doc(s)')
 
     # Stale topics
     stale = [t for t in topics if t["stale"]]
     if stale:
         for t in stale:
             gaps.append(
-                f"Stale topic: \"{t['label']}\" ({t['doc_count']} docs) "
+                f'Stale topic: "{t["label"]}" ({t["doc_count"]} docs) '
                 f"not accessed in >{STALE_THRESHOLD_DAYS} days"
             )
 
@@ -449,8 +555,7 @@ def _detect_gaps(
     try:
         with db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id, title FROM tasks "
-                "WHERE type = 'epic' AND status IN ('open', 'active')"
+                "SELECT id, title FROM tasks WHERE type = 'epic' AND status IN ('open', 'active')"
             )
             epics = cursor.fetchall()
 
@@ -458,13 +563,10 @@ def _detect_gaps(
             epic_title = epic["title"].lower()
             # Check if any topic label overlaps with epic title words
             epic_words = set(epic_title.split())
-            matched = any(
-                epic_words & set(t["label"].lower().split(", "))
-                for t in topics
-            )
+            matched = any(epic_words & set(t["label"].lower().split(", ")) for t in topics)
             if not matched:
                 gaps.append(
-                    f"Epic without docs: \"{epic['title']}\" "
+                    f'Epic without docs: "{epic["title"]}" '
                     f"(task #{epic['id']}) has no matching topic cluster"
                 )
     except Exception:
@@ -517,8 +619,7 @@ def _display_topic_map(
 
     if singletons:
         console.print(
-            f"\n[dim]{len(singletons)} unclustered document(s) "
-            f"(no strong topic grouping)[/dim]"
+            f"\n[dim]{len(singletons)} unclustered document(s) (no strong topic grouping)[/dim]"
         )
 
 
@@ -535,11 +636,22 @@ def _display_gaps(gaps: list[str]) -> None:
 
 def _display_questions(topic_questions: list[TopicQuestions]) -> None:
     """Display generated questions per topic."""
-    console.print("\n[bold]Answerable Questions:[/bold]")
+    console.print()
     for tq in topic_questions:
-        console.print(f"\n  [cyan]{tq['topic']}[/cyan]")
-        for q in tq["questions"]:
-            console.print(f"    ? {q}")
+        lines = Text()
+        for i, q in enumerate(tq["questions"], 1):
+            if i > 1:
+                lines.append("\n")
+            lines.append(f" {i}. ", style="bold cyan")
+            lines.append(q)
+        panel = Panel(
+            lines,
+            title=f"[bold]{tq['topic']}[/bold]",
+            title_align="left",
+            border_style="cyan",
+            padding=(0, 1),
+        )
+        console.print(panel)
 
 
 def _display_plain_topic_map(
@@ -548,10 +660,7 @@ def _display_plain_topic_map(
     total_docs: int,
 ) -> None:
     """Display the topic map as plain text (no Rich markup)."""
-    print(
-        f"Knowledge Map — {total_docs} docs, {len(topics)} topics, "
-        f"{len(singletons)} unclustered"
-    )
+    print(f"Knowledge Map — {total_docs} docs, {len(topics)} topics, {len(singletons)} unclustered")
     print()
 
     for i, topic in enumerate(topics, 1):
@@ -581,11 +690,10 @@ def _display_plain_gaps(gaps: list[str]) -> None:
 
 def _display_plain_questions(topic_questions: list[TopicQuestions]) -> None:
     """Display questions as plain text."""
-    print("\nAnswerable Questions:")
     for tq in topic_questions:
-        print(f"\n  {tq['topic']}")
-        for q in tq["questions"]:
-            print(f"    ? {q}")
+        print(f"\n--- {tq['topic']} ---")
+        for i, q in enumerate(tq["questions"], 1):
+            print(f"  {i}. {q}")
 
 
 # ── Main command ──────────────────────────────────────────────────────
@@ -594,7 +702,7 @@ def _display_plain_questions(topic_questions: list[TopicQuestions]) -> None:
 @app.command()
 def explore(
     threshold: float = typer.Option(
-        0.3,
+        0.5,
         "--threshold",
         "-t",
         help="Similarity threshold for clustering (0.0-1.0, lower = more grouping)",
@@ -658,11 +766,15 @@ def explore(
     documents = _fetch_all_documents()
     if not documents:
         if json_output:
-            print(json.dumps({
-                "total_documents": 0,
-                "topic_count": 0,
-                "topics": [],
-            }))
+            print(
+                json.dumps(
+                    {
+                        "total_documents": 0,
+                        "topic_count": 0,
+                        "topics": [],
+                    }
+                )
+            )
         else:
             msg = "No documents found in knowledge base"
             if rich_output:
@@ -673,12 +785,16 @@ def explore(
 
     if len(documents) < 2:
         if json_output:
-            print(json.dumps({
-                "total_documents": len(documents),
-                "topic_count": 0,
-                "topics": [],
-                "message": "Need at least 2 documents for clustering",
-            }))
+            print(
+                json.dumps(
+                    {
+                        "total_documents": len(documents),
+                        "topic_count": 0,
+                        "topics": [],
+                        "message": "Need at least 2 documents for clustering",
+                    }
+                )
+            )
         else:
             msg = "Need at least 2 documents for topic clustering"
             if rich_output:
@@ -749,9 +865,11 @@ def explore(
 
         all_tags = list_all_tags()
         output["tag_landscape"] = [
-            TagCount(name=t["name"], count=t["count"])
-            for t in all_tags[:20]
+            TagCount(name=t["name"], count=t["count"]) for t in all_tags[:20]
         ]
+
+        if gaps:
+            output["gaps"] = gap_list
 
         if questions:
             output["questions"] = topic_questions
