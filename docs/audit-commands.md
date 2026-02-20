@@ -31,7 +31,7 @@ Comprehensive audit of all top-level commands. For each: justification, verdict,
 | `ai` (entire group) | 10 subcommands, most redundant or infrastructure. `ai search` = `find --mode semantic`. `ai ask`/`ai context` are the only unique user features. Index/link management is maintenance. | See "Folding ai" below |
 | `review` | Tag-based workflow (`needs-review` → `reviewed`/`rejected`). This is just a specialized `find --tags` + `tag add` workflow. 4 subcommands to replace something tags already do. | `find --tags needs-review` + `tag add 42 reviewed`. Drop the command. |
 | `touch` | Resets staleness timer. Alias for `stale touch` that's also a top-level command. Confusing duplication. | Keep only under `stale touch` (already exists as `stale` subcommand in stale.py), remove the top-level alias |
-| `gist` | Creates GitHub gist from existing doc. Very niche. `save` already has `--gist` inline. | Use `save --gist` or `view 42 \| gh gist create`. Drop standalone command. |
+| ~~`gist`~~ | ~~Creates GitHub gist from existing doc.~~ | **Keep.** Frequently used to share good docs. Standalone `gist` command is more ergonomic than `save --gist` for existing docs. Consider removing the inline `--gist` flags from `save` to reduce its flag count — `save` creates docs, `gist` shares them. |
 | `version` | `--version` flag already exists on the main app callback. Redundant. | `emdx --version` already works. Drop the `version` subcommand. |
 | `task note` | Docs say it's "shorthand for `task log`." One command shouldn't be a pure alias of another. | Drop. Use `task log`. |
 | `distill` | AI-powered audience synthesis. Cool idea but niche. Overlaps with `delegate "summarize docs tagged X for audience Y"`. | Drop. Same result via delegate with a prompt. |
@@ -123,7 +123,7 @@ Option (a) is pragmatic. The ship has sailed — rewriting every command's outpu
 
 Current flags: `--file`, `--title`, `--project`, `--tags`, `--group`, `--group-role`, `--auto-tag`, `--suggest-tags`, `--supersede`, `--gist`, `--public`, `--secret`, `--copy`, `--open`, `--auto-link`, `--task`, `--done`.
 
-**Fix:** If `gist` is cut as a standalone command, also remove the inline gist flags from `save` (`--gist`, `--public`, `--secret`, `--copy`, `--open`). That's 5 flags gone. Users can pipe: `emdx view 42 --raw | gh gist create`.
+**Fix:** Since `gist` is staying as a standalone command, remove the inline gist flags from `save` (`--gist`, `--public`, `--secret`, `--copy`, `--open`). That's 5 flags gone. Workflow becomes: `emdx save "content"` then `emdx gist 42`. Clean separation — `save` creates, `gist` shares.
 
 ---
 
@@ -180,7 +180,7 @@ Should be `emdx save --file README.md` (post-0.18.0).
 
 | Command | What it covers |
 |---------|---------------|
-| `save` | Create documents (minus gist flags) |
+| `save` | Create documents (remove inline gist flags — `gist` command handles sharing) |
 | `find` | Search, list, recent, topics, similar, ask, context — the universal read command |
 | `view` | Display single doc (with `--links` for link graph) |
 | `edit` | Modify docs |
@@ -195,13 +195,13 @@ Should be `emdx save --file README.md` (post-0.18.0).
 | `trash` | Deleted doc management |
 | `gui` | TUI browser |
 | `group` | Document groups (evaluate if needed or if tags+epics suffice) |
+| `gist` | Share docs as GitHub gists |
 | `recipe` | Saved prompts |
 
-### Cut entirely (~10 commands removed)
+### Cut entirely (~9 commands removed)
 - `ai` (folded into `find` + `maintain`)
 - `review` (workflow achievable with `find --tags` + `tag add`)
 - `touch` (keep only as `stale touch` or `maintain touch`)
-- `gist` (use `save --gist` or pipe to `gh gist create`)
 - `version` (use `--version` flag)
 - `task note` (use `task log`)
 - `distill` (use `delegate`)
