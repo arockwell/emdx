@@ -72,14 +72,13 @@ def get_input_content(input_arg: str | None) -> InputContent:
 
     # Priority 2: Check if input is provided
     if input_arg:
-        # Check if it's a file path
+        # Check if it's a file path — skip filesystem check for obvious content
+        # (newlines can't appear in paths; components > 255 chars exceed OS limits)
         file_path = Path(input_arg)
-        try:
-            is_file = file_path.exists() and file_path.is_file()
-        except OSError:
-            # Strings > 255 chars trigger OSError on path stat (filename too long)
-            is_file = False
-        if is_file:
+        could_be_path = "\n" not in input_arg and all(
+            len(part) <= 255 for part in file_path.parts
+        )
+        if could_be_path and file_path.exists() and file_path.is_file():
             # It's a file
             try:
                 content = file_path.read_text(encoding="utf-8")
