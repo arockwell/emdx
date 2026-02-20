@@ -205,6 +205,15 @@ emdx find "query"                      # Hybrid search (default when index exist
 emdx find "concept" --mode semantic    # Semantic/conceptual search
 emdx find "query" --extract            # Extract key info from results
 emdx find --tags "gameplan,active"     # Tag filtering (comma = AND, use --any-tags for OR)
+emdx find --all                        # List all documents
+emdx find --recent 10                  # Show 10 most recently accessed docs
+emdx find --similar 42                 # Find docs similar to doc #42
+emdx find --ask "question"             # RAG: retrieve context + LLM answer
+emdx find --context "question" | claude  # Output retrieved context for piping
+
+# View
+emdx view 42                           # View document content
+emdx view 42 --links                   # Show document's link graph
 
 # Tasks (use --epic and --cat, NOT --tags)
 emdx task add "Title" -D "Details" --epic 898 --cat FEAT
@@ -218,10 +227,15 @@ emdx task cat list                     # See available categories
 emdx tag add 42 gameplan active
 emdx tag list
 
-# AI search
-# Note: emdx find now supports semantic search natively via --mode semantic
-emdx ai search "concept"
-emdx ai context "question" | claude
+# Status
+emdx status                            # Delegate activity overview
+emdx status --stats                    # Knowledge base statistics
+emdx status --stats --detailed         # Detailed stats with project breakdown
+
+# Maintenance
+emdx maintain compact --dry-run        # Find similar docs to merge
+emdx maintain index                    # Build/update embedding index
+emdx maintain link --all               # Auto-link related documents
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).

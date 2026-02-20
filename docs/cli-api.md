@@ -33,11 +33,6 @@ ls -la | emdx save --title "Directory Listing"
 # Save and auto-link to related documents
 emdx save --file notes.md --auto-link
 
-# Save and create a secret gist
-echo "Shareable notes" | emdx save --title "Notes" --gist
-
-# Save and create a public gist, copy URL
-emdx save --file notes.md --gist --public --copy
 ```
 
 **Options:**
@@ -47,20 +42,15 @@ emdx save --file notes.md --gist --public --copy
 - `--project, -p TEXT` - Override project detection
 - `--group, -g INTEGER` - Add document to group
 - `--group-role TEXT` - Role in group (primary, exploration, synthesis, variant, member)
-- `--auto-link` - Auto-link to semantically similar documents (requires `emdx ai index`)
+- `--auto-link` - Auto-link to semantically similar documents (requires `emdx maintain index`)
 - `--auto-tag` - Automatically apply suggested tags
 - `--suggest-tags` - Show tag suggestions after saving
 - `--supersede` - Auto-link to existing doc with same title
 - `--task INTEGER` - Link saved document to a task as its output
 - `--done` - Also mark the linked task as done (requires `--task`)
-- `--gist` / `--share` - Create a GitHub gist after saving
-- `--secret` - Create a secret gist (default; implies `--gist`)
-- `--public` - Create a public gist (implies `--gist`)
-- `--copy, -c` - Copy gist URL to clipboard
-- `--open, -o` - Open gist in browser
 
 ### **emdx find**
-Search documents with hybrid (default when index exists), keyword, or semantic search.
+Search documents with hybrid (default when index exists), keyword, or semantic search. Also supports listing, similar-doc lookup, RAG Q&A, and context retrieval.
 
 ```bash
 # Full-text search (keyword mode)
@@ -98,6 +88,22 @@ emdx find "config" --json
 
 # Show snippet previews (default behavior, explicit)
 emdx find "database" --snippets
+
+# List all documents (replaces old `emdx list` command)
+emdx find --all
+emdx find --all --project "emdx"
+
+# Show recently accessed documents (replaces old `emdx recent` command)
+emdx find --recent 10
+
+# Find similar documents (replaces old `emdx ai similar` command)
+emdx find --similar 42
+
+# RAG Q&A: retrieve context + LLM answer (replaces old `emdx ai ask`)
+emdx find --ask "What's our caching strategy?"
+
+# Context retrieval for piping to claude (replaces old `emdx ai context`)
+emdx find --context "How does auth work?" | claude
 ```
 
 **Options:**
@@ -115,7 +121,12 @@ emdx find "database" --snippets
 - `--created-before TEXT` - Filter by creation date (YYYY-MM-DD)
 - `--modified-after TEXT` - Filter by modification date (YYYY-MM-DD)
 - `--modified-before TEXT` - Filter by modification date (YYYY-MM-DD)
-- `--json` - Output results as JSON
+- `--json, -j` - Output results as JSON
+- `--all, -a` - List all documents (no search query needed)
+- `--recent INTEGER` - Show N most recently accessed documents
+- `--similar INTEGER` - Find documents similar to this doc ID
+- `--ask` - Answer the query using RAG (retrieves context + LLM)
+- `--context` - Output retrieved context as plain text (for piping to claude)
 
 ### **emdx view**
 View document content.
@@ -138,6 +149,9 @@ emdx view 42 --no-pager
 
 # Hide document header
 emdx view 42 --no-header
+
+# Show document's link graph (replaces old `emdx ai links`)
+emdx view 42 --links
 ```
 
 ### **emdx edit**
@@ -567,8 +581,9 @@ Equivalent to `emdx save <file> --tags "recipe"`.
 ## 🧹 **Maintenance Commands**
 
 ### **emdx maintain**
-System maintenance and cleanup operations.
+System maintenance, cleanup, embedding index, and document linking.
 
+#### **emdx maintain cleanup**
 ```bash
 # Show what cleanup would do (dry run)
 emdx maintain cleanup
@@ -586,37 +601,88 @@ emdx maintain cleanup --files --execute
 emdx maintain cleanup --all --execute
 ```
 
+#### **emdx maintain compact**
+AI-powered document synthesis to reduce knowledge base sprawl (moved from top-level `compact`).
+
+```bash
+# Dry run: show clusters without synthesizing (no API calls)
+emdx maintain compact --dry-run
+
+# Automatically synthesize all discovered clusters
+emdx maintain compact --auto
+
+# Compact specific documents together
+emdx maintain compact 42 43 44
+
+# Filter to a specific topic
+emdx maintain compact --topic "authentication"
+
+# Adjust similarity threshold
+emdx maintain compact --threshold 0.7
+
+# Skip confirmation prompts
+emdx maintain compact --yes
+```
+
+**Options:**
+- `--dry-run, -n` - Show clusters without synthesizing
+- `--auto` - Automatically synthesize all clusters
+- `--threshold, -t FLOAT` - Similarity threshold (0.0-1.0, default: 0.5)
+- `--topic TEXT` - Filter to documents matching this topic
+- `--model, -m TEXT` - Model to use for synthesis
+- `--yes, -y` - Skip confirmation prompts
+
+#### **emdx maintain index**
+Build and manage the embedding index (moved from `emdx ai index`).
+
+```bash
+# Build index for new documents only
+emdx maintain index
+
+# Force reindex everything
+emdx maintain index --force
+
+# Check index statistics
+emdx maintain index --stats
+
+# Clear all embeddings (requires reindexing)
+emdx maintain index --clear
+```
+
+**Options:**
+- `--force` - Reindex all documents
+- `--batch-size INTEGER` - Batch size for indexing
+- `--chunks` - Use chunk-level embeddings
+- `--stats` - Show index statistics
+- `--clear` - Clear all embeddings
+
+#### **emdx maintain link**
+Create semantic links between related documents (moved from `emdx ai link`).
+
+```bash
+# Create links for a specific document
+emdx maintain link 42
+
+# Backfill links for all indexed documents
+emdx maintain link --all
+
+# Adjust similarity threshold and max links
+emdx maintain link 42 --threshold 0.6 --max 3
+```
+
+**Options:**
+- `--all` - Backfill links for all indexed documents
+- `--threshold, -t FLOAT` - Minimum similarity (0-1, default: 0.5)
+- `--max, -m INTEGER` - Maximum links per document (default: 5)
+
+#### **emdx maintain unlink**
+Remove a link between two documents (moved from `emdx ai unlink`).
+
+```bash
+emdx maintain unlink 42 57
+```
+
 ## 📊 **Information Commands**
-
-### **emdx list**
-List documents by project.
-
-```bash
-# List all documents grouped by project
-emdx list
-
-# List documents for specific project
-emdx list --project "emdx"
-```
-
-### **emdx recent**
-Show recently accessed documents.
-
-```bash
-# Show 10 most recent documents
-emdx recent
-
-# Show more recent documents
-emdx recent 25
-```
-
-### **emdx stats**
-Show knowledge base statistics.
-
-```bash
-# Overall statistics
-emdx stats
-```
 
 ### **emdx trash**
 Manage deleted documents.
@@ -677,12 +743,6 @@ emdx gist 42 --public
 emdx gist 42 --copy
 ```
 
-**Tip:** Use `emdx save --gist` (or `--secret`/`--public`) to save and create a gist in one step:
-
-```bash
-echo "content" | emdx save --title "Share Me" --secret --copy
-```
-
 ## ⚙️ **Configuration**
 
 ### **Environment Variables**
@@ -716,14 +776,13 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
 - `tag` (add, remove, list, rename, merge, batch) - Tag management
-- `list`, `recent`, `stats`, `briefing` - Information commands
-- `gui`, `prime`, `status`, `version` - Interface and overview
-- `ai` (ask, search, context) - AI-powered features
-- `compact`, `distill`, `review` - AI-powered maintenance
+- `briefing` - Activity summary
+- `gui`, `prime`, `status` - Interface and overview
+- `maintain` (cleanup, compact, index, link, unlink) - Maintenance
 - `gist` - GitHub Gist integration
 - `exec` - Execution monitoring (read-only)
 - `group`, `task` (including `task epic`, `task cat`), `trash` - Organization commands
-- `stale`, `touch` - Staleness tracking
+- `stale` (list, touch) - Staleness tracking
 
 **Error message:**
 When a disabled command is invoked, you'll see:
@@ -881,163 +940,6 @@ emdx delegate --worktree --pr "fix X"
 
 ---
 
-## ✨ AI-Powered Knowledge Base
-
-The `emdx ai` commands provide semantic search and Q&A capabilities over your knowledge base using embeddings and LLMs.
-
-### Getting Started
-
-```bash
-# Build the embedding index (one-time, ~1-2 minutes)
-emdx ai index
-
-# Check index status
-emdx ai stats
-```
-
-### Semantic Search
-
-Find documents by meaning, not just keywords:
-
-```bash
-# Search for conceptually related documents
-emdx ai search "authentication flow"
-emdx ai search "error handling patterns" --limit 10
-
-# Filter by project
-emdx ai search "database optimization" --project myapp
-
-# Adjust similarity threshold (0-1)
-emdx ai search "caching strategy" --threshold 0.5
-```
-
-### Find Similar Documents
-
-```bash
-# Find documents similar to a given document
-emdx ai similar 42
-emdx ai similar 42 --limit 10
-```
-
-### Document Links (Knowledge Graph)
-
-Auto-discover and manage links between related documents:
-
-```bash
-# Create links for a document using semantic similarity
-emdx ai link 42
-
-# Backfill links for all indexed documents
-emdx ai link 0 --all
-
-# Adjust similarity threshold and max links
-emdx ai link 42 --threshold 0.6 --max 3
-
-# View a document's links
-emdx ai links 42
-
-# Traverse two hops (document → linked → linked)
-emdx ai links 42 --depth 2
-
-# Output as JSON
-emdx ai links 42 --json
-
-# Remove a link between two documents
-emdx ai unlink 42 57
-```
-
-**`emdx ai link` options:**
-- `--all` - Backfill links for all indexed documents
-- `--threshold, -t FLOAT` - Minimum similarity (0-1, default: 0.5)
-- `--max, -m INTEGER` - Maximum links per document (default: 5)
-
-**`emdx ai links` options:**
-- `--depth, -d INTEGER` - Traversal depth (1=direct, 2=two hops, default: 1)
-- `--json` - Output as JSON
-
-Links are also created automatically when using `emdx save --auto-link`. The `emdx view` header shows related documents when links exist.
-
-### Q&A with Claude API
-
-Ask questions and get synthesized answers (requires `ANTHROPIC_API_KEY`):
-
-```bash
-# Ask questions about your knowledge base
-emdx ai ask "What's our caching strategy?"
-emdx ai ask "How did we solve the auth bug?" --project myapp
-
-# Reference specific documents
-emdx ai ask "What does ticket AUTH-123 involve?"
-
-# Force keyword search (no embeddings)
-emdx ai ask "recent changes" --keyword
-```
-
-### Context Retrieval (for Claude CLI)
-
-Retrieve context and pipe to the `claude` CLI to use your Claude Max subscription instead of API:
-
-```bash
-# Basic usage - pipe to claude
-emdx ai context "How does the auth system work?" | claude
-
-# With a specific prompt
-emdx ai context "What are the tag conventions?" | claude "summarize briefly"
-
-# Limit docs and filter by project
-emdx ai context "error handling" --limit 5 --project emdx | claude
-
-# Raw docs without question
-emdx ai context "auth patterns" --no-question | claude "list the patterns"
-```
-
-### Index Management
-
-```bash
-# Build index for new documents only
-emdx ai index
-
-# Force reindex everything
-emdx ai index --force
-
-# Check index statistics
-emdx ai stats
-
-# Clear all embeddings (requires reindexing)
-emdx ai clear --yes
-```
-
-### Commands Reference
-
-| Command | Description | Needs API Key? |
-|---------|-------------|----------------|
-| `emdx ai index` | Build/update embedding index | No |
-| `emdx ai search` | Semantic search | No |
-| `emdx ai similar` | Find similar documents | No |
-| `emdx ai link` | Create semantic links for a document | No |
-| `emdx ai links` | Show document links | No |
-| `emdx ai unlink` | Remove a link between documents | No |
-| `emdx ai stats` | Show index statistics | No |
-| `emdx ai clear` | Clear embedding index | No |
-| `emdx ai ask` | Q&A with Claude API | **Yes** |
-| `emdx ai context` | Get context for piping | No |
-
-### How It Works
-
-1. **Indexing**: Documents are converted to 384-dimensional vectors using `all-MiniLM-L6-v2` (runs locally, no API cost)
-2. **Search**: Queries are vectorized and compared using cosine similarity
-3. **Fallback**: If embeddings aren't available, falls back to keyword search (FTS5)
-4. **Q&A**: Top-N relevant docs are sent to Claude as context for answering
-
-### Tips
-
-- Run `emdx ai index` periodically to index new documents
-- Use `emdx ai context | claude` to avoid API costs (uses Claude Max)
-- Semantic search works best with natural language queries
-- Lower threshold values (0.2-0.3) return more results but less relevant
-
----
-
 ## 📋 Task Management (`emdx task`)
 
 Agent work queue for tracking tasks with status, epics, and categories.
@@ -1109,9 +1011,6 @@ emdx task log 1
 
 # Add entry to task log
 emdx task log 1 "Started implementation"
-
-# Add a progress note without changing status
-emdx task note 1 "Halfway through the refactor"
 ```
 
 ### Deleting Tasks
@@ -1196,7 +1095,7 @@ emdx task cat delete SEC
 
 ## 📰 Briefing (`emdx briefing`)
 
-Show recent emdx activity summary.
+Show recent emdx activity summary. Use `--save` to generate and persist a session wrapup (replaces old `wrapup` command).
 
 ```bash
 # Show activity from the last 24 hours (default)
@@ -1209,163 +1108,11 @@ emdx briefing --since yesterday
 
 # Output as JSON for agent consumption
 emdx briefing --json
-```
 
----
-
-## 📝 Wrapup (`emdx wrapup`)
-
-Generate a session summary from recent tasks, documents, and delegate executions.
-
-```bash
-# Summarize last 4 hours (default)
-emdx wrapup
-
-# Wider time window
-emdx wrapup --hours 8
-
-# Preview what would be summarized
-emdx wrapup --dry-run
-
-# Raw activity data without synthesis
-emdx wrapup --json
-
-# Suppress metadata output
-emdx wrapup --quiet
-```
-
-**Options:**
-- `--hours, -h INTEGER` - Time window to summarize (default: 4)
-- `--model, -m TEXT` - Model override for synthesis
-- `--quiet, -q` - Suppress metadata output
-- `--json` - Output raw activity data without synthesis
-- `--dry-run` - Preview what would be summarized
-
-Summaries are auto-saved with `session-summary,active` tags.
-
----
-
-## 📦 Compact (`emdx compact`)
-
-AI-powered document synthesis to reduce knowledge base sprawl.
-
-```bash
-# Dry run: show clusters without synthesizing (no API calls)
-emdx compact --dry-run
-
-# Automatically synthesize all discovered clusters
-emdx compact --auto
-
-# Compact specific documents together
-emdx compact 42 43 44
-
-# Filter to a specific topic
-emdx compact --topic "authentication"
-
-# Adjust similarity threshold
-emdx compact --threshold 0.7
-
-# Skip confirmation prompts
-emdx compact --yes
-```
-
-**Options:**
-- `--dry-run, -n` - Show clusters without synthesizing
-- `--auto` - Automatically synthesize all clusters
-- `--threshold, -t FLOAT` - Similarity threshold (0.0-1.0, default: 0.5)
-- `--topic TEXT` - Filter to documents matching this topic
-- `--model, -m TEXT` - Model to use for synthesis
-- `--yes, -y` - Skip confirmation prompts
-
----
-
-## 🔬 Distill (`emdx distill`)
-
-Audience-aware summarization of knowledge base content.
-
-```bash
-# Distill for yourself (default)
-emdx distill "authentication"
-
-# Distill for documentation
-emdx distill "auth patterns" --for docs
-
-# Distill for team briefing
-emdx distill "project status" --for coworkers
-
-# Filter by tags
-emdx distill --tags "gameplan,active"
-
-# Save the output to the knowledge base
-emdx distill "auth" --save --title "Auth Summary"
-
-# Quiet mode (content only)
-emdx distill "auth" --quiet
-```
-
-**Options:**
-- `--for, -f TEXT` - Target audience: `me`, `docs`, `coworkers` (default: me)
-- `--tags, -t TEXT` - Comma-separated tags to filter documents
-- `--limit, -l INTEGER` - Maximum documents to include (default: 20)
-- `--save, -s` - Save the output to the knowledge base
-- `--title TEXT` - Title for saved document
-- `--quiet, -q` - Output only the distilled content
-
----
-
-## 🗺️ Explore (`emdx explore`)
-
-Discover what your knowledge base covers by clustering documents into topics.
-
-```bash
-# Topic map — cluster labels, doc counts, freshness, staleness
-emdx explore
-
-# Detect coverage gaps (thin topics, stale areas, lonely tags)
-emdx explore --gaps
-
-# Generate answerable questions per topic (uses Claude)
-emdx explore --questions
-
-# Structured output for agents
-emdx explore --json
-
-# Rich formatted output
-emdx explore --rich
-
-# Adjust clustering sensitivity (lower = more grouping)
-emdx explore --threshold 0.3
-
-# Limit number of topics shown
-emdx explore --limit 10
-```
-
-**Options:**
-- `--threshold, -t FLOAT` - Similarity threshold for clustering (0.0-1.0, lower = more grouping, default: 0.5)
-- `--questions, -q` - Generate answerable questions per topic (uses Claude API)
-- `--gaps, -g` - Detect coverage gaps (thin topics, stale areas, lonely tags)
-- `--json` - Output results as JSON
-- `--rich` - Enable colored Rich output
-- `--limit, -n INTEGER` - Max topics to show (0 = all, default: 0)
-
----
-
-## 📋 Review (`emdx review`)
-
-Triage agent-produced documents tagged `needs-review`.
-
-```bash
-# List documents needing review
-emdx review list
-
-# Approve a document
-emdx review approve 42
-
-# Reject a document
-emdx review reject 42
-
-# Show review statistics
-emdx review stats
+# Generate session wrapup and save to KB (replaces old `emdx wrapup`)
+emdx briefing --save
+emdx briefing --save --hours 8
+emdx briefing --save --model sonnet
 ```
 
 ---
@@ -1379,26 +1126,14 @@ Track knowledge decay and identify documents needing review.
 emdx stale list
 ```
 
-### **emdx touch**
+### **emdx stale touch**
 
 Reset a document's staleness timer without incrementing the view count.
 
 ```bash
 # Touch single document
-emdx touch 42
+emdx stale touch 42
 
 # Touch multiple documents
-emdx touch 42 43 44
+emdx stale touch 42 43 44
 ```
-
----
-
-## 📌 Version (`emdx version`)
-
-```bash
-emdx version
-```
-
----
-
-This CLI provides powerful knowledge management with intuitive commands and comprehensive execution tracking, all optimized for developer workflows and productivity.

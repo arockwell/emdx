@@ -358,7 +358,7 @@ def create_recipe(
         console.print(f"[red]File not found: {file}[/red]")
         raise typer.Exit(1)
 
-    cmd = ["emdx", "save", str(path), "--tags", "recipe"]
+    cmd = ["emdx", "save", "--file", str(path), "--tags", "recipe"]
     if title:
         cmd.extend(["--title", title])
 

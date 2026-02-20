@@ -198,24 +198,104 @@ def _collect_status_data() -> dict[str, Any]:
     }
 
 
+def _show_kb_stats(project: str | None = None, detailed: bool = False) -> None:
+    """Show knowledge base statistics (folded from old `stats` command)."""
+    from emdx.database import db
+    from emdx.models.documents import get_stats
+    from emdx.utils.datetime_utils import format_datetime as _format_datetime
+
+    stats_data = get_stats(project=project)
+
+    if project:
+        console.print(f"[bold]Knowledge Base Statistics - Project: {project}[/bold]")
+    else:
+        console.print("[bold]Knowledge Base Statistics[/bold]")
+    console.print("=" * 40)
+
+    console.print(f"[blue]Total Documents:[/blue] {stats_data.get('total_documents', 0)}")
+    if not project:
+        console.print(f"[blue]Total Projects:[/blue] {stats_data.get('total_projects', 0)}")
+    console.print(f"[blue]Total Views:[/blue] {stats_data.get('total_views', 0)}")
+    console.print(f"[blue]Average Views:[/blue] {stats_data.get('avg_views', 0):.1f}")
+    console.print(f"[blue]Database Size:[/blue] {stats_data.get('table_size', '0 MB')}")
+
+    if stats_data.get("most_viewed"):
+        most_viewed = stats_data["most_viewed"]
+        console.print(
+            f"[blue]Most Viewed:[/blue] \"{most_viewed['title']}\" "
+            f"({most_viewed['access_count']} views)"
+        )
+
+    newest_date = stats_data.get("newest_doc")
+    console.print(f"[blue]Most Recent:[/blue] {_format_datetime(newest_date)}")
+
+    if detailed:
+        from rich.table import Table as RichTable
+
+        console.print("\n[bold]Detailed Statistics[/bold]")
+        console.print("-" * 40)
+
+        if not project:
+            with db.get_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT project, COUNT(*) as doc_count, "
+                    "SUM(access_count) as total_views, "
+                    "MAX(created_at) as last_updated "
+                    "FROM documents WHERE is_deleted = FALSE "
+                    "GROUP BY project ORDER BY doc_count DESC"
+                )
+                project_table = RichTable(title="Documents by Project")
+                project_table.add_column("Project", style="green")
+                project_table.add_column("Documents", justify="right", style="cyan")
+                project_table.add_column("Total Views", justify="right", style="blue")
+                project_table.add_column("Last Updated", style="yellow")
+
+                for row in cursor.fetchall():
+                    project_table.add_row(
+                        row[0] or "None",
+                        str(row[1]),
+                        str(row[2] or 0),
+                        _format_datetime(row[3], "%Y-%m-%d"),
+                    )
+                console.print(project_table)
+
+    console.print()
+
+
 def status(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show additional details"),
-    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+    stats: bool = typer.Option(
+        False, "--stats", help="Show knowledge base statistics"
+    ),
+    detailed: bool = typer.Option(
+        False, "--detailed", "-d", help="Show detailed statistics (with --stats)"
+    ),
+    stat_project: str | None = typer.Option(
+        None, "--project", "-p", help="Filter stats by project"
+    ),
 ) -> None:
     """
     Show delegate activity index and project status.
 
     Displays active delegate tasks, recent completions, and failures.
+    Use --stats for knowledge base statistics.
 
     Examples:
         emdx status
         emdx status --verbose
+        emdx status --stats
+        emdx status --stats --detailed
     """
     if json_output:
         print_json(_collect_status_data())
         return
 
     console.print()
+
+    if stats:
+        _show_kb_stats(project=stat_project, detailed=detailed)
+        return
 
     # Active delegate tasks
     _show_active_tasks()

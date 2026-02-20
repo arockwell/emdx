@@ -1110,6 +1110,175 @@ from emdx.commands.analyze import analyze as analyze_cmd  # noqa: E402
 
 app.command(name="analyze")(analyze_cmd)
 
+# Register compact as a subcommand of maintain
+from emdx.commands.compact import app as compact_app  # noqa: E402
+
+app.add_typer(compact_app, name="compact", help="Compact related documents via AI synthesis")
+
+
+# AI infrastructure commands (moved from `ai` command group)
+@app.command(name="index")
+def index_embeddings(
+    force: bool = typer.Option(False, "--force", "-f", help="Reindex all documents"),
+    batch_size: int = typer.Option(50, "--batch-size", "-b", help="Documents per batch"),
+    chunks: bool = typer.Option(True, "--chunks/--no-chunks", help="Also build chunk-level index"),
+    stats_only: bool = typer.Option(False, "--stats", help="Show index stats only"),
+    clear: bool = typer.Option(False, "--clear", help="Clear the embedding index"),
+) -> None:
+    """Build, update, or manage the semantic search index.
+
+    Examples:
+        emdx maintain index              # Index new documents
+        emdx maintain index --force      # Reindex everything
+        emdx maintain index --stats      # Show index statistics
+        emdx maintain index --clear      # Clear all embeddings
+    """
+    from rich.panel import Panel
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    try:
+        from ..services.embedding_service import EmbeddingService
+
+        service = EmbeddingService()
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    if clear:
+        confirm = typer.confirm("This will delete all embeddings. Continue?")
+        if not confirm:
+            raise typer.Abort()
+        count = service.clear_index()
+        console.print(f"[green]Cleared {count} embeddings[/green]")
+        return
+
+    idx_stats = service.stats()
+
+    if stats_only:
+        def format_bytes(b: int) -> str:
+            if b < 1024:
+                return f"{b} B"
+            elif b < 1024 * 1024:
+                return f"{b / 1024:.1f} KB"
+            return f"{b / (1024 * 1024):.1f} MB"
+
+        total_size = idx_stats.index_size_bytes + idx_stats.chunk_index_size_bytes
+        console.print(Panel(
+            f"[bold]Embedding Index Statistics[/bold]\n\n"
+            f"Documents:    {idx_stats.indexed_documents} / "
+            f"{idx_stats.total_documents} indexed\n"
+            f"Coverage:     {idx_stats.coverage_percent}%\n"
+            f"Chunks:       {idx_stats.indexed_chunks} indexed\n"
+            f"Model:        {idx_stats.model_name}\n"
+            f"Doc index:    {format_bytes(idx_stats.index_size_bytes)}\n"
+            f"Chunk index:  {format_bytes(idx_stats.chunk_index_size_bytes)}\n"
+            f"Total size:   {format_bytes(total_size)}",
+            title="AI Index",
+        ))
+        return
+
+    console.print(
+        f"[dim]Current index: {idx_stats.indexed_documents}/"
+        f"{idx_stats.total_documents} documents ({idx_stats.coverage_percent}%)[/dim]"
+    )
+    console.print(f"[dim]Chunk index: {idx_stats.indexed_chunks} chunks[/dim]")
+
+    needs_doc_index = idx_stats.indexed_documents < idx_stats.total_documents or force
+    needs_chunk_index = chunks and (idx_stats.indexed_chunks == 0 or force)
+
+    if not needs_doc_index and not needs_chunk_index:
+        console.print("[green]Index is already up to date![/green]")
+        return
+
+    if needs_doc_index:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Indexing documents...", total=None)
+            doc_count = service.index_all(force=force, batch_size=batch_size)
+            progress.update(task, completed=True)
+        console.print(f"[green]Indexed {doc_count} documents[/green]")
+
+    if needs_chunk_index:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Indexing chunks...", total=None)
+            chunk_count = service.index_chunks(force=force, batch_size=batch_size)
+            progress.update(task, completed=True)
+        console.print(f"[green]Indexed {chunk_count} chunks[/green]")
+
+
+@app.command(name="link")
+def create_links(
+    doc_id: int = typer.Argument(..., help="Document ID to create links for"),
+    all_docs: bool = typer.Option(False, "--all", help="Backfill links for all documents"),
+    threshold: float = typer.Option(0.5, "--threshold", "-t", help="Minimum similarity (0-1)"),
+    max_links: int = typer.Option(5, "--max", "-m", help="Maximum links per document"),
+) -> None:
+    """Create semantic links for a document (or all documents).
+
+    Examples:
+        emdx maintain link 42
+        emdx maintain link 0 --all
+        emdx maintain link 42 --threshold 0.6 --max 3
+    """
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    try:
+        from ..services.link_service import auto_link_all, auto_link_document
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    if all_docs:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Linking all documents...", total=None)
+            total = auto_link_all(threshold=threshold, max_links=max_links)
+            progress.update(task, completed=True)
+        console.print(f"[green]Created {total} links across all documents[/green]")
+    else:
+        result = auto_link_document(doc_id, threshold=threshold, max_links=max_links)
+        if result.links_created > 0:
+            console.print(
+                f"[green]Created {result.links_created} link(s) "
+                f"for document #{doc_id}[/green]"
+            )
+            for lid, score in zip(result.linked_doc_ids, result.scores, strict=False):
+                console.print(f"  [cyan]#{lid}[/cyan] ({score:.0%})")
+        else:
+            console.print(
+                f"[yellow]No similar documents found above "
+                f"{threshold:.0%} threshold[/yellow]"
+            )
+
+
+@app.command(name="unlink")
+def remove_link(
+    source_id: int = typer.Argument(..., help="First document ID"),
+    target_id: int = typer.Argument(..., help="Second document ID"),
+) -> None:
+    """Remove a link between two documents.
+
+    Examples:
+        emdx maintain unlink 42 57
+    """
+    from ..database import document_links
+
+    deleted = document_links.delete_link(source_id, target_id)
+    if deleted:
+        console.print(f"[green]Removed link between #{source_id} and #{target_id}[/green]")
+    else:
+        console.print(f"[yellow]No link found between #{source_id} and #{target_id}[/yellow]")
+
 
 if __name__ == "__main__":
     app()
