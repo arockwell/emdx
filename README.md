@@ -1,6 +1,6 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.16.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.18.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -11,29 +11,29 @@ Claude sessions start from zero. emdx doesn't. Save your research, fire off agen
 ## See it in action
 
 ```bash
-# You're working on a project. Save what you know.
-$ emdx save --file security-audit.md
-✅ Saved as #42: security-audit
+# You ask Claude to research something. It saves the findings.
+$ emdx save "Token refresh fails when clock skew > 30s..." --title "Auth Bug Analysis"
+✅ Saved as #42: Auth Bug Analysis
 
-# Have Claude analyze it for you
-$ emdx delegate --doc 42 "analyze each finding and suggest fixes"
-📋 Saved as #43: Delegate: analyze each finding...
-
-# Or run three analyses in parallel — each gets its own agent
+# It fires off parallel agents for deeper analysis
 $ emdx delegate "audit auth for vulnerabilities" \
                 "review error handling patterns" \
-                "check for missing input validation"
-📋 Saved as #44: Delegate: audit auth...
-📋 Saved as #45: Delegate: review error handling...
-📋 Saved as #46: Delegate: check for missing input...
+                "check input validation coverage"
+📋 Saved as #43: Delegate: audit auth...
+📋 Saved as #44: Delegate: review error handling...
+📋 Saved as #45: Delegate: check input validation...
 
-# A week later, find everything — your notes and all the agent output
-$ emdx find "security"
-🔍 Found 5 results for 'security'
+# It tracks what needs doing
+$ emdx task add "Fix token refresh bug" --cat FIX
+$ emdx task add "Add rate limiting" --cat FEAT
 
-# Go straight from analysis to pull request
-$ emdx delegate --doc 43 --pr "fix the issues from this analysis"
-🔀 PR #87: fix the issues from this analysis
+# Everything accumulates. Nothing vanishes.
+$ emdx find "auth"
+🔍 Found 4 results for 'auth'
+
+# Chain agent output into a PR
+$ emdx delegate --doc 43 --pr "fix the issues from this audit"
+🔀 PR #87: fix the issues from this audit
 ```
 
 ## Install
@@ -141,8 +141,6 @@ $ emdx ai ask "What did we decide about the API redesign?"
 
 ## More features
 
-Add `emdx prime` to your CLAUDE.md and every Claude Code session starts with context — ready tasks, recent docs, in-progress work.
-
 ```bash
 emdx compact --dry-run                           # Deduplicate similar docs
 emdx compact --auto                              # Merge discovered clusters
@@ -169,7 +167,6 @@ emdx gui                                         # Interactive TUI browser
 | Add a task | `emdx task add "title" --cat FEAT` |
 | See ready tasks | `emdx task ready` |
 | Ask your KB a question | `emdx ai context "question" \| claude` |
-| Start a Claude session | `emdx prime` |
 
 ## Documentation
 
