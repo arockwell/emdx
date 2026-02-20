@@ -16,6 +16,7 @@ class CliCommand:
     args: list[str]  # Command arguments
     env: dict[str, str] = field(default_factory=dict)  # Additional env vars
     cwd: str | None = None  # Working directory
+    stdin_data: str | None = None  # Data to pipe via stdin
 
 
 @dataclass
