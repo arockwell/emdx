@@ -111,6 +111,32 @@ def view(
 
 
 @app.command()
+def delete(
+    epic_id: int = typer.Argument(..., help="Epic task ID to delete"),
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Delete even if open/active child tasks exist"
+    ),
+) -> None:
+    """Delete an epic and unlink its child tasks.
+
+    Child tasks are NOT deleted — their parent_task_id is cleared.
+    Refuses to delete if open/active children exist unless --force is used.
+
+    Examples:
+        emdx task epic delete 510
+        emdx task epic delete 510 --force
+    """
+    try:
+        result = tasks.delete_epic(epic_id, force=force)
+        console.print(f"[green]Deleted epic #{epic_id}[/green]")
+        if result["children_unlinked"]:
+            console.print(f"[yellow]Unlinked {result['children_unlinked']} child task(s)[/yellow]")
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command()
 def done(
     epic_id: int = typer.Argument(..., help="Epic task ID"),
 ) -> None:

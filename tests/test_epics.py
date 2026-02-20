@@ -2,6 +2,7 @@
 
 import re
 
+import pytest
 from typer.testing import CliRunner
 
 from emdx.commands.epics import app as epics_app
@@ -86,6 +87,52 @@ class TestEpicDone:
         tasks.update_task(epic_id, status="done")
         epic = tasks.get_task(epic_id)
         assert epic["status"] == "done"
+
+
+class TestDeleteEpic:
+    """Tests for delete_epic."""
+
+    def test_delete_epic_no_children(self):
+        epic_id = tasks.create_epic("Empty Epic", "DENP")
+        result = tasks.delete_epic(epic_id)
+        assert result["children_unlinked"] == 0
+        assert tasks.get_task(epic_id) is None
+
+    def test_delete_epic_with_done_children(self):
+        epic_id = tasks.create_epic("Done Children Epic", "DDCH")
+        t1 = tasks.create_task(
+            "Done child", parent_task_id=epic_id, epic_key="DDCH", status="done"
+        )
+        result = tasks.delete_epic(epic_id)
+        assert result["children_unlinked"] == 1
+        # Child still exists but parent_task_id is cleared
+        child = tasks.get_task(t1)
+        assert child is not None
+        assert child["parent_task_id"] is None
+
+    def test_delete_epic_refuses_open_children(self):
+        epic_id = tasks.create_epic("Open Children Epic", "DOCH")
+        tasks.create_task("Open child", parent_task_id=epic_id, epic_key="DOCH")
+        with pytest.raises(ValueError, match="open/active child"):
+            tasks.delete_epic(epic_id)
+
+    def test_delete_epic_force_with_open_children(self):
+        epic_id = tasks.create_epic("Force Delete Epic", "DFEP")
+        t1 = tasks.create_task("Open child", parent_task_id=epic_id, epic_key="DFEP")
+        result = tasks.delete_epic(epic_id, force=True)
+        assert result["children_unlinked"] == 1
+        assert tasks.get_task(epic_id) is None
+        child = tasks.get_task(t1)
+        assert child["parent_task_id"] is None
+
+    def test_delete_epic_not_found(self):
+        with pytest.raises(ValueError, match="not found"):
+            tasks.delete_epic(999999)
+
+    def test_delete_non_epic_task(self):
+        task_id = tasks.create_task("Regular task")
+        with pytest.raises(ValueError, match="not found"):
+            tasks.delete_epic(task_id)
 
 
 class TestListEpics:
@@ -182,6 +229,33 @@ class TestEpicsCLI:
         result = runner.invoke(epics_app, ["view", "999999"])
         assert result.exit_code == 1
         assert "not found" in _out(result)
+
+    def test_delete_command(self):
+        epic_id = tasks.create_epic("Delete CLI Epic", "EDCL")
+        tasks.update_task(epic_id, status="done")
+        result = runner.invoke(epics_app, ["delete", str(epic_id)])
+        assert result.exit_code == 0
+        assert "Deleted" in _out(result)
+
+    def test_delete_command_not_found(self):
+        result = runner.invoke(epics_app, ["delete", "999999"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_delete_command_refuses_open(self):
+        epic_id = tasks.create_epic("Refuse CLI Epic", "ERCL")
+        tasks.create_task("Open child", parent_task_id=epic_id, epic_key="ERCL")
+        result = runner.invoke(epics_app, ["delete", str(epic_id)])
+        assert result.exit_code == 1
+        assert "open/active" in _out(result)
+
+    def test_delete_command_force(self):
+        epic_id = tasks.create_epic("Force CLI Epic", "EFCL")
+        tasks.create_task("Open child", parent_task_id=epic_id, epic_key="EFCL")
+        result = runner.invoke(epics_app, ["delete", str(epic_id), "--force"])
+        assert result.exit_code == 0
+        assert "Deleted" in _out(result)
+        assert "Unlinked" in _out(result)
 
 
 class TestTaskAddWithEpic:

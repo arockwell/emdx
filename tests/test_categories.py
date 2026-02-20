@@ -85,6 +85,63 @@ class TestListCategories:
         assert lcnt["total_count"] >= 2
 
 
+class TestDeleteCategory:
+    """Tests for delete_category."""
+
+    def test_delete_empty_category(self):
+        categories.create_category("DEMP", "Empty Category")
+        result = categories.delete_category("DEMP")
+        assert result["tasks_cleared"] == 0
+        assert result["epics_cleared"] == 0
+        assert categories.get_category("DEMP") is None
+
+    def test_delete_category_with_done_tasks(self):
+        categories.create_category("DDNE", "Done Tasks")
+        t1 = tasks.create_task("Task 1", epic_key="DDNE", status="done")
+        result = categories.delete_category("DDNE")
+        assert result["tasks_cleared"] == 1
+        # Task still exists but epic_key is cleared
+        task = tasks.get_task(t1)
+        assert task is not None
+        assert task["epic_key"] is None
+        assert task["epic_seq"] is None
+
+    def test_delete_category_refuses_open_tasks(self):
+        categories.create_category("DREF", "Has Open Tasks")
+        tasks.create_task("Open task", epic_key="DREF")
+        with pytest.raises(ValueError, match="open/active task"):
+            categories.delete_category("DREF")
+
+    def test_delete_category_force_with_open_tasks(self):
+        categories.create_category("DFRC", "Force Delete")
+        t1 = tasks.create_task("Open task", epic_key="DFRC")
+        result = categories.delete_category("DFRC", force=True)
+        assert result["tasks_cleared"] == 1
+        assert categories.get_category("DFRC") is None
+        task = tasks.get_task(t1)
+        assert task["epic_key"] is None
+
+    def test_delete_category_clears_epics(self):
+        categories.create_category("DEPC", "With Epics")
+        epic_id = tasks.create_epic("Test Epic", "DEPC")
+        tasks.update_task(epic_id, status="done")
+        result = categories.delete_category("DEPC")
+        assert result["epics_cleared"] == 1
+        epic = tasks.get_task(epic_id)
+        assert epic is not None
+        assert epic["epic_key"] is None
+
+    def test_delete_category_not_found(self):
+        with pytest.raises(ValueError, match="not found"):
+            categories.delete_category("ZZZZ")
+
+    def test_delete_category_case_insensitive(self):
+        categories.create_category("DCAS", "Case Test")
+        result = categories.delete_category("dcas")
+        assert result["tasks_cleared"] == 0
+        assert categories.get_category("DCAS") is None
+
+
 class TestAdoptCategory:
     """Tests for adopt_category."""
 
@@ -141,6 +198,32 @@ class TestCategoriesCLI:
         assert result.exit_code == 0
         # Should show a table with our category
         assert "CLST" in _out(result)
+
+    def test_delete_command(self):
+        categories.create_category("CDEL", "CLI Delete")
+        result = runner.invoke(app, ["delete", "CDEL"])
+        assert result.exit_code == 0
+        assert "Deleted" in _out(result)
+
+    def test_delete_command_not_found(self):
+        result = runner.invoke(app, ["delete", "XXXX"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_delete_command_refuses_open(self):
+        categories.create_category("CDRJ", "CLI Refuse")
+        tasks.create_task("Open task", epic_key="CDRJ")
+        result = runner.invoke(app, ["delete", "CDRJ"])
+        assert result.exit_code == 1
+        assert "open/active" in _out(result)
+
+    def test_delete_command_force(self):
+        categories.create_category("CDFF", "CLI Force")
+        tasks.create_task("Open task", epic_key="CDFF")
+        result = runner.invoke(app, ["delete", "CDFF", "--force"])
+        assert result.exit_code == 0
+        assert "Deleted" in _out(result)
+        assert "Unlinked" in _out(result)
 
     def test_adopt_command(self):
         tasks.create_task("CADP-1: CLI adopt test")
