@@ -497,7 +497,7 @@ def _run_single(
     output_instruction = (
         "\n\nIMPORTANT — SAVE YOUR OUTPUT:\n"
         f"1. Write your complete findings/analysis to: {output_file}\n"
-        f'2. Save it: emdx save {output_file} --title "{doc_title}" '
+        f'2. Save it: emdx save --file {output_file} --title "{doc_title}" '
         f'--tags "{tags_str}"\n'
         "3. Report the document ID shown after saving."
     )
