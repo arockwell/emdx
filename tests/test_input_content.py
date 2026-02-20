@@ -1,4 +1,4 @@
-"""Tests for get_input_content function bug fix."""
+"""Tests for get_input_content — stdin, --file, and positional content."""
 
 import io
 import tempfile
@@ -10,159 +10,154 @@ import pytest
 from emdx.commands.core import get_input_content
 
 
-class TestGetInputContent:
-    """Test the get_input_content function, especially the stdin/file path bug fix."""
+class TestStdinInput:
+    """Stdin takes highest priority when it has content."""
 
-    def test_file_path_with_empty_stdin_in_subprocess_context(self):
-        """Test that file paths work when stdin appears available but is empty (like in poetry run)."""  # noqa: E501
-        # Create a temporary file with content
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
-            temp_file.write("# Test Content\n\nThis should be read from file, not from empty stdin.")  # noqa: E501
-            temp_file_path = temp_file.name
-
-        try:
-            # Mock subprocess context where stdin.isatty() returns False but stdin is empty
-            empty_stdin = io.StringIO("")
-
-            with patch('sys.stdin', empty_stdin):
-                with patch('sys.stdin.isatty', return_value=False):
-                    result = get_input_content(temp_file_path)
-
-            # Should read from file, not empty stdin
-            assert result.source_type == "file"
-            assert "This should be read from file" in result.content
-            assert result.source_path == Path(temp_file_path)
-
-        finally:
-            # Clean up
-            Path(temp_file_path).unlink()
-
-    def test_stdin_with_actual_content_takes_priority(self):
-        """Test that stdin content is used when it actually contains data."""
-        stdin_content = "# Stdin Content\n\nThis comes from stdin and should take priority."
+    def test_stdin_with_content_wins_over_positional_arg(self):
+        stdin_content = "# From stdin\n\nShould take priority."
         mock_stdin = io.StringIO(stdin_content)
 
         with patch('sys.stdin', mock_stdin):
             with patch('sys.stdin.isatty', return_value=False):
-                result = get_input_content("some_file.md")
+                result = get_input_content("positional text")
 
-        # Should use stdin content, not file
         assert result.source_type == "stdin"
-        assert "This comes from stdin" in result.content
-        assert result.source_path is None
+        assert "From stdin" in result.content
 
-    def test_stdin_with_only_whitespace_falls_through_to_file(self):
-        """Test that stdin with only whitespace falls through to file processing."""
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
-            temp_file.write("# File Content\n\nThis should be used when stdin has only whitespace.")
-            temp_file_path = temp_file.name
+    def test_stdin_with_content_wins_over_file_flag(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("file content")
+            fpath = f.name
 
         try:
-            # Mock stdin with only whitespace
-            whitespace_stdin = io.StringIO("   \n\t  \n  ")
-
-            with patch('sys.stdin', whitespace_stdin):
+            mock_stdin = io.StringIO("stdin content")
+            with patch('sys.stdin', mock_stdin):
                 with patch('sys.stdin.isatty', return_value=False):
-                    result = get_input_content(temp_file_path)
+                    result = get_input_content(None, file_path=fpath)
 
-            # Should read from file since stdin only has whitespace
-            assert result.source_type == "file"
-            assert "This should be used when stdin" in result.content
-            assert result.source_path == Path(temp_file_path)
-
+            assert result.source_type == "stdin"
+            assert result.content == "stdin content"
         finally:
-            Path(temp_file_path).unlink()
+            Path(fpath).unlink()
 
-    def test_interactive_terminal_prioritizes_file_over_stdin(self):
-        """Test that in interactive terminal (tty), file arguments take precedence."""
-        # Create a temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
-            temp_file.write("# File Content\n\nThis should be used in interactive mode.")
-            temp_file_path = temp_file.name
+    def test_empty_stdin_falls_through_to_file(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("# File Content\n\nRead from file.")
+            fpath = f.name
 
         try:
-            # Mock interactive terminal (stdin.isatty() returns True)
-            with patch('sys.stdin.isatty', return_value=True):
-                result = get_input_content(temp_file_path)
+            empty_stdin = io.StringIO("")
+            with patch('sys.stdin', empty_stdin):
+                with patch('sys.stdin.isatty', return_value=False):
+                    result = get_input_content(None, file_path=fpath)
 
-            # Should read from file in interactive mode
             assert result.source_type == "file"
-            assert "This should be used in interactive mode" in result.content
-            assert result.source_path == Path(temp_file_path)
-
+            assert "Read from file" in result.content
+            assert result.source_path == Path(fpath)
         finally:
-            Path(temp_file_path).unlink()
+            Path(fpath).unlink()
 
-    def test_nonexistent_file_returns_direct_input(self):
-        """Test that nonexistent file path is treated as direct text input."""
-        with patch('sys.stdin.isatty', return_value=True):
-            result = get_input_content("This is direct text input")
+    def test_whitespace_only_stdin_falls_through(self):
+        with patch('sys.stdin', io.StringIO("   \n\t  \n  ")):
+            with patch('sys.stdin.isatty', return_value=False):
+                result = get_input_content("direct text")
 
         assert result.source_type == "direct"
-        assert result.content == "This is direct text input"
-        assert result.source_path is None
+        assert result.content == "direct text"
 
-    def test_no_input_raises_exit(self):
-        """Test that no input raises typer.Exit."""
+
+class TestFileInput:
+    """--file flag reads from an explicit file path."""
+
+    def test_file_flag_reads_content(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("# Hello\n\nWorld")
+            fpath = f.name
+
+        try:
+            with patch('sys.stdin.isatty', return_value=True):
+                result = get_input_content(None, file_path=fpath)
+
+            assert result.source_type == "file"
+            assert result.content == "# Hello\n\nWorld"
+            assert result.source_path == Path(fpath)
+        finally:
+            Path(fpath).unlink()
+
+    def test_file_flag_missing_file_exits(self):
         import typer
 
         with patch('sys.stdin.isatty', return_value=True):
             with pytest.raises(typer.Exit):
-                get_input_content(None)
+                get_input_content(None, file_path="/nonexistent/path.md")
 
-    def test_regression_poetry_run_context(self):
-        """
-        Regression test for the specific bug: poetry run context with empty stdin.
-
-        This simulates the exact conditions that caused the bug:
-        - sys.stdin.isatty() returns False (subprocess context)
-        - sys.stdin.read() returns empty string
-        - File path argument provided
-
-        Before fix: would return empty content from stdin
-        After fix: should fall through to file reading
-        """
-        # Create test file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as temp_file:
-            temp_file.write("# Regression Test\n\nThis content should be saved, not empty string.")
-            temp_file_path = temp_file.name
+    def test_file_flag_takes_priority_over_positional_arg(self):
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("file wins")
+            fpath = f.name
 
         try:
-            # Exact conditions from poetry run that caused the bug
-            empty_stdin = io.StringIO("")
+            with patch('sys.stdin.isatty', return_value=True):
+                result = get_input_content("positional text", file_path=fpath)
 
-            with patch('sys.stdin', empty_stdin):
-                with patch('sys.stdin.isatty', return_value=False):  # subprocess context
-                    result = get_input_content(temp_file_path)
-
-            # After fix: should read file content, not empty stdin
             assert result.source_type == "file"
-            assert len(result.content.strip()) > 0  # Not empty!
-            assert "This content should be saved" in result.content
-            assert result.source_path == Path(temp_file_path)
-
+            assert result.content == "file wins"
         finally:
-            Path(temp_file_path).unlink()
+            Path(fpath).unlink()
 
-    def test_long_inline_content_does_not_crash(self):
-        """Regression test for #714: inline content >255 chars crashes with OSError."""
-        long_content = "A" * 300  # Exceeds OS filename limit (255 chars)
+
+class TestDirectContentInput:
+    """Positional argument is always treated as content, never as a file path."""
+
+    def test_positional_arg_is_direct_content(self):
+        with patch('sys.stdin.isatty', return_value=True):
+            result = get_input_content("just some text")
+
+        assert result.source_type == "direct"
+        assert result.content == "just some text"
+        assert result.source_path is None
+
+    def test_string_that_looks_like_file_path_is_still_content(self):
+        """Positional arg that looks like a path is NOT treated as a file."""
+        with patch('sys.stdin.isatty', return_value=True):
+            result = get_input_content("some_file.md")
+
+        assert result.source_type == "direct"
+        assert result.content == "some_file.md"
+
+    def test_long_content_works(self):
+        """Regression test for #714: any length content works as positional arg."""
+        long_content = "A" * 300
 
         with patch('sys.stdin.isatty', return_value=True):
             result = get_input_content(long_content)
 
         assert result.source_type == "direct"
         assert result.content == long_content
-        assert result.source_path is None
 
-    def test_exactly_at_filename_limit_does_not_crash(self):
-        """Ensure content at exactly 255 chars (the OS limit) is handled gracefully."""
-        content_255 = "B" * 255
+    def test_multiline_content_works(self):
+        content = "line 1\nline 2\nline 3"
 
         with patch('sys.stdin.isatty', return_value=True):
-            result = get_input_content(content_255)
+            result = get_input_content(content)
 
-        # Should be treated as direct content (no file "BBB...B" exists)
         assert result.source_type == "direct"
-        assert result.content == content_255
+        assert result.content == content
+
+
+class TestNoInput:
+    """No input at all raises an error."""
+
+    def test_no_input_raises_exit(self):
+        import typer
+
+        with patch('sys.stdin.isatty', return_value=True):
+            with pytest.raises(typer.Exit):
+                get_input_content(None)
+
+    def test_no_input_no_file_raises_exit(self):
+        import typer
+
+        with patch('sys.stdin.isatty', return_value=True):
+            with pytest.raises(typer.Exit):
+                get_input_content(None, file_path=None)
