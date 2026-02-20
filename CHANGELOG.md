@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-02-20
+
+**The knowledge graph release.** EMDX gained the ability to discover connections between documents automatically — save a document and it finds related ones, building a self-organizing knowledge graph. Search got smarter with Reciprocal Rank Fusion replacing the old weighted-average hybrid scoring. A new `explore` command maps the KB's topic landscape, showing coverage depth and gaps. On the CLI side, `emdx save` was simplified — the positional argument is now always content (no more path-guessing), and delegate gained `--sonnet`/`--opus` shortcuts with automatic model tagging.
+
+### 🚀 Major Features
+
+#### Auto-linking — self-organizing knowledge graph (#577, #725)
+Documents now automatically discover related content. When you save a document with `--auto-link`, EMDX uses semantic similarity to find and link related documents, building a navigable knowledge graph:
+
+```bash
+emdx save --file notes.md --auto-link     # Save and auto-link to similar docs
+emdx ai links 42                           # Explore connections (--depth 2 for 2 hops)
+emdx ai link 42                            # Create links for existing doc (--all to backfill)
+emdx ai unlink 42 57                       # Remove a link
+emdx view 42                               # Related docs shown in header
+```
+
+Backed by a new `document_links` table (migration 043) with bidirectional links and similarity scores. Links surface in `emdx view` headers automatically.
+
+#### Reciprocal Rank Fusion for hybrid search (#578, #724)
+Hybrid search (keyword + semantic) now uses Reciprocal Rank Fusion instead of a weighted average. RRF merges ranked lists using `RRF(d) = Σ 1/(k + rank_i(d))`, producing better relevance when combining FTS5 BM25 keyword scores with chunk-level embedding scores. Also adds min-max normalization for FTS5 scores and preserves both `keyword_score` and `semantic_score` on results for observability.
+
+#### `emdx explore` — KB topic discovery (#716)
+Maps the knowledge base by clustering documents using TF-IDF content similarity:
+
+```bash
+emdx explore                    # Topic map with cluster labels, doc counts, freshness
+emdx explore --gaps             # Coverage gap detection (thin topics, stale areas)
+emdx explore --questions        # LLM-generated answerable questions per topic
+emdx explore --json             # Structured output for agents
+```
+
+Lazy-loads sklearn only when invoked. 21 tests.
+
+### 🔧 Improvements
+
+#### Model shortcuts and tagging for delegate (#717)
+New `--sonnet` and `--opus` flags as shortcuts for `--model sonnet` and `--model opus`. Documents created by delegate are automatically tagged with `model:<name>` (e.g., `model:opus`) recording which model produced them.
+
+#### `emdx task cat delete` and `emdx task epic delete` (#722)
+Delete commands for categories and epics. Both refuse to delete when open tasks exist unless `--force` is used. Tasks are unlinked (not deleted) when their parent is removed.
+
+#### Delegate prompts piped via stdin (#718)
+Delegate now pipes task prompts through stdin instead of CLI arguments, fixing issues with very long prompts that exceeded OS argument limits.
+
+### 🐛 Bug Fixes
+
+- Demote hybrid search fallback warnings to debug level (#708)
+- Fix delegate save instruction to use `--file` flag (#721)
+- Fix `mypy` `no-any-return` in `get_link_count` (#725)
+
+### 📖 Documentation
+- Reworked README around Save/Delegate/Track narrative structure (#713, #726)
+- Bundled all dependencies into the main install (#726)
+
+### 💥 Breaking Changes
+
+#### `emdx save` positional argument is always content (#714, #721)
+Previously, `emdx save "text"` would check if `"text"` was a file path first, causing crashes on long strings (#714) and confusing agents. Now:
+
+```bash
+emdx save "content"             # positional = always content
+emdx save --file document.md    # explicit file read (new --file/-f flag)
+echo "x" | emdx save            # stdin still works
+```
+
 ## [0.17.0] - 2026-02-17
 
 **The simplification release.** EMDX dropped the emoji alias system entirely — tags are now plain text, with a migration to convert existing emoji tags. The `--each/--do` dynamic discovery feature was removed from delegate. The Q&A screen got a ground-up rewrite fixing terminal corruption. Task management tightened — `epic` and `cat` commands moved under `emdx task`, and `db.ensure_schema()` was centralized into a single app callback. Textual upgraded to v8.0, and the TUI gained its first pilot-based test suite (36 tests).
@@ -878,6 +944,7 @@ A sustained cleanup across 10+ PRs deleted dead code from every layer — unused
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.18.0]: https://github.com/arockwell/emdx/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/arockwell/emdx/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/arockwell/emdx/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/arockwell/emdx/compare/v0.14.0...v0.15.0

@@ -155,7 +155,7 @@ emdx delegate --branch -b develop "add feature X"
 emdx delegate --doc 42 --pr "fix the bug"
 ```
 
-**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--epic`/`-e`, `--cat`/`-c`, `--cleanup`
+**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `--sonnet`, `--opus`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--epic`/`-e`, `--cat`/`-c`, `--cleanup`
 
 ### Quick Reference
 
@@ -297,7 +297,6 @@ If a delegate appears stuck (no output beyond worktree creation):
 4. Kill: `kill <PID>` then clean up worktree: `git worktree remove <path> --force`
 
 ### Common Causes of Hanging
-- Very large `--doc` content embedded in CLI arguments
 - Shared virtualenv editable install pointing to deleted worktree (fix: `poetry lock && poetry install`)
 
 ## Release Process
