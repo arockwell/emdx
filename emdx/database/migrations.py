@@ -2394,6 +2394,44 @@ def migration_042_convert_emoji_tags_to_text(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_043_add_document_links(conn: sqlite3.Connection) -> None:
+    """Add document_links table for bidirectional knowledge graph links.
+
+    Stores semantic similarity links between documents, both auto-detected
+    (via embedding similarity on save) and manually created.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_doc_id INTEGER NOT NULL,
+            target_doc_id INTEGER NOT NULL,
+            similarity_score REAL NOT NULL DEFAULT 0.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            method TEXT NOT NULL DEFAULT 'auto',
+            FOREIGN KEY (source_doc_id)
+                REFERENCES documents(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_doc_id)
+                REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(source_doc_id, target_doc_id)
+        )
+        """
+    )
+
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_doc_links_source "
+        "ON document_links(source_doc_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_doc_links_target "
+        "ON document_links(target_doc_id)"
+    )
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2439,6 +2477,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (40, "Add chunk embeddings for semantic search", migration_040_add_chunk_embeddings),
     (41, "Add output_text to executions", migration_041_add_execution_output_text),
     (42, "Convert emoji tags to text", migration_042_convert_emoji_tags_to_text),
+    (43, "Add document links table", migration_043_add_document_links),
 ]
 
 

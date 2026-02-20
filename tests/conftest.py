@@ -62,6 +62,7 @@ def isolate_test_database(tmp_path_factory):
             'emdx.database.documents',
             'emdx.database.search',
             'emdx.database.groups',
+            'emdx.database.document_links',
             'emdx.models.executions',
             'emdx.services.execution_monitor',
             'emdx.services.execution_service',

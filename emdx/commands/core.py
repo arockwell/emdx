@@ -206,6 +206,9 @@ def save(
     ),  # noqa: E501
     copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
     open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
+    auto_link: bool = typer.Option(
+        False, "--auto-link", help="Auto-link to semantically similar documents (requires ai index)"
+    ),
     task: int | None = typer.Option(
         None, "--task", help="Link saved document to a task as its output"
     ),
@@ -270,6 +273,25 @@ def save(
                 console.print(f"   [dim]Group:[/dim] #{group_id} ({group['name']})")
         else:
             console.print(f"   [yellow]Warning: Group #{group_id} not found[/yellow]")
+
+    # Step 6.6: Auto-link to similar documents if requested
+    if auto_link:
+        try:
+            from emdx.services.link_service import auto_link_document
+
+            link_result = auto_link_document(doc_id)
+            if link_result.links_created > 0:
+                console.print(
+                    f"   [dim]Linked to {link_result.links_created}"
+                    f" similar doc(s)[/dim]"
+                )
+        except ImportError:
+            console.print(
+                "   [yellow]Auto-link skipped: "
+                "install emdx[ai] for semantic linking[/yellow]"
+            )
+        except Exception as e:
+            console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
 
     # Step 6.7: Link to task if specified
     if task is not None:
@@ -851,9 +873,33 @@ def view(
 
         doc_tags = get_document_tags(doc["id"])
 
+        # Fetch linked documents
+        try:
+            from emdx.database.document_links import get_links_for_document
+
+            doc_links = get_links_for_document(doc["id"])
+        except Exception:
+            doc_links = []
+
         # JSON output
         if json_output:
             content = doc["content"]
+            linked_docs = []
+            for link in doc_links:
+                if link["source_doc_id"] == doc["id"]:
+                    linked_docs.append({
+                        "id": link["target_doc_id"],
+                        "title": link["target_title"],
+                        "similarity": link["similarity_score"],
+                        "method": link["method"],
+                    })
+                else:
+                    linked_docs.append({
+                        "id": link["source_doc_id"],
+                        "title": link["source_title"],
+                        "similarity": link["similarity_score"],
+                        "method": link["method"],
+                    })
             output = {
                 "id": doc["id"],
                 "title": doc["title"],
@@ -865,6 +911,7 @@ def view(
                 "access_count": doc["access_count"],
                 "parent_id": doc.get("parent_id"),
                 "tags": doc_tags,
+                "linked_docs": linked_docs,
                 "word_count": len(content.split()),
                 "char_count": len(content),
                 "line_count": content.count("\n") + 1 if content else 0,
@@ -878,6 +925,8 @@ def view(
                     _print_view_header_rich(doc, doc_tags)
                 else:
                     _print_view_header_plain(doc, doc_tags)
+                if doc_links:
+                    _print_related_docs(doc["id"], doc_links, rich_mode)
                 print()
 
             if raw:
@@ -970,6 +1019,40 @@ def _print_view_header_rich(doc: Mapping[str, Any], doc_tags: list[str]) -> None
         padding=(0, 1),
     )
     console.print(panel)
+
+
+def _print_related_docs(
+    doc_id: int,
+    links: list[Any],
+    rich_mode: bool,
+) -> None:
+    """Print related documents section for the view command."""
+    related: list[tuple[int, str, float]] = []
+    for link in links:
+        if link["source_doc_id"] == doc_id:
+            related.append((
+                link["target_doc_id"],
+                link["target_title"],
+                link["similarity_score"],
+            ))
+        else:
+            related.append((
+                link["source_doc_id"],
+                link["source_title"],
+                link["similarity_score"],
+            ))
+
+    if rich_mode:
+        items = [
+            f"  [cyan]#{rid}[/cyan] {rtitle} [dim]({score:.0%})[/dim]"
+            for rid, rtitle, score in related
+        ]
+        console.print(f"  [dim]Related:[/dim]   {items[0].strip()}")
+        for item in items[1:]:
+            console.print(f"             {item.strip()}")
+    else:
+        parts = [f"#{rid} {rtitle} ({score:.0%})" for rid, rtitle, score in related]
+        print(f"Related: {', '.join(parts)}")
 
 
 @app.command()
