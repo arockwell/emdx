@@ -144,3 +144,25 @@ class TestGetInputContent:
 
         finally:
             Path(temp_file_path).unlink()
+
+    def test_long_inline_content_does_not_crash(self):
+        """Regression test for #714: inline content >255 chars crashes with OSError."""
+        long_content = "A" * 300  # Exceeds OS filename limit (255 chars)
+
+        with patch('sys.stdin.isatty', return_value=True):
+            result = get_input_content(long_content)
+
+        assert result.source_type == "direct"
+        assert result.content == long_content
+        assert result.source_path is None
+
+    def test_exactly_at_filename_limit_does_not_crash(self):
+        """Ensure content at exactly 255 chars (the OS limit) is handled gracefully."""
+        content_255 = "B" * 255
+
+        with patch('sys.stdin.isatty', return_value=True):
+            result = get_input_content(content_255)
+
+        # Should be treated as direct content (no file "BBB...B" exists)
+        assert result.source_type == "direct"
+        assert result.content == content_255
