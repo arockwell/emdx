@@ -43,15 +43,16 @@ class ClaudeCliExecutor(CliExecutor):
     ) -> CliCommand:
         """Build Claude CLI command.
 
+        Prompt is piped via stdin to avoid OS argument length limits.
         Claude command format:
-            claude --print "prompt" --model <model> --output-format <format>
-                   [--verbose] [--allowedTools X,Y,Z]
+            echo "prompt" | claude --print --model <model> --output-format <format>
+                                   [--verbose] [--allowedTools X,Y,Z]
         """
         # Start with binary
         cmd = list(self.config.binary)
 
-        # Add prompt flag and prompt (not positional for Claude)
-        cmd.extend([self.config.prompt_flag, prompt])
+        # --print flag without a value; prompt will arrive via stdin
+        cmd.append(self.config.prompt_flag)
 
         # Add model
         resolved_model = resolve_model_alias(model or self.config.default_model, CliTool.CLAUDE)
@@ -68,7 +69,7 @@ class ClaudeCliExecutor(CliExecutor):
         if allowed_tools and self.config.supports_allowed_tools and self.config.allowed_tools_flag:
             cmd.extend([self.config.allowed_tools_flag, ",".join(allowed_tools)])
 
-        return CliCommand(args=cmd, cwd=working_dir)
+        return CliCommand(args=cmd, cwd=working_dir, stdin_data=prompt)
 
     def parse_output(
         self,

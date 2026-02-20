@@ -118,7 +118,7 @@ emdx status   # Quick overview
 ### Mandatory Behaviors
 
 1. **Check ready tasks** before starting work: `emdx task ready`
-2. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
+2. **Save significant outputs** to emdx: `emdx save "findings" --title "Title" --tags "analysis,active"`
 3. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
 4. **Never end session** without updating task status and creating tasks for remaining work
 
@@ -195,8 +195,9 @@ emdx delegate --doc 42 --pr "fix the bug"
 
 ```bash
 # Save
-emdx save document.md
-echo "text" | emdx save --title "Title" --tags "notes"
+emdx save "text content" --title "Title" --tags "notes"
+emdx save --file document.md                  # Read from file
+echo "text" | emdx save --title "Title"       # Pipe from stdin
 
 # Search — FTS5 keyword search (default). OR/AND/NOT do NOT work (terms are quoted).
 # To search for multiple concepts, run separate find commands or use --tags.
@@ -266,7 +267,6 @@ grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
 
 - **`emdx find` does not support OR/AND/NOT** — `escape_fts5_query()` quotes each term, making operators literal. Use separate find calls or `--tags` with `--any-tags`.
 - **`emdx task add`** not `emdx task create` — the subcommand is `add`.
-- **`emdx save "text"`** looks for a FILE named "text" — use `echo "text" | emdx save --title "Title"` for stdin.
 - **`select.select()` on macOS**: Python's `select.select()` does not work reliably on `subprocess.Popen` stdout/stderr pipes on macOS. Use background threads with `queue.Queue` instead (see `_reader_thread()` in `unified_executor.py`).
 - **Delegate log monitoring**: When running parallel delegates, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
 - **FTS5 virtual table queries**: `documents_fts` is a separate FTS5 virtual table, NOT a column on `documents`. You must JOIN it: `SELECT d.id FROM documents d JOIN documents_fts fts ON d.id = fts.rowid WHERE fts.documents_fts MATCH ?`. Never use `WHERE documents_fts MATCH ?` directly on the documents table — it silently fails with "no such column". See `emdx/database/search.py` for the canonical pattern.

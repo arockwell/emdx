@@ -287,12 +287,18 @@ class UnifiedExecutor:
                 with open(log_file, "w") as f:
                     process = subprocess.Popen(
                         cmd.args,
+                        stdin=subprocess.PIPE if cmd.stdin_data else None,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True,
                         cwd=cmd.cwd,
                         env=get_subprocess_env(),
                     )
+
+                    # Feed prompt via stdin then close to signal EOF
+                    if cmd.stdin_data and process.stdin:
+                        process.stdin.write(cmd.stdin_data)
+                        process.stdin.close()
 
                     # Read stdout via background thread (reliable on macOS)
                     stdout_q: queue.Queue[str | None] = queue.Queue()
@@ -353,12 +359,18 @@ class UnifiedExecutor:
                 with open(log_file, "w") as f:
                     process = subprocess.Popen(
                         cmd.args,
+                        stdin=subprocess.PIPE if cmd.stdin_data else None,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True,
                         cwd=cmd.cwd,
                         env=get_subprocess_env(),
                     )
+
+                    # Feed prompt via stdin then close to signal EOF
+                    if cmd.stdin_data and process.stdin:
+                        process.stdin.write(cmd.stdin_data)
+                        process.stdin.close()
 
                     # Read stdout via background thread (reliable on macOS)
                     stdout_q = queue.Queue()

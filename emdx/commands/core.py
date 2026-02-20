@@ -59,8 +59,13 @@ class DocumentMetadata:
     project: str | None = None
 
 
-def get_input_content(input_arg: str | None) -> InputContent:
-    """Handle input from stdin, file, or direct text"""
+def get_input_content(
+    input_arg: str | None, file_path: str | None = None
+) -> InputContent:
+    """Handle input from stdin, --file, or positional content argument.
+
+    Priority: stdin > --file > positional content arg.
+    """
     import sys
 
     # Priority 1: Check if stdin has data
@@ -68,31 +73,30 @@ def get_input_content(input_arg: str | None) -> InputContent:
         content = sys.stdin.read()
         if content.strip():  # Only use stdin if it has actual content
             return InputContent(content=content, source_type="stdin")
-        # Fall through to check input_arg if stdin is empty
+        # Fall through if stdin is empty
 
-    # Priority 2: Check if input is provided
+    # Priority 2: Explicit --file flag
+    if file_path:
+        fp = Path(file_path)
+        if not fp.exists() or not fp.is_file():
+            console.print(f"[red]Error: File not found: {file_path}[/red]")
+            raise typer.Exit(1)
+        try:
+            content = fp.read_text(encoding="utf-8")
+            return InputContent(content=content, source_type="file", source_path=fp)
+        except Exception as e:
+            console.print(f"[red]Error reading file: {e}[/red]")
+            raise typer.Exit(1) from e
+
+    # Priority 3: Positional argument is always treated as content
     if input_arg:
-        # Check if it's a file path
-        file_path = Path(input_arg)
-        if file_path.exists() and file_path.is_file():
-            # It's a file
-            try:
-                content = file_path.read_text(encoding="utf-8")
-                return InputContent(content=content, source_type="file", source_path=file_path)
-            except Exception as e:
-                console.print(f"[red]Error reading file: {e}[/red]")
-                raise typer.Exit(1) from e
-        else:
-            # Treat as direct content
-            return InputContent(content=input_arg, source_type="direct")
+        return InputContent(content=input_arg, source_type="direct")
 
     # No input provided
-    else:
-        console.print(
-            "[red]Error: No input provided. Provide a file path, text content, "
-            "or pipe data via stdin[/red]"
-        )
-        raise typer.Exit(1)
+    console.print(
+        "[red]Error: No input provided. Use positional arg, --file, or pipe via stdin[/red]"
+    )
+    raise typer.Exit(1)
 
 
 def generate_title(input_content: InputContent, provided_title: str | None) -> str:
@@ -175,7 +179,10 @@ def display_save_result(
 @app.command()
 def save(
     input: str | None = typer.Argument(
-        None, help="File path or content to save (reads from stdin if not provided)"
+        None, help="Text content to save (or pipe via stdin)"
+    ),
+    file: str | None = typer.Option(
+        None, "--file", "-f", help="Read content from a file path"
     ),
     title: str | None = typer.Option(None, "--title", "-t", help="Document title"),
     project: str | None = typer.Option(
@@ -213,7 +220,10 @@ def save(
         False, "--done", help="Also mark the linked task as done (requires --task)"
     ),
 ) -> None:
-    """Save content to the knowledge base (from file, stdin, or direct text)"""
+    """Save content to the knowledge base.
+
+    Content sources (in priority order): stdin > --file > positional argument.
+    """
     # Validate --done requires --task
     if mark_done and task is None:
         console.print("[red]Error: --done requires --task[/red]")
@@ -229,7 +239,7 @@ def save(
             raise typer.Exit(1)
 
     # Step 1: Get input content
-    input_content = get_input_content(input)
+    input_content = get_input_content(input, file_path=file)
 
     # Step 2: Generate title
     final_title = generate_title(input_content, title)
