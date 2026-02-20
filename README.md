@@ -4,17 +4,15 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**The knowledge base that can go get its own knowledge.**
+**Send agents. Save everything. Track what's next.**
 
-Every Claude Code session starts from zero. Your research, decisions, and AI-generated analysis vanish when the session ends. You re-explain context. You re-run searches. You lose work.
-
-emdx fixes this. It's a CLI tool — a local knowledge base backed by SQLite. Save your research, pipe in command output, or delegate tasks to Claude agents — every result lands in one searchable place. Next session, it's all still there.
+Claude sessions start from zero. emdx doesn't. Save your research, fire off agents that write results back to your knowledge base, and track what's left. One CLI, local SQLite, nothing vanishes.
 
 ## See it in action
 
 ```bash
 # You're working on a project. Save what you know.
-$ emdx save security-audit.md
+$ emdx save --file security-audit.md
 ✅ Saved as #42: security-audit
 
 # Have Claude analyze it for you
@@ -38,8 +36,6 @@ $ emdx delegate --doc 43 --pr "fix the issues from this analysis"
 🔀 PR #87: fix the issues from this analysis
 ```
 
-Everything prints to stdout and gets saved to your knowledge base.
-
 ## Install
 
 ```bash
@@ -52,13 +48,13 @@ uv tool install 'emdx[ai]'     # Add semantic search, embeddings, Q&A
 uv tool install 'emdx[all]'    # Everything
 ```
 
-## The knowledge base
+## Save
 
-Anything you save becomes searchable — files, notes, piped command output. Tag things so you can find them by topic later.
+Files, notes, piped command output — anything you save becomes searchable. Tag things so you can find them by topic later.
 
 ```bash
 # Save a file
-$ emdx save meeting-notes.md
+$ emdx save --file meeting-notes.md
 ✅ Saved as #12: meeting-notes
 
 # Save a quick note
@@ -81,9 +77,9 @@ $ emdx find "auth"
 $ emdx find --tags "security"
 ```
 
-## Delegate work to agents
+## Delegate
 
-You saw the basics in the hero. Here's where it gets interesting — you can control how agents work, combine their output, and chain results together.
+Control how agents work, combine their output, and chain results together.
 
 ```bash
 # Throttle concurrency when you have a lot of tasks
@@ -113,6 +109,26 @@ $ emdx delegate --doc 42 --pr "implement this plan"
 🔀 PR #89: implement this plan
 ```
 
+## Track
+
+Organize work with tasks, epics, and categories. Delegate results feed back into the task list.
+
+```bash
+# Create tasks as you discover work
+$ emdx task add "Fix token refresh bug" --cat FIX
+$ emdx task add "Add rate limiting to API" --cat FEAT --epic 42
+
+# See what's ready to work on
+$ emdx task ready
+
+# Mark progress
+$ emdx task active 15
+$ emdx task done 15
+
+# Group work under epics
+$ emdx task epic list
+```
+
 ## AI features
 
 With `emdx[ai]` installed, search by meaning instead of just keywords:
@@ -128,15 +144,9 @@ $ emdx ai context "How does auth work?" | claude
 $ emdx ai ask "What did we decide about the API redesign?"
 ```
 
-## Claude Code integration
-
-Add `emdx prime` to your CLAUDE.md and every Claude Code session starts with context — ready tasks, recent documents, and in-progress work.
-
-```bash
-$ emdx prime    # Output current work context for Claude Code session injection
-```
-
 ## More features
+
+Add `emdx prime` to your CLAUDE.md and every Claude Code session starts with context — ready tasks, recent docs, in-progress work.
 
 ```bash
 emdx compact --dry-run                           # Deduplicate similar docs
@@ -152,7 +162,8 @@ emdx gui                                         # Interactive TUI browser
 
 | I want to... | Command |
 |--------------|---------|
-| Save a file or note | `emdx save file.md` |
+| Save a file | `emdx save --file doc.md` |
+| Save a note | `emdx save "quick note" --title "Title"` |
 | Find by keyword | `emdx find "query"` |
 | Find by tag | `emdx find --tags "active"` |
 | View a document | `emdx view 42` |
@@ -160,6 +171,8 @@ emdx gui                                         # Interactive TUI browser
 | Run an AI task | `emdx delegate "task"` |
 | Run tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
 | Create a PR from a task | `emdx delegate --pr "fix the bug"` |
+| Add a task | `emdx task add "title" --cat FEAT` |
+| See ready tasks | `emdx task ready` |
 | Ask your KB a question | `emdx ai context "question" \| claude` |
 | Start a Claude session | `emdx prime` |
 
