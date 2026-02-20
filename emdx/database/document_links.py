@@ -73,8 +73,7 @@ def delete_links_for_document(doc_id: int) -> int:
     """Delete all links involving a document. Returns count deleted."""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
-            "DELETE FROM document_links "
-            "WHERE source_doc_id = ? OR target_doc_id = ?",
+            "DELETE FROM document_links WHERE source_doc_id = ? OR target_doc_id = ?",
             (doc_id, doc_id),
         )
         conn.commit()
@@ -127,8 +126,10 @@ def link_exists(source_doc_id: int, target_doc_id: int) -> bool:
             "OR (source_doc_id = ? AND target_doc_id = ?) "
             "LIMIT 1",
             (
-                source_doc_id, target_doc_id,
-                target_doc_id, source_doc_id,
+                source_doc_id,
+                target_doc_id,
+                target_doc_id,
+                source_doc_id,
             ),
         )
         return cursor.fetchone() is not None
@@ -138,11 +139,11 @@ def get_link_count(doc_id: int) -> int:
     """Get the number of links for a document."""
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
-            "SELECT COUNT(*) FROM document_links "
-            "WHERE source_doc_id = ? OR target_doc_id = ?",
+            "SELECT COUNT(*) FROM document_links WHERE source_doc_id = ? OR target_doc_id = ?",
             (doc_id, doc_id),
         )
-        return cursor.fetchone()[0]
+        row = cursor.fetchone()
+        return int(row[0]) if row else 0
 
 
 def batch_get_link_counts(doc_ids: list[int]) -> dict[int, int]:
@@ -175,6 +176,7 @@ def create_links_batch(
     Each tuple is (source_doc_id, target_doc_id, similarity_score, method).
     Returns the number of links created.
     """
+
     def _insert_batch(c: sqlite3.Connection) -> int:
         count = 0
         for source_id, target_id, score, method in links:
