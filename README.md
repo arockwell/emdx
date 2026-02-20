@@ -43,11 +43,6 @@ uv tool install emdx    # or: pip install emdx
 emdx --help
 ```
 
-```bash
-uv tool install 'emdx[ai]'     # Add semantic search, embeddings, Q&A
-uv tool install 'emdx[all]'    # Everything
-```
-
 ## Save
 
 Files, notes, piped command output — anything you save becomes searchable. Tag things so you can find them by topic later.
@@ -131,7 +126,7 @@ $ emdx task epic list
 
 ## AI features
 
-With `emdx[ai]` installed, search by meaning instead of just keywords:
+Search by meaning instead of just keywords:
 
 ```bash
 # "rate limiting" finds docs about throttling, backoff, quotas...
