@@ -1,13 +1,7 @@
 """Activity View - Mission Control for EMDX.
 
-The primary interface for monitoring Claude Code's work:
-- Status bar with active count, docs today, cost, errors, sparkline
-- Activity stream showing agents, groups, and direct saves
-- Preview pane with document content
-- Hierarchical drill-in for groups
-
-Uses Textual's Tree widget for native hierarchy, expand/collapse,
-and cursor tracking by node reference — eliminating scroll jumping.
+Flat table of recent documents and agent executions with a preview pane.
+No hierarchy, no groups — just a scannable list sorted by time.
 """
 
 import logging
@@ -20,31 +14,26 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import Log, RichLog, Static, Tree
+from textual.widgets import Log, RichLog, Static
 
 from emdx.utils.datetime_utils import parse_datetime
 
 from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
 from .activity_items import ActivityItem as ActivityItemBase
-from .activity_tree import ActivityTree
-from .group_picker import GroupPicker
+from .activity_table import ActivityTable
 from .sparkline import sparkline
 
 logger = logging.getLogger(__name__)
 
 try:
     from emdx.services import document_service as doc_db
-    from emdx.services import group_service as groups_db
     from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
     HAS_DOCS = True
-    HAS_GROUPS = True
 except ImportError:
     doc_db = None  # type: ignore[assignment]
-    groups_db = None  # type: ignore[assignment]
     HAS_DOCS = False
-    HAS_GROUPS = False
 
 
 def format_tokens(tokens: int) -> str:
@@ -77,14 +66,12 @@ def format_time_ago(dt: datetime) -> str:
     seconds = diff.total_seconds()
 
     # If timestamp appears to be in the future, it's likely stored as UTC
-    # Convert it to local time (documents use UTC, workflows use local)
-    if seconds < -60:  # More than 1 minute in "future" = probably UTC
+    if seconds < -60:
         dt_utc = dt.replace(tzinfo=timezone.utc)
         dt_local = dt_utc.astimezone().replace(tzinfo=None)
         diff = now - dt_local
         seconds = diff.total_seconds()
 
-    # Handle any remaining future times
     if seconds < 0:
         return "just now"
 
@@ -102,7 +89,6 @@ def format_time_ago(dt: datetime) -> str:
     return f"{days}d"
 
 
-# Re-export ActivityItem base class from activity_items for type annotations
 ActivityItem = ActivityItemBase
 
 
@@ -123,7 +109,7 @@ class ActivityView(HelpMixin, Widget):
     """Activity View - Mission Control for EMDX."""
 
     HELP_TITLE = "Activity View"
-    """Mission Control - the primary view for monitoring EMDX activity."""
+    """Mission Control — flat table of recent activity."""
 
     class ViewDocument(Message):
         """Request to view a document fullscreen."""
@@ -136,14 +122,9 @@ class ActivityView(HelpMixin, Widget):
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
         ("enter", "fullscreen", "Open"),
-        ("l", "expand", "Expand"),
-        ("h", "collapse", "Collapse"),
         ("f", "fullscreen", "Fullscreen"),
         ("r", "refresh", "Refresh"),
-        ("g", "add_to_group", "Add to Group"),
-        ("G", "create_group", "Create Group"),
         ("i", "create_gist", "New Gist"),
-        ("u", "ungroup", "Ungroup"),
         ("x", "dismiss_execution", "Kill/Dismiss"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
@@ -207,7 +188,7 @@ class ActivityView(HelpMixin, Widget):
         padding: 0 1;
     }
 
-    #activity-tree {
+    #activity-table {
         height: 1fr;
         scrollbar-size: 1 1;
     }
@@ -265,23 +246,18 @@ class ActivityView(HelpMixin, Widget):
         self.log_subscriber = AgentLogSubscriber(self)
         self.streaming_item_id: int | None = None
         self._fullscreen = False
-        # Cache to prevent flickering during refresh
-        self._last_preview_key: tuple | None = None  # (item_type, item_id, status)
-        self._preview_raw_content: str = ""  # Raw markdown for copy mode
+        self._last_preview_key: tuple[str, int, str] | None = None
+        self._preview_raw_content: str = ""
         self._copy_mode = False
-        # Flag to only run zombie cleanup once on startup
         self._zombies_cleaned = False
-        # Reentrance guard: prevents overlapping async refreshes
         self._refresh_in_progress = False
-        # Data loader (owns DB queries)
         self._data_loader = ActivityDataLoader()
 
     def _get_selected_item(self) -> ActivityItem | None:
-        """Get the currently selected ActivityItem from the tree."""
+        """Get the currently selected ActivityItem from the table."""
         try:
-            tree = self.query_one("#activity-tree", ActivityTree)
-            node = tree.cursor_node
-            return node.data if node else None
+            table = self.query_one("#activity-table", ActivityTable)
+            return table.get_selected_item()
         except Exception:
             return None
 
@@ -294,13 +270,13 @@ class ActivityView(HelpMixin, Widget):
 
         # Main content
         with Horizontal(id="main-content"):
-            # Left: Activity stream (top) + Context panel (bottom)
+            # Left: Activity table (top) + Context panel (bottom)
             with Vertical(id="activity-panel"):
-                # Top: Activity list
+                # Top: Activity table
                 with Vertical(id="activity-list-section"):
                     yield Static("ACTIVITY", id="activity-header")
-                    yield ActivityTree("Activity", id="activity-tree")
-                # Bottom: Context panel (workflow details or doc metadata)
+                    yield ActivityTable(id="activity-table")
+                # Bottom: Context panel (document metadata)
                 with Vertical(id="context-section"):
                     yield Static("DETAILS", id="context-header")
                     with ScrollableContainer(id="context-scroll"):
@@ -310,7 +286,7 @@ class ActivityView(HelpMixin, Widget):
                             markup=True,
                             wrap=True,
                             auto_scroll=False,
-                        )  # noqa: E501
+                        )
 
             # Right: Preview (document content)
             with Vertical(id="preview-panel"):
@@ -335,17 +311,14 @@ class ActivityView(HelpMixin, Widget):
                     wrap=True,
                 )
 
-        # Group picker (inline at bottom, hidden by default)
-        yield GroupPicker(id="group-picker")
-
     async def on_mount(self) -> None:
         """Initialize the view."""
-        tree = self.query_one("#activity-tree", ActivityTree)
+        table = self.query_one("#activity-table", ActivityTable)
 
         await self.load_data()
-        tree.focus()
+        table.focus()
 
-        # Start refresh timer (sync wrapper dispatches to async via run_worker)
+        # Start refresh timer
         self.set_interval(1.0, self._refresh_data_tick)
 
     async def load_data(self, update_preview: bool = True) -> None:
@@ -355,9 +328,9 @@ class ActivityView(HelpMixin, Widget):
         )
         self._zombies_cleaned = True
 
-        # Populate tree
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.populate_from_items(self.activity_items)
+        # Populate table
+        table = self.query_one("#activity-table", ActivityTable)
+        table.populate(self.activity_items)
 
         await self._update_status_bar()
         if update_preview:
@@ -368,10 +341,10 @@ class ActivityView(HelpMixin, Widget):
         """Update the status bar with current stats."""
         status_bar = self.query_one("#status-bar", Static)
 
-        # Count active items (running agents)
-        active = len([item for item in self.activity_items if item.status == "running"])
+        active = len(
+            [item for item in self.activity_items if item.status == "running"]
+        )
 
-        # Count docs today
         today = datetime.now().date()
         docs_today = len(
             [
@@ -381,35 +354,34 @@ class ActivityView(HelpMixin, Widget):
             ]
         )
 
-        # Total cost today
         cost_today: float = sum(
             (
                 item.cost
                 for item in self.activity_items
-                if item.timestamp and item.timestamp.date() == today and item.cost
+                if item.timestamp
+                and item.timestamp.date() == today
+                and item.cost
             ),
             0.0,
         )
 
-        # Count errors (today only)
         errors = len(
             [
                 item
                 for item in self.activity_items
-                if item.status == "failed" and item.timestamp and item.timestamp.date() == today
+                if item.status == "failed"
+                and item.timestamp
+                and item.timestamp.date() == today
             ]
         )
 
-        # Generate sparkline for the week
         week_data = self._get_week_activity_data()
         spark = sparkline([float(x) for x in week_data], width=7)
 
-        # Get theme indicator
         from emdx.ui.themes import get_theme_indicator
 
         theme_indicator = get_theme_indicator(self.app.theme)
 
-        # Format status bar
         parts = []
         if active > 0:
             parts.append(f"[green]🟢 {active} Active[/green]")
@@ -433,7 +405,7 @@ class ActivityView(HelpMixin, Widget):
         today = datetime.now().date()
         counts = []
 
-        for i in range(6, -1, -1):  # 6 days ago to today
+        for i in range(6, -1, -1):
             day = today - timedelta(days=i)
             count = len(
                 [
@@ -450,7 +422,6 @@ class ActivityView(HelpMixin, Widget):
         """Render markdown content to the preview RichLog."""
         from emdx.ui.markdown_config import MarkdownConfig
 
-        # Cache raw content for copy mode
         self._preview_raw_content = content[:50000] if content else ""
 
         preview = self.query_one("#preview-content", RichLog)
@@ -467,7 +438,6 @@ class ActivityView(HelpMixin, Widget):
         except Exception:
             preview.write(content[:50000] if content else "[dim]No content[/dim]")
 
-        # If in copy mode, also update the copy Log
         if self._copy_mode:
             self._update_copy_widget()
 
@@ -484,7 +454,9 @@ class ActivityView(HelpMixin, Widget):
     def action_toggle_copy_mode(self) -> None:
         """Toggle between rendered preview and selectable copy mode."""
         try:
-            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview_scroll = self.query_one(
+                "#preview-scroll", ScrollableContainer
+            )
             copy_log = self.query_one("#preview-copy", Log)
         except Exception:
             return
@@ -502,7 +474,9 @@ class ActivityView(HelpMixin, Widget):
         """Update the preview pane with selected item."""
         try:
             preview = self.query_one("#preview-content", RichLog)
-            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview_scroll = self.query_one(
+                "#preview-scroll", ScrollableContainer
+            )
             preview_log = self.query_one("#preview-log", RichLog)
             header = self.query_one("#preview-header", Static)
         except Exception as e:
@@ -531,9 +505,11 @@ class ActivityView(HelpMixin, Widget):
 
         current_key = (item.item_type, item.item_id, item.status)
 
-        # Skip update if same item and not forced (prevents flickering during refresh)
-        # Always update for running items (logs change) or if explicitly forced
-        if not force and item.status != "running" and self._last_preview_key == current_key:
+        if (
+            not force
+            and item.status != "running"
+            and self._last_preview_key == current_key
+        ):
             return
 
         self._last_preview_key = current_key
@@ -553,16 +529,17 @@ class ActivityView(HelpMixin, Widget):
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
-                    # Check if content already has a markdown title header (may have leading whitespace)  # noqa: E501
                     content_stripped = content.lstrip()
                     has_title_header = (
                         content_stripped.startswith(f"# {title}")
-                        or content_stripped.startswith("# ")  # Any h1 header counts
+                        or content_stripped.startswith("# ")
                     )
                     if has_title_header:
                         self._render_markdown_preview(content)
                     else:
-                        self._render_markdown_preview(f"# {title}\n\n{content}")
+                        self._render_markdown_preview(
+                            f"# {title}\n\n{content}"
+                        )
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return
@@ -570,7 +547,7 @@ class ActivityView(HelpMixin, Widget):
                     self._render_markdown_preview(
                         f"# {item.title}\n\n"
                         f"*Document #{item.doc_id} not found*\n\n"
-                        "This document may have been deleted or the database may be out of sync."
+                        "This document may have been deleted."
                     )
                     show_markdown()
                     header.update(f"⚠️ #{item.doc_id} (missing)")
@@ -578,7 +555,7 @@ class ActivityView(HelpMixin, Widget):
             except Exception as e:
                 logger.error(f"Error loading document: {e}")
 
-        # For agent executions without doc_id, use the item's preview method
+        # For agent executions without doc_id
         if item.item_type == "agent_execution":
             content, header_text = await item.get_preview_content(doc_db)
             if content:
@@ -586,11 +563,6 @@ class ActivityView(HelpMixin, Widget):
                 show_markdown()
                 header.update(header_text)
                 return
-
-        # For groups, show summary
-        if item.item_type == "group" and HAS_GROUPS:
-            await self._show_group_summary(item)
-            return
 
         # Default
         preview.clear()
@@ -611,18 +583,20 @@ class ActivityView(HelpMixin, Widget):
         item = self._get_selected_item()
         if item is None:
             context_header.update("DETAILS")
-            context_content.write("[dim]Select an item to see details[/dim]")
+            context_content.write(
+                "[dim]Select an item to see details[/dim]"
+            )
             return
 
-        # Document details
         if item.doc_id:
-            await self._show_document_context(item, context_content, context_header)
-        # Group details
-        elif item.item_type == "group":
-            await self._show_group_context(item, context_content, context_header)
+            await self._show_document_context(
+                item, context_content, context_header
+            )
         else:
             context_header.update("DETAILS")
-            context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
+            context_content.write(
+                f"[dim]{item.item_type}: {item.title}[/dim]"
+            )
 
     async def _show_document_context(
         self, item: ActivityItem, content: RichLog, header: Static
@@ -653,7 +627,9 @@ class ActivityView(HelpMixin, Widget):
             if doc.get("created_at"):
                 created_dt = parse_datetime(doc["created_at"])
                 if created_dt:
-                    meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
+                    meta_line1.append(
+                        f"[dim]{format_time_ago(created_dt)}[/dim]"
+                    )
             if meta_line1:
                 content.write(" · ".join(meta_line1))
 
@@ -672,116 +648,12 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error showing document context: {e}")
 
-    async def _show_group_context(
-        self, item: ActivityItem, content: RichLog, header: Static
-    ) -> None:
-        """Show group details in context panel."""
-        if not HAS_GROUPS:
-            header.update("GROUP")
-            return
-
-        try:
-            group = groups_db.get_group(item.item_id)
-            if not group:
-                header.update(f"📦 #{item.item_id}")
-                return
-
-            header.update(f"📦 {group['name']}")
-            content.write(
-                f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]"
-            )  # noqa: E501
-
-            desc = group.get("description")
-            if desc:
-                content.write(f"{desc[:100]}")
-
-        except Exception as e:
-            logger.error(f"Error showing group context: {e}")
-
-    async def _show_group_summary(self, item: ActivityItem) -> None:
-        """Show group summary in preview."""
-        try:
-            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
-            preview_log = self.query_one("#preview-log", RichLog)
-            header = self.query_one("#preview-header", Static)
-        except Exception as e:
-            logger.debug(f"Preview widgets not ready for group summary: {e}")
-            return
-
-        group_id = item.item_id
-        if not group_id:
-            return
-
-        try:
-            group = groups_db.get_group(group_id)
-            if not group:
-                return
-
-            lines = [f"# {group['name']}", ""]
-
-            desc = group.get("description")
-            if desc:
-                lines.append(desc)
-                lines.append("")
-
-            lines.append(f"**Type:** {group.get('group_type', 'batch')}")
-            lines.append(f"**Documents:** {group.get('doc_count', 0)}")
-
-            if group.get("total_tokens"):
-                lines.append(f"**Total tokens:** {group['total_tokens']:,}")
-            if group.get("total_cost_usd"):
-                lines.append(f"**Total cost:** ${group['total_cost_usd']:.4f}")
-
-            if group.get("project"):
-                lines.append(f"**Project:** {group['project']}")
-
-            child_groups = groups_db.get_child_groups(group_id)
-            if child_groups:
-                lines.append("")
-                lines.append("## Child Groups")
-                for cg in child_groups[:10]:
-                    type_icons = {
-                        "initiative": "📋",
-                        "round": "🔄",
-                        "batch": "📦",
-                        "session": "💾",
-                    }
-                    icon = type_icons.get(cg.get("group_type", ""), "📁")
-                    lines.append(
-                        f"- {icon} #{cg['id']} {cg['name']} ({cg.get('doc_count', 0)} docs)"
-                    )  # noqa: E501
-                if len(child_groups) > 10:
-                    lines.append(f"*... and {len(child_groups) - 10} more*")
-
-            members = groups_db.get_group_members(group_id)
-            if members:
-                lines.append("")
-                lines.append("## Documents")
-                for m in members[:15]:
-                    role = m.get("role", "member")
-                    role_icons = {
-                        "primary": "★",
-                        "synthesis": "📝",
-                        "exploration": "◇",
-                        "variant": "≈",
-                    }  # noqa: E501
-                    role_icon = role_icons.get(role, "•")
-                    lines.append(f"- {role_icon} #{m['id']} {m['title'][:40]} ({role})")
-                if len(members) > 15:
-                    lines.append(f"*... and {len(members) - 15} more*")
-
-            self._render_markdown_preview("\n".join(lines))
-            preview_scroll.display = True
-            preview_log.display = False
-            header.update(f"{item.type_icon} Group #{group_id}")
-
-        except Exception as e:
-            logger.error(f"Error showing group summary: {e}", exc_info=True)
-
     async def _show_live_log(self, item: ActivityItem) -> None:
         """Show live log for running agent execution."""
         try:
-            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
+            preview_scroll = self.query_one(
+                "#preview-scroll", ScrollableContainer
+            )
             preview_log = self.query_one("#preview-log", RichLog)
             header = self.query_one("#preview-header", Static)
         except Exception as e:
@@ -808,14 +680,20 @@ class ActivityView(HelpMixin, Widget):
 
             if not log_path:
                 preview_log.write("[yellow]⏳ Waiting for log...[/yellow]")
-                preview_log.write(f"[dim]item_type={item.item_type}[/dim]")
+                preview_log.write(
+                    f"[dim]item_type={item.item_type}[/dim]"
+                )
                 return
 
             if not log_path.exists():
-                preview_log.write(f"[yellow]⏳ Log file pending: {log_path}[/yellow]")
+                preview_log.write(
+                    f"[yellow]⏳ Log file pending: {log_path}[/yellow]"
+                )
                 return
 
-            preview_log.write(f"[green]● Streaming from: {log_path.name}[/green]")
+            preview_log.write(
+                f"[green]● Streaming from: {log_path.name}[/green]"
+            )
             self.log_stream = LogStream(log_path)
             self.streaming_item_id = item.item_id
 
@@ -824,10 +702,16 @@ class ActivityView(HelpMixin, Widget):
                 from emdx.ui.live_log_writer import LiveLogWriter
 
                 LiveLogWriter(preview_log, auto_scroll=True)
-                from emdx.utils.stream_json_parser import parse_and_format_live_logs
+                from emdx.utils.stream_json_parser import (
+                    parse_and_format_live_logs,
+                )
 
                 formatted = parse_and_format_live_logs(initial)
-                formatted = [ln for ln in formatted if "__RAW_RESULT_JSON__:" not in ln]
+                formatted = [
+                    ln
+                    for ln in formatted
+                    if "__RAW_RESULT_JSON__:" not in ln
+                ]
                 for line in formatted[-50:]:
                     preview_log.write(line)
                 preview_log.scroll_end(animate=False)
@@ -835,14 +719,17 @@ class ActivityView(HelpMixin, Widget):
             self.log_stream.subscribe(self.log_subscriber)
 
         except Exception as e:
-            logger.error(f"Error setting up live log: {e}", exc_info=True)
+            logger.error(
+                f"Error setting up live log: {e}", exc_info=True
+            )
             preview_log.write(f"[red]Error: {e}[/red]")
 
     def _handle_log_content(self, content: str) -> None:
-        """Handle new log content from stream - LIVE LOGS formatted."""
-        # Filter out raw result JSON markers from live display
+        """Handle new log content from stream."""
         content = "\n".join(
-            ln for ln in content.split("\n") if not ln.startswith("__RAW_RESULT_JSON__:")
+            ln
+            for ln in content.split("\n")
+            if not ln.startswith("__RAW_RESULT_JSON__:")
         )
         if not content.strip():
             return
@@ -866,11 +753,6 @@ class ActivityView(HelpMixin, Widget):
             self.log_stream = None
         self.streaming_item_id = None
 
-    async def _refresh_labels_only(self) -> None:
-        """Refresh just the tree labels without reloading data."""
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.refresh_from_items(self.activity_items)
-
     def _hide_notification(self) -> None:
         """Hide the notification bar."""
         self.notification_visible = False
@@ -892,27 +774,21 @@ class ActivityView(HelpMixin, Widget):
         """Sync callback for set_interval — dispatches to async refresh."""
         if self._refresh_in_progress:
             return
-        # Set flag here (sync) to prevent the next tick from cancelling
-        # the worker via exclusive=True before the coroutine starts.
         self._refresh_in_progress = True
-        self.run_worker(self._refresh_data(), exclusive=True, group="refresh")
+        self.run_worker(
+            self._refresh_data(), exclusive=True, group="refresh"
+        )
 
     async def _refresh_data(self) -> None:
-        """Periodic refresh of data.
-
-        With Tree widget, this is dramatically simpler:
-        1. Load fresh items from DB
-        2. Call refresh_from_items() which diffs and updates labels in-place
-        3. Tree preserves cursor position and scroll natively
-        """
+        """Periodic refresh of data."""
         try:
             self.activity_items = await self._data_loader.load_all(
                 zombies_cleaned=self._zombies_cleaned,
             )
             self._zombies_cleaned = True
 
-            tree = self.query_one("#activity-tree", ActivityTree)
-            tree.refresh_from_items(self.activity_items)
+            table = self.query_one("#activity-table", ActivityTable)
+            table.refresh_items(self.activity_items)
 
             await self._update_status_bar()
         finally:
@@ -921,77 +797,12 @@ class ActivityView(HelpMixin, Widget):
     # Actions
 
     def action_cursor_down(self) -> None:
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.action_cursor_down()
+        table = self.query_one("#activity-table", ActivityTable)
+        table.action_cursor_down()
 
     def action_cursor_up(self) -> None:
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.action_cursor_up()
-
-    async def action_select(self) -> None:
-        """Select/expand current item."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        tree = self.query_one("#activity-tree", ActivityTree)
-        node = tree.cursor_node
-        if node is None:
-            return
-
-        if node.is_expanded:
-            node.collapse()
-        elif item.can_expand():
-            # Load children before expanding
-            try:
-                item.children = await item.load_children(doc_db)
-                item.expanded = True
-                # Add children to tree node
-                node.remove_children()
-                tree.add_activity_children(node, item.children)
-                node.expand()
-            except Exception as e:
-                logger.error(
-                    f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True
-                )  # noqa: E501
-
-    async def action_expand(self) -> None:
-        """Expand current item."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        tree = self.query_one("#activity-tree", ActivityTree)
-        node = tree.cursor_node
-        if node is None or node.is_expanded:
-            return
-
-        if item.can_expand():
-            try:
-                item.children = await item.load_children(doc_db)
-                item.expanded = True
-                node.remove_children()
-                tree.add_activity_children(node, item.children)
-                node.expand()
-            except Exception as e:
-                logger.error(
-                    f"Error expanding {item.item_type} #{item.item_id}: {e}", exc_info=True
-                )  # noqa: E501
-
-    async def action_collapse(self) -> None:
-        """Collapse current item or go to parent."""
-        tree = self.query_one("#activity-tree", ActivityTree)
-        node = tree.cursor_node
-        if node is None:
-            return
-
-        if node.is_expanded:
-            node.collapse()
-            if node.data:
-                node.data.expanded = False
-        elif node.parent and node.parent != tree.root:
-            # Navigate to parent
-            tree.move_cursor(node.parent)
+        table = self.query_one("#activity-table", ActivityTable)
+        table.action_cursor_up()
 
     def action_fullscreen(self) -> None:
         """Open document in fullscreen preview modal."""
@@ -1016,43 +827,18 @@ class ActivityView(HelpMixin, Widget):
         """Focus previous pane."""
         pass
 
-    async def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
-        """Handle tree cursor movement."""
+    async def on_activity_table_item_highlighted(
+        self, event: ActivityTable.ItemHighlighted
+    ) -> None:
+        """Handle table cursor movement."""
         await self._update_preview(force=True)
         await self._update_context_panel()
 
-    def on_activity_tree_double_clicked(self, event: ActivityTree.DoubleClicked) -> None:
-        """Handle double-click on tree node — open fullscreen."""
+    def on_activity_table_double_clicked(
+        self, event: ActivityTable.DoubleClicked
+    ) -> None:
+        """Handle double-click on table row — open fullscreen."""
         self.action_fullscreen()
-
-    async def on_tree_node_expanded(self, event: Tree.NodeExpanded) -> None:
-        """Handle lazy child loading when a node is expanded."""
-        node = event.node
-        item = node.data
-        if item is None:
-            return
-
-        # If node already has children in the tree, skip
-        if len(list(node.children)) > 0:
-            return
-
-        # Load children from DB
-        if item.can_expand():
-            try:
-                item.children = await item.load_children(doc_db)
-                item.expanded = True
-                tree = self.query_one("#activity-tree", ActivityTree)
-                tree.add_activity_children(node, item.children)
-            except Exception as e:
-                logger.error(
-                    f"Error loading children for {item.item_type} #{item.item_id}: {e}",
-                    exc_info=True,
-                )  # noqa: E501
-
-    def on_tree_node_collapsed(self, event: Tree.NodeCollapsed) -> None:
-        """Track collapse state on the item."""
-        if event.node.data:
-            event.node.data.expanded = False
 
     def on_unmount(self) -> None:
         """Cleanup on unmount."""
@@ -1068,11 +854,15 @@ class ActivityView(HelpMixin, Widget):
             return
 
         if not item.doc_id:
-            self._show_notification("Select a document to gist", is_error=True)
+            self._show_notification(
+                "Select a document to gist", is_error=True
+            )
             return
 
         if not HAS_DOCS or not doc_db:
-            self._show_notification("Documents not available", is_error=True)
+            self._show_notification(
+                "Documents not available", is_error=True
+            )
             return
 
         try:
@@ -1100,7 +890,7 @@ class ActivityView(HelpMixin, Widget):
             logger.error(f"Error creating gist: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
 
-    # Execution management actions
+    # Execution management
 
     async def action_dismiss_execution(self) -> None:
         """Kill or dismiss a stale/running execution."""
@@ -1110,22 +900,30 @@ class ActivityView(HelpMixin, Widget):
             return
 
         if item.item_type != "agent_execution":
-            self._show_notification("Can only dismiss executions", is_error=True)
+            self._show_notification(
+                "Can only dismiss executions", is_error=True
+            )
             return
 
         if item.status != "running":
-            self._show_notification("Execution is not running", is_error=True)
+            self._show_notification(
+                "Execution is not running", is_error=True
+            )
             return
 
         try:
-            from emdx.models.executions import get_execution, update_execution_status
+            from emdx.models.executions import (
+                get_execution,
+                update_execution_status,
+            )
 
             execution = get_execution(item.item_id)
             if not execution:
-                self._show_notification(f"Execution #{item.item_id} not found", is_error=True)
+                self._show_notification(
+                    f"Execution #{item.item_id} not found", is_error=True
+                )
                 return
 
-            # Try to kill the process if it has a PID
             if execution.pid:
                 try:
                     import psutil
@@ -1133,183 +931,42 @@ class ActivityView(HelpMixin, Widget):
                     proc = psutil.Process(execution.pid)
                     proc.terminate()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass  # Process already gone or can't access
+                    pass
 
-            # Mark as failed
             update_execution_status(item.item_id, "failed", exit_code=-6)
-            self._show_notification(f"Dismissed execution #{item.item_id}")
+            self._show_notification(
+                f"Dismissed execution #{item.item_id}"
+            )
             await self._refresh_data()
 
         except Exception as e:
             logger.error(f"Error dismissing execution: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
 
-    # Group management actions
-
-    def action_add_to_group(self) -> None:
-        """Show group picker to add selected document or group to another group."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        picker = self.query_one("#group-picker", GroupPicker)
-
-        if item.item_type == "group":
-            picker.show(source_group_id=item.item_id)
-            return
-
-        if item.doc_id:
-            picker.show(doc_id=item.doc_id)
-            return
-
-        self._show_notification("Select a document or group", is_error=True)
-
-    async def action_create_group(self) -> None:
-        """Create a new group from the selected document."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        if not item.doc_id:
-            self._show_notification("Select a document to create a group from", is_error=True)
-            return
-
-        if not HAS_GROUPS or not groups_db:
-            self._show_notification("Groups not available", is_error=True)
-            return
-
-        try:
-            doc = doc_db.get_document(item.doc_id) if HAS_DOCS else None
-            doc_title = doc.get("title", "Untitled") if doc else "Untitled"
-
-            group_name = f"{doc_title[:30]} Group"
-            group_id = groups_db.create_group(
-                name=group_name,
-                group_type="batch",
-            )
-
-            groups_db.add_document_to_group(group_id, item.doc_id, role="primary")
-
-            self._show_notification(f"Created group '{group_name}'")
-            await self._refresh_data()
-
-        except Exception as e:
-            logger.error(f"Error creating group: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-    async def action_ungroup(self) -> None:
-        """Remove selected item from its parent group."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        if not HAS_GROUPS or not groups_db:
-            self._show_notification("Groups not available", is_error=True)
-            return
-
-        try:
-            if item.item_type == "group":
-                group = groups_db.get_group(item.item_id)
-                if not group or not group.get("parent_group_id"):
-                    self._show_notification("Group has no parent", is_error=True)
-                    return
-                groups_db.update_group(item.item_id, parent_group_id=None)
-                self._show_notification(f"Removed '{group['name']}' from parent")
-                await self._refresh_data()
-                return
-
-            if item.doc_id:
-                doc_groups = groups_db.get_document_groups(item.doc_id)
-                if not doc_groups:
-                    self._show_notification("Document is not in any group", is_error=True)
-                    return
-
-                for group in doc_groups:
-                    groups_db.remove_document_from_group(group["id"], item.doc_id)
-
-                group_names = ", ".join(g["name"][:20] for g in doc_groups)
-                self._show_notification(f"Removed from: {group_names}")
-                await self._refresh_data()
-                return
-
-            self._show_notification("Select a document or group to ungroup", is_error=True)
-
-        except Exception as e:
-            logger.error(f"Error ungrouping: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-    def _show_notification(self, message: str, is_error: bool = False) -> None:
+    def _show_notification(
+        self, message: str, is_error: bool = False
+    ) -> None:
         """Show a notification message."""
         self.notification_is_error = is_error
         self.notification_text = message
         self.notification_visible = True
         self.set_timer(3.0, self._hide_notification)
 
-    # Group picker message handlers
-
-    async def on_group_picker_group_selected(self, event: GroupPicker.GroupSelected) -> None:
-        """Handle group selection from picker."""
-        if not HAS_GROUPS or not groups_db:
-            return
-
-        try:
-            if event.source_group_id:
-                groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
-                self._show_notification(f"Moved group under '{event.group_name}'")
-            elif event.doc_id:
-                groups_db.add_document_to_group(event.group_id, event.doc_id)
-                self._show_notification(f"Added to '{event.group_name}'")
-            await self._refresh_data()
-        except Exception as e:
-            logger.error(f"Error in group operation: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.focus()
-
-    async def on_group_picker_group_created(self, event: GroupPicker.GroupCreated) -> None:
-        """Handle new group creation from picker."""
-        if not HAS_GROUPS or not groups_db:
-            return
-
-        try:
-            if event.source_group_id:
-                groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
-                self._show_notification(f"Created '{event.group_name}' and moved group under it")
-            elif event.doc_id:
-                groups_db.add_document_to_group(event.group_id, event.doc_id)
-                self._show_notification(f"Created '{event.group_name}' and added document")
-            await self._refresh_data()
-        except Exception as e:
-            logger.error(f"Error in group operation: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.focus()
-
-    def on_group_picker_cancelled(self, event: GroupPicker.Cancelled) -> None:
-        """Handle picker cancellation."""
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.focus()
-
     async def select_document_by_id(self, doc_id: int) -> bool:
         """Select and show a document by its ID."""
         logger.debug(f"select_document_by_id({doc_id}) called")
 
-        tree = self.query_one("#activity-tree", ActivityTree)
+        table = self.query_one("#activity-table", ActivityTable)
 
-        # First check if already visible in tree
-        node = tree.find_node_by_doc_id(doc_id)
-        if node:
-            logger.debug("Found document node directly in tree")
-            tree.move_cursor(node)
-            tree.scroll_to_node(node)
+        row_index = table.find_row_by_doc_id(doc_id)
+        if row_index is not None:
+            logger.debug("Found document row in table")
+            table.move_cursor(row=row_index)
             await self._update_preview(force=True)
             return True
 
-        logger.debug("Not visible in tree, trying direct load as fallback")
+        logger.debug("Not in table, trying direct load as fallback")
 
-        # Fallback - just show doc in preview
         if HAS_DOCS and doc_db:
             doc = doc_db.get_document(doc_id)
             if doc:
@@ -1321,5 +978,7 @@ class ActivityView(HelpMixin, Widget):
                 self._show_notification(f"Showing: {title[:40]}")
                 return True
 
-        self._show_notification(f"Document #{doc_id} not found", is_error=True)
+        self._show_notification(
+            f"Document #{doc_id} not found", is_error=True
+        )
         return False

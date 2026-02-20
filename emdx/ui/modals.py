@@ -95,13 +95,11 @@ class KeybindingsHelpScreen(ModalScreen[None]):
         """Default keybindings for Activity view."""
         return [
             ("Navigation", "j / k", "Move down / up"),
-            ("Navigation", "Enter", "Expand / collapse"),
-            ("Navigation", "l / h", "Expand / collapse"),
+            ("Navigation", "Enter", "Open fullscreen"),
             ("Navigation", "Tab", "Next pane"),
             ("Actions", "i", "Copy document (gist)"),
-            ("Actions", "g", "Add to group"),
-            ("Actions", "G", "Create new group"),
-            ("Actions", "u", "Remove from group"),
+            ("Actions", "x", "Kill/dismiss execution"),
+            ("Actions", "c", "Copy mode (raw text)"),
             ("Actions", "f", "Fullscreen preview"),
             ("Actions", "r", "Refresh"),
             ("General", "?", "Show this help"),

@@ -45,7 +45,7 @@ class ActivityBrowser(Widget):
         yield self.activity_view
         yield Static(
             "[bold]1[/bold] Activity │ [dim]2[/dim] Tasks │ [dim]3[/dim] Q&A │ "
-            "[dim]j/k[/dim] nav │ [dim]Enter[/dim] expand │ [dim]?[/dim] help",
+            "[dim]j/k[/dim] nav │ [dim]Enter[/dim] open │ [dim]?[/dim] help",
             id="help-bar",
         )
 
@@ -71,9 +71,9 @@ class ActivityBrowser(Widget):
         """Focus the activity view."""
         if self.activity_view:
             try:
-                tree = self.activity_view.query_one("#activity-tree")
-                if tree:
-                    tree.focus()
+                table = self.activity_view.query_one("#activity-table")
+                if table:
+                    table.focus()
             except Exception:
                 # Widget not mounted yet, will focus on mount
                 pass
