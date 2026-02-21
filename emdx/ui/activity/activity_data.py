@@ -5,31 +5,24 @@ Produces typed ActivityItem subclasses from activity_items.py.
 
 import logging
 from datetime import datetime, timedelta
-from typing import cast
 
-from emdx.ui.types import GroupDict
 from emdx.utils.datetime_utils import parse_datetime
 
 from .activity_items import (
     ActivityItem,
     AgentExecutionItem,
     DocumentItem,
-    GroupItem,
 )
 
 logger = logging.getLogger(__name__)
 
 try:
     from emdx.services import document_service as doc_svc
-    from emdx.services import group_service as group_svc
 
     HAS_DOCS = True
-    HAS_GROUPS = True
 except ImportError:
     doc_svc = None  # type: ignore[assignment]
-    group_svc = None  # type: ignore[assignment]
     HAS_DOCS = False
-    HAS_GROUPS = False
 
 
 class ActivityDataLoader:
@@ -49,9 +42,6 @@ class ActivityDataLoader:
         """
         items: list[ActivityItem] = []
 
-        if HAS_GROUPS:
-            items.extend(await self._load_groups())
-
         if HAS_DOCS:
             items.extend(await self._load_direct_saves())
 
@@ -68,51 +58,9 @@ class ActivityDataLoader:
         items.sort(key=sort_key)
         return items
 
-    async def _load_groups(self) -> list[ActivityItem]:
-        """Load document groups into typed GroupItem instances.
-
-        Uses a single batched query instead of N+1 per-group lookups.
-        """
-        items: list[ActivityItem] = []
-        try:
-            top_groups = group_svc.list_top_groups_with_counts()
-        except Exception as e:
-            logger.error(f"Error listing groups: {e}", exc_info=True)
-            return items
-
-        for group in top_groups:
-            try:
-                group_id = group["id"]
-                created = parse_datetime(group.get("created_at")) or datetime.now()
-
-                item = GroupItem(
-                    item_id=group_id,
-                    title=group["name"],
-                    timestamp=created,
-                    group=cast(GroupDict, dict(group)),
-                    doc_count=group["doc_count"],
-                    total_cost=group["total_cost_usd"] or 0,
-                    total_tokens=group["total_tokens"],
-                    child_group_count=group["child_group_count"],
-                    cost=group["total_cost_usd"] or 0,
-                )
-
-                items.append(item)
-
-            except Exception as e:
-                logger.error(f"Error loading group {group.get('id', '?')}: {e}", exc_info=True)
-
-        return items
-
     async def _load_direct_saves(self) -> list[ActivityItem]:
-        """Load documents not added to groups (standalone saves)."""
+        """Load recent documents."""
         items: list[ActivityItem] = []
-        grouped_doc_ids: set[int] = set()
-        if HAS_GROUPS:
-            try:
-                grouped_doc_ids = group_svc.get_all_grouped_document_ids()
-            except Exception as e:
-                logger.debug(f"Error getting grouped doc IDs: {e}")
 
         try:
             docs = doc_svc.list_recent_documents(limit=100, days=7)
@@ -123,8 +71,6 @@ class ActivityDataLoader:
         for doc in docs:
             try:
                 doc_id = doc["id"]
-                if doc_id in grouped_doc_ids:
-                    continue
 
                 created = doc.get("created_at")
                 title = doc.get("title", "")
@@ -168,7 +114,7 @@ class ActivityDataLoader:
                 working_dir = row["working_dir"]
 
                 # Skip completed executions that produced a doc — the doc
-                # already shows in the activity feed (standalone or grouped).
+                # already shows in the activity feed.
                 # Only keep running/failed executions for visibility.
                 if status == "completed" and doc_id:
                     continue

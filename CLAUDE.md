@@ -11,7 +11,7 @@ EMDX is a knowledge base that AI agents populate and humans curate. Python 3.11+
 **Design principle:** Same commands, different output modes. Same data, different views. `--json` is the agent lens. Rich tables/TUI is the human lens. Epics/categories serve both — they organize for humans and scope for agents. Agents populate the KB; humans curate and direct it.
 
 **What's good for whom:**
-- **Humans:** Hierarchy (epics/categories/groups), TUI, rendered markdown, fuzzy search, briefings
+- **Humans:** Hierarchy (epics/categories), TUI, rendered markdown, fuzzy search, briefings
 - **Agents:** `--json` output, flat task queue (`task ready`), exact ID access, `prime --json`
 - **Both:** Tags, save, find, delegate, task dependencies
 

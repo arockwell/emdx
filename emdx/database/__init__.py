@@ -4,7 +4,6 @@ EMDX Database Package
 Organized database operations split into focused modules:
 - connection: Database connection management
 - documents: Document CRUD operations
-- groups: Document group operations
 - search: Full-text search operations
 - migrations: Database schema migrations
 This package maintains backward compatibility with the original sqlite_database.py API.
@@ -17,7 +16,6 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Union, cast
 
-from . import groups
 from .connection import DatabaseConnection, db_connection
 from .documents import (
     delete_document,
@@ -406,7 +404,6 @@ __all__ = [
     "db",
     "SQLiteDatabase",
     "db_connection",
-    "groups",
     "save_document",
     "get_document",
     "list_documents",

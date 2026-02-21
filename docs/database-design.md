@@ -81,7 +81,6 @@ CREATE TABLE executions (
 ### **Additional Tables**
 
 The database also includes tables for:
-- **`document_groups`** — Hierarchical document organization
 - **`tasks`** — Agent work queue with status, epics, and categories
 - **`task_categories`** — Category definitions for auto-numbered task titles
 - **`document_embeddings`** — Document-level semantic search vectors (384-dimensional)

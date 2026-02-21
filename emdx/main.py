@@ -98,7 +98,6 @@ from emdx.commands.browse import app as browse_app  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.executions import app as executions_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
-from emdx.commands.groups import app as groups_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.review import app as review_app  # noqa: E402
@@ -153,10 +152,6 @@ app.add_typer(executions_app, name="exec", help="Manage Claude executions")
 
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Agent work queue")
-
-# Add groups as a subcommand group
-app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
-
 
 # Add review commands for triaging agent outputs
 app.add_typer(review_app, name="review", help="Triage agent-produced documents")

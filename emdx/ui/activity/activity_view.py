@@ -2,9 +2,8 @@
 
 The primary interface for monitoring Claude Code's work:
 - Status bar with active count, docs today, cost, errors, sparkline
-- Activity stream showing agents, groups, and direct saves
+- Activity stream showing agents and direct saves
 - Preview pane with document content
-- Hierarchical drill-in for groups
 
 Uses Textual's Tree widget for native hierarchy, expand/collapse,
 and cursor tracking by node reference — eliminating scroll jumping.
@@ -28,23 +27,18 @@ from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
 from .activity_items import ActivityItem as ActivityItemBase
 from .activity_tree import ActivityTree
-from .group_picker import GroupPicker
 from .sparkline import sparkline
 
 logger = logging.getLogger(__name__)
 
 try:
     from emdx.services import document_service as doc_db
-    from emdx.services import group_service as groups_db
     from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
     HAS_DOCS = True
-    HAS_GROUPS = True
 except ImportError:
     doc_db = None  # type: ignore[assignment]
-    groups_db = None  # type: ignore[assignment]
     HAS_DOCS = False
-    HAS_GROUPS = False
 
 
 def format_tokens(tokens: int) -> str:
@@ -140,10 +134,7 @@ class ActivityView(HelpMixin, Widget):
         ("h", "collapse", "Collapse"),
         ("f", "fullscreen", "Fullscreen"),
         ("r", "refresh", "Refresh"),
-        ("g", "add_to_group", "Add to Group"),
-        ("G", "create_group", "Create Group"),
         ("i", "create_gist", "New Gist"),
-        ("u", "ungroup", "Ungroup"),
         ("x", "dismiss_execution", "Kill/Dismiss"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
@@ -334,9 +325,6 @@ class ActivityView(HelpMixin, Widget):
                     markup=True,
                     wrap=True,
                 )
-
-        # Group picker (inline at bottom, hidden by default)
-        yield GroupPicker(id="group-picker")
 
     async def on_mount(self) -> None:
         """Initialize the view."""
@@ -587,11 +575,6 @@ class ActivityView(HelpMixin, Widget):
                 header.update(header_text)
                 return
 
-        # For groups, show summary
-        if item.item_type == "group" and HAS_GROUPS:
-            await self._show_group_summary(item)
-            return
-
         # Default
         preview.clear()
         preview.write(f"[italic]{item.title}[/italic]")
@@ -617,9 +600,6 @@ class ActivityView(HelpMixin, Widget):
         # Document details
         if item.doc_id:
             await self._show_document_context(item, context_content, context_header)
-        # Group details
-        elif item.item_type == "group":
-            await self._show_group_context(item, context_content, context_header)
         else:
             context_header.update("DETAILS")
             context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
@@ -671,112 +651,6 @@ class ActivityView(HelpMixin, Widget):
 
         except Exception as e:
             logger.error(f"Error showing document context: {e}")
-
-    async def _show_group_context(
-        self, item: ActivityItem, content: RichLog, header: Static
-    ) -> None:
-        """Show group details in context panel."""
-        if not HAS_GROUPS:
-            header.update("GROUP")
-            return
-
-        try:
-            group = groups_db.get_group(item.item_id)
-            if not group:
-                header.update(f"📦 #{item.item_id}")
-                return
-
-            header.update(f"📦 {group['name']}")
-            content.write(
-                f"[dim]{group.get('group_type', 'batch')} · {group.get('doc_count', 0)} docs[/dim]"
-            )  # noqa: E501
-
-            desc = group.get("description")
-            if desc:
-                content.write(f"{desc[:100]}")
-
-        except Exception as e:
-            logger.error(f"Error showing group context: {e}")
-
-    async def _show_group_summary(self, item: ActivityItem) -> None:
-        """Show group summary in preview."""
-        try:
-            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
-            preview_log = self.query_one("#preview-log", RichLog)
-            header = self.query_one("#preview-header", Static)
-        except Exception as e:
-            logger.debug(f"Preview widgets not ready for group summary: {e}")
-            return
-
-        group_id = item.item_id
-        if not group_id:
-            return
-
-        try:
-            group = groups_db.get_group(group_id)
-            if not group:
-                return
-
-            lines = [f"# {group['name']}", ""]
-
-            desc = group.get("description")
-            if desc:
-                lines.append(desc)
-                lines.append("")
-
-            lines.append(f"**Type:** {group.get('group_type', 'batch')}")
-            lines.append(f"**Documents:** {group.get('doc_count', 0)}")
-
-            if group.get("total_tokens"):
-                lines.append(f"**Total tokens:** {group['total_tokens']:,}")
-            if group.get("total_cost_usd"):
-                lines.append(f"**Total cost:** ${group['total_cost_usd']:.4f}")
-
-            if group.get("project"):
-                lines.append(f"**Project:** {group['project']}")
-
-            child_groups = groups_db.get_child_groups(group_id)
-            if child_groups:
-                lines.append("")
-                lines.append("## Child Groups")
-                for cg in child_groups[:10]:
-                    type_icons = {
-                        "initiative": "📋",
-                        "round": "🔄",
-                        "batch": "📦",
-                        "session": "💾",
-                    }
-                    icon = type_icons.get(cg.get("group_type", ""), "📁")
-                    lines.append(
-                        f"- {icon} #{cg['id']} {cg['name']} ({cg.get('doc_count', 0)} docs)"
-                    )  # noqa: E501
-                if len(child_groups) > 10:
-                    lines.append(f"*... and {len(child_groups) - 10} more*")
-
-            members = groups_db.get_group_members(group_id)
-            if members:
-                lines.append("")
-                lines.append("## Documents")
-                for m in members[:15]:
-                    role = m.get("role", "member")
-                    role_icons = {
-                        "primary": "★",
-                        "synthesis": "📝",
-                        "exploration": "◇",
-                        "variant": "≈",
-                    }  # noqa: E501
-                    role_icon = role_icons.get(role, "•")
-                    lines.append(f"- {role_icon} #{m['id']} {m['title'][:40]} ({role})")
-                if len(members) > 15:
-                    lines.append(f"*... and {len(members) - 15} more*")
-
-            self._render_markdown_preview("\n".join(lines))
-            preview_scroll.display = True
-            preview_log.display = False
-            header.update(f"{item.type_icon} Group #{group_id}")
-
-        except Exception as e:
-            logger.error(f"Error showing group summary: {e}", exc_info=True)
 
     async def _show_live_log(self, item: ActivityItem) -> None:
         """Show live log for running agent execution."""
@@ -1144,153 +1018,12 @@ class ActivityView(HelpMixin, Widget):
             logger.error(f"Error dismissing execution: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
 
-    # Group management actions
-
-    def action_add_to_group(self) -> None:
-        """Show group picker to add selected document or group to another group."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        picker = self.query_one("#group-picker", GroupPicker)
-
-        if item.item_type == "group":
-            picker.show(source_group_id=item.item_id)
-            return
-
-        if item.doc_id:
-            picker.show(doc_id=item.doc_id)
-            return
-
-        self._show_notification("Select a document or group", is_error=True)
-
-    async def action_create_group(self) -> None:
-        """Create a new group from the selected document."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        if not item.doc_id:
-            self._show_notification("Select a document to create a group from", is_error=True)
-            return
-
-        if not HAS_GROUPS or not groups_db:
-            self._show_notification("Groups not available", is_error=True)
-            return
-
-        try:
-            doc = doc_db.get_document(item.doc_id) if HAS_DOCS else None
-            doc_title = doc.get("title", "Untitled") if doc else "Untitled"
-
-            group_name = f"{doc_title[:30]} Group"
-            group_id = groups_db.create_group(
-                name=group_name,
-                group_type="batch",
-            )
-
-            groups_db.add_document_to_group(group_id, item.doc_id, role="primary")
-
-            self._show_notification(f"Created group '{group_name}'")
-            await self._refresh_data()
-
-        except Exception as e:
-            logger.error(f"Error creating group: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-    async def action_ungroup(self) -> None:
-        """Remove selected item from its parent group."""
-        item = self._get_selected_item()
-        if item is None:
-            return
-
-        if not HAS_GROUPS or not groups_db:
-            self._show_notification("Groups not available", is_error=True)
-            return
-
-        try:
-            if item.item_type == "group":
-                group = groups_db.get_group(item.item_id)
-                if not group or not group.get("parent_group_id"):
-                    self._show_notification("Group has no parent", is_error=True)
-                    return
-                groups_db.update_group(item.item_id, parent_group_id=None)
-                self._show_notification(f"Removed '{group['name']}' from parent")
-                await self._refresh_data()
-                return
-
-            if item.doc_id:
-                doc_groups = groups_db.get_document_groups(item.doc_id)
-                if not doc_groups:
-                    self._show_notification("Document is not in any group", is_error=True)
-                    return
-
-                for group in doc_groups:
-                    groups_db.remove_document_from_group(group["id"], item.doc_id)
-
-                group_names = ", ".join(g["name"][:20] for g in doc_groups)
-                self._show_notification(f"Removed from: {group_names}")
-                await self._refresh_data()
-                return
-
-            self._show_notification("Select a document or group to ungroup", is_error=True)
-
-        except Exception as e:
-            logger.error(f"Error ungrouping: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
     def _show_notification(self, message: str, is_error: bool = False) -> None:
         """Show a notification message."""
         self.notification_is_error = is_error
         self.notification_text = message
         self.notification_visible = True
         self.set_timer(3.0, self._hide_notification)
-
-    # Group picker message handlers
-
-    async def on_group_picker_group_selected(self, event: GroupPicker.GroupSelected) -> None:
-        """Handle group selection from picker."""
-        if not HAS_GROUPS or not groups_db:
-            return
-
-        try:
-            if event.source_group_id:
-                groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
-                self._show_notification(f"Moved group under '{event.group_name}'")
-            elif event.doc_id:
-                groups_db.add_document_to_group(event.group_id, event.doc_id)
-                self._show_notification(f"Added to '{event.group_name}'")
-            await self._refresh_data()
-        except Exception as e:
-            logger.error(f"Error in group operation: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.focus()
-
-    async def on_group_picker_group_created(self, event: GroupPicker.GroupCreated) -> None:
-        """Handle new group creation from picker."""
-        if not HAS_GROUPS or not groups_db:
-            return
-
-        try:
-            if event.source_group_id:
-                groups_db.update_group(event.source_group_id, parent_group_id=event.group_id)
-                self._show_notification(f"Created '{event.group_name}' and moved group under it")
-            elif event.doc_id:
-                groups_db.add_document_to_group(event.group_id, event.doc_id)
-                self._show_notification(f"Created '{event.group_name}' and added document")
-            await self._refresh_data()
-        except Exception as e:
-            logger.error(f"Error in group operation: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.focus()
-
-    def on_group_picker_cancelled(self, event: GroupPicker.Cancelled) -> None:
-        """Handle picker cancellation."""
-        tree = self.query_one("#activity-tree", ActivityTree)
-        tree.focus()
 
     async def select_document_by_id(self, doc_id: int) -> bool:
         """Select and show a document by its ID."""

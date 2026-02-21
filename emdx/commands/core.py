@@ -189,14 +189,6 @@ def save(
         None, "--project", "-p", help="Project name (auto-detected from git)"
     ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
-    group_id: int | None = typer.Option(
-        None, "--group", "-g", help="Add document to group", envvar="EMDX_GROUP_ID"
-    ),
-    group_role: str = typer.Option(
-        "member",
-        "--group-role",
-        help="Role in group (primary, exploration, synthesis, variant, member)",
-    ),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
     suggest_tags: bool = typer.Option(
         False, "--suggest-tags", help="Show tag suggestions after saving"
@@ -272,19 +264,7 @@ def save(
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
 
-    # Step 6.5: Add to group if specified
-    if group_id is not None:
-        from emdx.database import groups
-
-        group = groups.get_group(group_id)
-        if group:
-            success = groups.add_document_to_group(group_id, doc_id, role=group_role)
-            if success:
-                console.print(f"   [dim]Group:[/dim] #{group_id} ({group['name']})")
-        else:
-            console.print(f"   [yellow]Warning: Group #{group_id} not found[/yellow]")
-
-    # Step 6.6: Auto-link to similar documents if requested
+    # Step 6.5: Auto-link to similar documents if requested
     if auto_link:
         try:
             from emdx.services.link_service import auto_link_document

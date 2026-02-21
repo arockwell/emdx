@@ -20,7 +20,6 @@ emdx/
 │   ├── browse.py          # list, stats, recent
 │   ├── tags.py            # tag add/remove/list/rename/merge/batch
 │   ├── trash.py           # trash, restore, purge
-│   ├── groups.py          # document group management
 │   ├── tasks.py           # task work queue (add/ready/done/view/active/blocked)
 │   ├── gist.py            # GitHub gist integration
 │   ├── executions.py      # execution monitoring
@@ -48,7 +47,6 @@ emdx/
 │   ├── connection.py      # database connection
 │   ├── documents.py       # document CRUD
 │   ├── search.py          # FTS5 search
-│   ├── groups.py          # document group operations
 │   ├── types.py           # database type definitions
 │   └── migrations.py      # schema migrations (41 migrations, 0-40)
 ├── models/                 # Data models
@@ -93,7 +91,6 @@ emdx/
 │   ├── document_service.py   # document operations
 │   ├── document_merger.py    # document merging
 │   ├── synthesis_service.py  # synthesis orchestration
-│   ├── group_service.py      # group operations
 │   ├── tag_service.py        # tag operations
 │   ├── execution_service.py  # execution management
 │   ├── execution_monitor.py  # execution health monitoring
@@ -152,7 +149,7 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - `g/G` - go to top/bottom
 - `enter` - expand/view details
 - `r` - refresh
-- Filter by executions, documents, groups
+- Filter by executions and documents
 
 ## 🗃️ **Database Architecture**
 
@@ -162,7 +159,6 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - **`document_tags`** - Many-to-many document-tag relationships
 - **`executions`** - Execution tracking and lifecycle
 - **`documents_fts`** - Full-text search virtual table
-- **`document_groups`** - Hierarchical document organization
 - **`tasks`** - Agent work queue with epics and categories
 - **`chunk_embeddings`** - Chunk-level semantic search vectors
 
@@ -188,7 +184,7 @@ App (emdx gui)
     │   ├── LogViewer (with streaming)
     │   └── MetadataPanel
     ├── ActivityView (press 'a')
-    │   ├── ActivityTree (executions, documents, groups)
+    │   ├── ActivityTree (executions and documents)
     │   └── ContextPanel (details for selected item)
     └── TaskBrowser (press 't')
         ├── Task list with status indicators

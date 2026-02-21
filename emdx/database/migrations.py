@@ -2432,6 +2432,22 @@ def migration_043_add_document_links(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_044_remove_document_groups(conn: sqlite3.Connection) -> None:
+    """Remove document groups system.
+
+    Groups are replaced by tags, which provide simpler and more flexible
+    document organization.
+
+    Tables dropped:
+    - document_group_members
+    - document_groups
+    """
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS document_group_members")
+    cursor.execute("DROP TABLE IF EXISTS document_groups")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2478,6 +2494,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (41, "Add output_text to executions", migration_041_add_execution_output_text),
     (42, "Convert emoji tags to text", migration_042_convert_emoji_tags_to_text),
     (43, "Add document links table", migration_043_add_document_links),
+    (44, "Remove document groups", migration_044_remove_document_groups),
 ]
 
 
