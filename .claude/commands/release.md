@@ -11,9 +11,10 @@ Prepare a release for emdx version $ARGUMENTS.
    - Use `####` sub-headers for major features with PR number references
    - Write human-readable descriptions, not mechanical commit dumps
    - Add comparison link at the bottom: `[X.Y.Z]: https://github.com/arockwell/emdx/compare/vPREV...vX.Y.Z`
-4. **Check for new features needing docs** — If any new commands or major features were added, check if `docs/cli-api.md` and `docs/README.md` need updates
-5. **Verify** — Run `poetry run pytest tests/ -x -q` to make sure tests pass
-6. **Branch + commit + PR**:
+4. **Update version badge** — Update the version badge in `README.md`: `[![Version](https://img.shields.io/badge/version-X.Y.Z-blue.svg)]`
+5. **Check for new features needing docs** — If any new commands or major features were added, check if `docs/cli-api.md` and `docs/README.md` need updates
+6. **Verify** — Run `poetry run pytest tests/ -x -q` to make sure tests pass
+7. **Branch + commit + PR**:
    ```bash
    git checkout -b release/v$ARGUMENTS
    git add -A
