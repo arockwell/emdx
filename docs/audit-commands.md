@@ -46,7 +46,7 @@ Comprehensive audit of all top-level commands. For each: justification, verdict,
 | `wrapup` | `briefing --save` | `wrapup` collects recent activity and generates an AI summary. `briefing` already shows recent activity. Adding `--synthesize`/`--save` to `briefing` gives you `wrapup` without a separate command. They share the same time-window concept (`--hours`/`--since`). |
 | `explore` | `find --topics` | Topic map via TF-IDF clustering. Unique analysis but could be a mode of `find` since it's searching across docs. Or keep if you value discoverability. Borderline. |
 | `compact` | `maintain compact` | AI-powered document merging. This is maintenance/housekeeping, not a daily workflow command. Belongs under `maintain`. |
-| `exec` | `status --exec` or fold into `delegate` subgroup | Execution management (list, view, tail, cleanup). These are delegate execution records. Could be `delegate exec list`, `delegate exec view`, etc. |
+| `exec` | ~~`status --exec` or fold into `delegate` subgroup~~ **DONE** → `delegate list/show/kill/...` | Execution management folded into delegate as flat subcommands. |
 | `group` | Evaluate usage — possible cut | If groups are lightly used, consider whether tags + epics cover the same need. If heavily used, keep. |
 | `stale` | `maintain stale` | Staleness tracking is maintenance work. Could live under `maintain`. Counter-argument: it's queried often enough to justify top-level. |
 

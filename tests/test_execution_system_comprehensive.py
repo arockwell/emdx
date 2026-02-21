@@ -97,7 +97,7 @@ class ExecutionSystemTester:
         console.print("\n[bold cyan]Testing Execution Monitoring...[/bold cyan]")
 
         # Test execution list
-        exit_code, stdout, stderr = self.run_command("emdx exec list --limit 5")
+        exit_code, stdout, stderr = self.run_command("emdx delegate list --limit 5")
         if exit_code == 0:
             self.tests_passed += 1
             self.test_results.append(("Execution list", "✅ Passed"))
@@ -108,7 +108,7 @@ class ExecutionSystemTester:
             console.print(f"[red]❌ Execution list failed: {stderr}[/red]")
 
         # Test execution stats
-        exit_code, stdout, stderr = self.run_command("emdx exec stats")
+        exit_code, stdout, stderr = self.run_command("emdx delegate stats")
         if exit_code == 0:
             self.tests_passed += 1
             self.test_results.append(("Execution stats", "✅ Passed"))
@@ -119,7 +119,7 @@ class ExecutionSystemTester:
             console.print(f"[red]❌ Execution stats failed: {stderr}[/red]")
 
         # Test execution health
-        exit_code, stdout, stderr = self.run_command("emdx exec health")
+        exit_code, stdout, stderr = self.run_command("emdx delegate health")
         if exit_code == 0:
             self.tests_passed += 1
             self.test_results.append(("Execution health", "✅ Passed"))
@@ -197,13 +197,13 @@ class ExecutionSystemTester:
 
                 # Poll for execution to start (max 2s with early exit)
                 for _ in range(10):
-                    exit_code, stdout, stderr = self.run_command("emdx exec running")
+                    exit_code, stdout, stderr = self.run_command("emdx delegate running")
                     if "claude" in stdout.lower() or "running" in stdout.lower():
                         break
                     time.sleep(0.2)
 
                 # Check running executions (use last result from loop)
-                exit_code, stdout, stderr = self.run_command("emdx exec running")
+                exit_code, stdout, stderr = self.run_command("emdx delegate running")
                 if "claude" in stdout.lower() or "running" in stdout.lower():
                     self.tests_passed += 1
                     self.test_results.append(("Execution tracking", "✅ Passed"))

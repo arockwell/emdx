@@ -276,116 +276,116 @@ emdx tag batch --limit 50 --execute
 
 ## ⚡ **Execution Management**
 
-### **emdx exec**
-Manage and monitor command executions.
+### **emdx delegate** (execution management)
+Manage and monitor delegate executions.
 
-#### **emdx exec list**
+#### **emdx delegate list**
 List recent executions.
 
 ```bash
 # Show recent executions
-emdx exec list
+emdx delegate list
 
 # Show more executions
-emdx exec list --limit 100
+emdx delegate list --limit 100
 ```
 
-#### **emdx exec show**
+#### **emdx delegate show**
 Show execution details with integrated log viewer.
 
 ```bash
 # Show execution with auto-follow for running executions
-emdx exec show 42
+emdx delegate show 42
 
 # Show specific number of log lines
-emdx exec show 42 --lines 100
+emdx delegate show 42 --lines 100
 
 # Show full log file
-emdx exec show 42 --full
+emdx delegate show 42 --full
 
 # Just logs, no metadata
-emdx exec logs 42
+emdx delegate logs 42
 
 # Follow logs (alias for show -f)
-emdx exec tail 42
+emdx delegate tail 42
 ```
 
-#### **emdx exec logs**
+#### **emdx delegate logs**
 Show only the logs for an execution (no metadata header).
 
 ```bash
 # Show last 50 lines of logs
-emdx exec logs 42
+emdx delegate logs 42
 
 # Follow log output
-emdx exec logs 42 --follow
+emdx delegate logs 42 --follow
 
 # Show specific number of lines
-emdx exec logs 42 --lines 100
+emdx delegate logs 42 --lines 100
 ```
 
 **Options:**
 - `--follow, -f` - Follow log output
 - `--lines, -n INTEGER` - Number of lines to show (default: 50)
 
-#### **emdx exec tail**
-Follow the log of a running execution (alias for `exec show -f`).
+#### **emdx delegate tail**
+Follow the log of a running execution (alias for `delegate show -f`).
 
 ```bash
 # Follow execution logs in real-time
-emdx exec tail 42
+emdx delegate tail 42
 ```
 
-#### **emdx exec running**
+#### **emdx delegate running**
 Show currently running executions.
 
 ```bash
 # List all running executions
-emdx exec running
+emdx delegate running
 ```
 
-#### **emdx exec health**
+#### **emdx delegate health**
 Show detailed health status of running executions.
 
 ```bash
 # Health check with process details
-emdx exec health
+emdx delegate health
 ```
 
-#### **emdx exec monitor**
+#### **emdx delegate monitor**
 Real-time monitoring of executions.
 
 ```bash
 # Monitor with 5-second refresh
-emdx exec monitor
+emdx delegate monitor
 
 # Custom refresh interval
-emdx exec monitor --interval 10
+emdx delegate monitor --interval 10
 
 # One-time check (no continuous monitoring)
-emdx exec monitor --no-follow
+emdx delegate monitor --no-follow
 ```
 
-#### **emdx exec kill**
+#### **emdx delegate kill**
 Terminate running executions.
 
 ```bash
 # Kill specific execution (use partial ID)
-emdx exec kill 42ab8f
+emdx delegate kill 42ab8f
 
 # Show running executions to choose from
-emdx exec kill
+emdx delegate kill
 
 # Kill ALL running executions (with confirmation)
-emdx exec killall
+emdx delegate killall
 ```
 
-#### **emdx exec stats**
+#### **emdx delegate stats**
 Show execution statistics.
 
 ```bash
 # Overall execution statistics
-emdx exec stats
+emdx delegate stats
 ```
 
 ## 📁 **Document Groups**
@@ -818,14 +818,14 @@ emdx find --tags "analysis"
 ### **Execution Monitoring**
 ```bash
 # Start monitoring executions
-emdx exec monitor
+emdx delegate monitor
 
 # In another terminal, check specific execution
-emdx exec show 42 --follow
+emdx delegate show 42 --follow
 
 # Kill stuck executions
-emdx exec health  # Check what's unhealthy
-emdx exec kill <execution_id>
+emdx delegate health  # Check what's unhealthy
+emdx delegate kill <execution_id>
 ```
 
 ### **Project Management**

@@ -197,7 +197,7 @@ def execute_claude_detached(
         print(
             f"\033[32m✅ Claude started in background (PID: {process.pid})\033[0m", file=sys.stderr
         )  # noqa: E501
-        print(f"Monitor with: emdx exec show {execution_id}", file=sys.stderr)
+        print(f"Monitor with: emdx delegate show {execution_id}", file=sys.stderr)
 
         return process.pid
 

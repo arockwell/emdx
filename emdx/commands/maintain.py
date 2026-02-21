@@ -676,7 +676,13 @@ def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> str | None:
             cmdline_str = " ".join(cmdline)
 
             # Look for EMDX execution processes
-            patterns = ["emdx exec", "claude_wrapper.py", "emdx-exec", "claude --print"]
+            patterns = [
+                "emdx delegate",
+                "emdx exec",
+                "claude_wrapper.py",
+                "emdx-exec",
+                "claude --print",
+            ]
             if not any(pattern in cmdline_str for pattern in patterns):
                 continue
 

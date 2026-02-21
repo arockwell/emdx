@@ -88,7 +88,6 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 # =============================================================================
 from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
-from emdx.commands.executions import app as executions_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.groups import app as groups_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
@@ -133,9 +132,6 @@ app.add_typer(tag_app, name="tag", help="Manage document tags")
 
 # Trash commands (subcommand group: emdx trash <subcommand>)
 app.add_typer(trash_app, name="trash", help="Manage deleted documents")
-
-# Add executions as a subcommand group
-app.add_typer(executions_app, name="exec", help="Manage Claude executions")
 
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Agent work queue")
