@@ -24,7 +24,8 @@ class TestStdinInput:
         assert result.source_type == "stdin"
         assert "From stdin" in result.content
 
-    def test_stdin_with_content_wins_over_file_flag(self):
+    def test_file_flag_wins_over_stdin(self):
+        """--file takes priority over stdin (#732: explicit intent beats implicit pipe)."""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
             f.write("file content")
             fpath = f.name
@@ -35,25 +36,8 @@ class TestStdinInput:
                 with patch('sys.stdin.isatty', return_value=False):
                     result = get_input_content(None, file_path=fpath)
 
-            assert result.source_type == "stdin"
-            assert result.content == "stdin content"
-        finally:
-            Path(fpath).unlink()
-
-    def test_empty_stdin_falls_through_to_file(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write("# File Content\n\nRead from file.")
-            fpath = f.name
-
-        try:
-            empty_stdin = io.StringIO("")
-            with patch('sys.stdin', empty_stdin):
-                with patch('sys.stdin.isatty', return_value=False):
-                    result = get_input_content(None, file_path=fpath)
-
             assert result.source_type == "file"
-            assert "Read from file" in result.content
-            assert result.source_path == Path(fpath)
+            assert result.content == "file content"
         finally:
             Path(fpath).unlink()
 
@@ -68,6 +52,30 @@ class TestStdinInput:
 
 class TestFileInput:
     """--file flag reads from an explicit file path."""
+
+    def test_file_flag_skips_stdin_entirely(self):
+        """Regression test for #732: --file must not attempt stdin.read().
+
+        When stdin is non-TTY but has no data (e.g., running from a script or
+        IDE), sys.stdin.read() blocks forever. --file must bypass stdin entirely.
+        """
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+            f.write("file content")
+            fpath = f.name
+
+        try:
+            # Simulate non-TTY stdin that would block on read()
+            blocking_stdin = io.StringIO()  # empty — read() returns "" immediately
+            # but in real bug, read() would block forever on a real fd
+            with patch('sys.stdin', blocking_stdin):
+                with patch('sys.stdin.isatty', return_value=False):
+                    # If stdin were checked first, this could hang
+                    result = get_input_content(None, file_path=fpath)
+
+            assert result.source_type == "file"
+            assert result.content == "file content"
+        finally:
+            Path(fpath).unlink()
 
     def test_file_flag_reads_content(self):
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:

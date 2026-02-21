@@ -64,18 +64,14 @@ def get_input_content(
 ) -> InputContent:
     """Handle input from stdin, --file, or positional content argument.
 
-    Priority: stdin > --file > positional content arg.
+    Priority: --file > stdin > positional content arg.
+
+    When --file is explicitly provided, stdin is skipped entirely to avoid
+    blocking on non-TTY stdin that has no data (see #732).
     """
     import sys
 
-    # Priority 1: Check if stdin has data
-    if not sys.stdin.isatty():
-        content = sys.stdin.read()
-        if content.strip():  # Only use stdin if it has actual content
-            return InputContent(content=content, source_type="stdin")
-        # Fall through if stdin is empty
-
-    # Priority 2: Explicit --file flag
+    # Priority 1: Explicit --file flag (skip stdin — user stated intent)
     if file_path:
         fp = Path(file_path)
         if not fp.exists() or not fp.is_file():
@@ -87,6 +83,13 @@ def get_input_content(
         except Exception as e:
             console.print(f"[red]Error reading file: {e}[/red]")
             raise typer.Exit(1) from e
+
+    # Priority 2: Check if stdin has data
+    if not sys.stdin.isatty():
+        content = sys.stdin.read()
+        if content.strip():  # Only use stdin if it has actual content
+            return InputContent(content=content, source_type="stdin")
+        # Fall through if stdin is empty
 
     # Priority 3: Positional argument is always treated as content
     if input_arg:
@@ -225,7 +228,7 @@ def save(
 ) -> None:
     """Save content to the knowledge base.
 
-    Content sources (in priority order): stdin > --file > positional argument.
+    Content sources (in priority order): --file > stdin > positional argument.
     """
     # Validate --done requires --task
     if mark_done and task is None:
