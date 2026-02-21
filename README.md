@@ -1,6 +1,6 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.18.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.19.0-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -133,19 +133,17 @@ Search by meaning instead of just keywords:
 $ emdx find "how we handle rate limiting" --mode semantic
 
 # Build a context package and pipe it to Claude
-$ emdx ai context "How does auth work?" | claude
+$ emdx find --context "How does auth work?" | claude
 
 # Or ask your KB directly (needs API key)
-$ emdx ai ask "What did we decide about the API redesign?"
+$ emdx find --ask "What did we decide about the API redesign?"
 ```
 
 ## More features
 
 ```bash
-emdx compact --dry-run                           # Deduplicate similar docs
-emdx compact --auto                              # Merge discovered clusters
-emdx distill "authentication"                    # Synthesize a topic summary
-emdx distill --for coworkers "sprint progress"   # Audience-aware summaries
+emdx maintain compact --dry-run                  # Deduplicate similar docs
+emdx maintain compact --auto                     # Merge discovered clusters
 emdx status                                      # Delegate activity dashboard
 emdx delegate running                            # Monitor running agents
 emdx gui                                         # Interactive TUI browser
@@ -166,12 +164,12 @@ emdx gui                                         # Interactive TUI browser
 | Create a PR from a task | `emdx delegate --pr "fix the bug"` |
 | Add a task | `emdx task add "title" --cat FEAT` |
 | See ready tasks | `emdx task ready` |
-| Ask your KB a question | `emdx ai context "question" \| claude` |
+| Ask your KB a question | `emdx find --context "question" \| claude` |
 
 ## Documentation
 
 - [CLI Reference](docs/cli-api.md) — Complete command documentation
-- [AI System](docs/ai-system.md) — Semantic search and Q&A
+- [AI System](docs/cli-api.md#find) — Semantic search, embeddings, and Q&A
 - [Architecture](docs/architecture.md) — System design
 - [Development Setup](docs/development-setup.md) — Contributing guide
 

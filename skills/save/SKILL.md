@@ -43,7 +43,7 @@ ls -la | emdx save --title "Directory Listing"
 
 ## Useful Options
 
-- `--auto-link` — Auto-link to semantically similar documents (requires `emdx ai index`)
+- `--auto-link` — Auto-link to semantically similar documents (requires `emdx maintain index`)
 - `--gist` / `--secret` / `--public` — Create a GitHub gist after saving
 - `--copy` — Copy gist URL to clipboard
 - `--task <id>` — Link saved document to a task as its output

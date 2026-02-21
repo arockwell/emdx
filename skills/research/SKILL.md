@@ -44,8 +44,8 @@ emdx find "query" --modified-after 2026-02-01
 
 **Recent documents:**
 ```bash
-emdx recent        # Last 10 accessed
-emdx recent 20     # Last 20
+emdx find --recent        # Last 10 accessed
+emdx find --recent 20     # Last 20
 ```
 
 **View a specific document:**
@@ -69,7 +69,7 @@ emdx explore --gaps       # Find thin/stale areas
 1. Start broad: `emdx find "topic" -s` to see what exists
 2. Narrow with tags: `emdx find --tags "analysis,active"`
 3. Try semantic if keyword search misses: `emdx find "concept" --mode semantic`
-4. Check recent work: `emdx recent`
+4. Check recent work: `emdx find --recent`
 5. Explore topics: `emdx explore` for a high-level map
 
 ## Important: FTS5 Limitations
