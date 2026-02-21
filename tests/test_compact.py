@@ -361,7 +361,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["compact", "--dry-run", "--threshold", "0.3"])
+        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--threshold", "0.3"])
 
         # Should succeed
         assert result.exit_code == 0
@@ -386,7 +386,7 @@ class TestCompactCommand:
             conn.commit()
 
         runner = CliRunner()
-        result = runner.invoke(app, ["compact", "99999", "99998"])
+        result = runner.invoke(app, ["maintain", "compact", "99999", "99998"])
 
         # Should show error about documents not found
         assert "not found" in result.stdout.lower()
@@ -415,7 +415,7 @@ class TestCompactCommand:
             conn.commit()
 
         runner = CliRunner()
-        result = runner.invoke(app, ["compact", str(doc_id)])
+        result = runner.invoke(app, ["maintain", "compact", str(doc_id)])
 
         # Should show error about needing at least 2 documents
         assert "at least 2" in result.stdout.lower()
@@ -427,7 +427,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["compact", "--help"])
+        result = runner.invoke(app, ["maintain", "compact", "--help"])
 
         assert result.exit_code == 0
         assert "dry-run" in result.stdout.lower()
@@ -441,7 +441,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["compact", "--dry-run"])
+        result = runner.invoke(app, ["maintain", "compact", "--dry-run"])
 
         assert result.exit_code == 0
         assert "no documents" in result.stdout.lower()
@@ -469,7 +469,7 @@ class TestCompactCommand:
 
         runner = CliRunner()
         # Use high threshold to ensure no clusters
-        result = runner.invoke(app, ["compact", "--dry-run", "--threshold", "0.95"])
+        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--threshold", "0.95"])
 
         assert result.exit_code == 0
         assert "no clusters" in result.stdout.lower()
@@ -481,7 +481,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["compact", "--dry-run", "--topic", "Python"])
+        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--topic", "Python"])
 
         assert result.exit_code == 0
         # Should filter to only Python documents

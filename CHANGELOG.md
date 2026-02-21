@@ -692,7 +692,7 @@ A sustained cleanup across 10+ PRs deleted dead code from every layer — unused
 
 #### Missing Command Documentation
 - **Added missing command documentation** for new commands:
-  - `emdx exec` - Execution management subcommands
+  - `emdx delegate list/show/kill/...` - Execution management (formerly `emdx exec`)
   - `emdx claude` - Claude execution subcommands  
   - `emdx lifecycle` - Document lifecycle tracking
   - `emdx analyze` - Document analysis command

@@ -3,6 +3,7 @@
 import re
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from emdx.commands.tasks import app
@@ -32,6 +33,7 @@ class TestTaskAdd:
             source_doc_id=None,
             parent_task_id=None,
             epic_key=None,
+            depends_on=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -49,6 +51,7 @@ class TestTaskAdd:
             source_doc_id=42,
             parent_task_id=None,
             epic_key=None,
+            depends_on=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -65,6 +68,7 @@ class TestTaskAdd:
             source_doc_id=99,
             parent_task_id=None,
             epic_key=None,
+            depends_on=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -83,6 +87,7 @@ class TestTaskAdd:
             source_doc_id=None,
             parent_task_id=None,
             epic_key=None,
+            depends_on=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -96,14 +101,13 @@ class TestTaskAdd:
             source_doc_id=None,
             parent_task_id=None,
             epic_key=None,
+            depends_on=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_all_options(self, mock_tasks):
         mock_tasks.create_task.return_value = 6
-        result = runner.invoke(
-            app, ["add", "Full task", "-d", "10", "-D", "Full description"]
-        )
+        result = runner.invoke(app, ["add", "Full task", "-d", "10", "-D", "Full description"])
         assert result.exit_code == 0
         out = _out(result)
         assert "Task #6" in out
@@ -114,6 +118,7 @@ class TestTaskAdd:
             source_doc_id=10,
             parent_task_id=None,
             epic_key=None,
+            depends_on=None,
         )
 
     def test_add_task_requires_title(self):
@@ -217,12 +222,21 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_tasks(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open task", "status": "open",
-             "epic_key": None, "epic_seq": None},
-            {"id": 2, "title": "Active task", "status": "active",
-             "epic_key": None, "epic_seq": None},
-            {"id": 3, "title": "Blocked task", "status": "blocked",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": "Open task", "status": "open", "epic_key": None, "epic_seq": None},
+            {
+                "id": 2,
+                "title": "Active task",
+                "status": "active",
+                "epic_key": None,
+                "epic_seq": None,
+            },
+            {
+                "id": 3,
+                "title": "Blocked task",
+                "status": "blocked",
+                "epic_key": None,
+                "epic_seq": None,
+            },
         ]
         mock_tasks.get_dependencies.return_value = []
         result = runner.invoke(app, ["list"])
@@ -236,8 +250,7 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_status_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Task", "status": "active",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": "Task", "status": "active", "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
@@ -246,8 +259,13 @@ class TestTaskList:
     @patch("emdx.commands.tasks.tasks")
     def test_list_shows_epic_label_and_strips_prefix(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "SEC-1: Harden auth", "status": "open",
-             "epic_key": "SEC", "epic_seq": 1},
+            {
+                "id": 1,
+                "title": "SEC-1: Harden auth",
+                "status": "open",
+                "epic_key": "SEC",
+                "epic_seq": 1,
+            },
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
@@ -261,8 +279,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -271,8 +292,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--done"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None, limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=None,
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -281,8 +305,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=20, exclude_delegate=False,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=20,
+            exclude_delegate=False,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -291,8 +318,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-a"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=20, exclude_delegate=False,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=20,
+            exclude_delegate=False,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -301,8 +331,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--status", "open"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open"], limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -311,8 +344,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-s", "open,active"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active"], limit=20, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -321,8 +357,11 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--limit", "5"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=5, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=5,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -331,21 +370,20 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-n", "10"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"], limit=10, exclude_delegate=True,
-            epic_key=None, parent_task_id=None,
+            status=["open", "active", "blocked"],
+            limit=10,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_displays_status_as_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": "Open", "status": "open",
-             "epic_key": None, "epic_seq": None},
-            {"id": 2, "title": "Active", "status": "active",
-             "epic_key": None, "epic_seq": None},
-            {"id": 3, "title": "Done", "status": "done",
-             "epic_key": None, "epic_seq": None},
-            {"id": 4, "title": "Failed", "status": "failed",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": "Open", "status": "open", "epic_key": None, "epic_seq": None},
+            {"id": 2, "title": "Active", "status": "active", "epic_key": None, "epic_seq": None},
+            {"id": 3, "title": "Done", "status": "done", "epic_key": None, "epic_seq": None},
+            {"id": 4, "title": "Failed", "status": "failed", "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
@@ -357,13 +395,9 @@ class TestTaskList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_does_not_truncate_title(self, mock_tasks):
-        long_title = (
-            "This is a very long task title that exceeds fifty"
-            " characters by quite a bit"
-        )
+        long_title = "This is a very long task title that exceeds fifty characters by quite a bit"
         mock_tasks.list_tasks.return_value = [
-            {"id": 1, "title": long_title, "status": "open",
-             "epic_key": None, "epic_seq": None},
+            {"id": 1, "title": long_title, "status": "open", "epic_key": None, "epic_seq": None},
         ]
         result = runner.invoke(app, ["list"])
         out = _out(result)
@@ -429,10 +463,16 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_basic_info(self, mock_tasks):
         mock_tasks.get_task.return_value = {
-            "id": 42, "title": "Fix auth bug", "status": "open",
+            "id": 42,
+            "title": "Fix auth bug",
+            "status": "open",
             "description": "The auth middleware has a race condition",
-            "epic_key": None, "epic_seq": None, "parent_task_id": None,
-            "source_doc_id": None, "priority": 3, "created_at": "2026-01-15",
+            "epic_key": None,
+            "epic_seq": None,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
+            "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
@@ -450,10 +490,17 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_epic_label(self, mock_tasks, mock_get_doc):
         mock_tasks.get_task.return_value = {
-            "id": 10, "title": "SEC-1: Harden auth", "status": "active",
-            "description": "", "epic_key": "SEC", "epic_seq": 1,
-            "parent_task_id": 500, "source_doc_id": 99, "output_doc_id": None,
-            "priority": 1, "created_at": "2026-01-15",
+            "id": 10,
+            "title": "SEC-1: Harden auth",
+            "status": "active",
+            "description": "",
+            "epic_key": "SEC",
+            "epic_seq": 1,
+            "parent_task_id": 500,
+            "source_doc_id": 99,
+            "output_doc_id": None,
+            "priority": 1,
+            "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
@@ -473,9 +520,15 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_dependencies(self, mock_tasks):
         mock_tasks.get_task.return_value = {
-            "id": 5, "title": "Task with deps", "status": "blocked",
-            "description": "", "epic_key": None, "epic_seq": None,
-            "parent_task_id": None, "source_doc_id": None, "priority": 3,
+            "id": 5,
+            "title": "Task with deps",
+            "status": "blocked",
+            "description": "",
+            "epic_key": None,
+            "epic_seq": None,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
             "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = [
@@ -498,9 +551,15 @@ class TestTaskView:
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_work_log(self, mock_tasks):
         mock_tasks.get_task.return_value = {
-            "id": 7, "title": "Some task", "status": "active",
-            "description": "", "epic_key": None, "epic_seq": None,
-            "parent_task_id": None, "source_doc_id": None, "priority": 3,
+            "id": 7,
+            "title": "Some task",
+            "status": "active",
+            "description": "",
+            "epic_key": None,
+            "epic_seq": None,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
             "created_at": "2026-01-15",
         }
         mock_tasks.get_dependencies.return_value = []
@@ -622,8 +681,9 @@ class TestTaskLog:
         assert result.exit_code != 0
 
 
+@pytest.mark.skip(reason="task note removed — use task log instead")
 class TestTaskNote:
-    """Tests for task note command."""
+    """Tests for task note command (removed)."""
 
     @patch("emdx.commands.tasks.tasks")
     def test_note_logs_message(self, mock_tasks):
@@ -700,3 +760,229 @@ class TestTaskBlocked:
     def test_blocked_requires_task_id(self):
         result = runner.invoke(app, ["blocked"])
         assert result.exit_code != 0
+
+
+class TestTaskAddWithAfter:
+    """Tests for --after flag on task add."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_add_with_single_after(self, mock_tasks):
+        mock_tasks.create_task.return_value = 10
+        result = runner.invoke(app, ["add", "Deploy", "--after", "5"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Task #10" in out
+        assert "after #5" in out
+        mock_tasks.create_task.assert_called_once_with(
+            "Deploy",
+            description="",
+            source_doc_id=None,
+            parent_task_id=None,
+            epic_key=None,
+            depends_on=[5],
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_add_with_multiple_after(self, mock_tasks):
+        mock_tasks.create_task.return_value = 20
+        result = runner.invoke(app, ["add", "Release", "--after", "10", "--after", "11"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Task #20" in out
+        assert "#10" in out
+        assert "#11" in out
+        mock_tasks.create_task.assert_called_once_with(
+            "Release",
+            description="",
+            source_doc_id=None,
+            parent_task_id=None,
+            epic_key=None,
+            depends_on=[10, 11],
+        )
+
+
+class TestTaskDepAdd:
+    """Tests for task dep add command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_add_success(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 5, "title": "Task"}
+        mock_tasks.add_dependency.return_value = True
+        result = runner.invoke(app, ["dep", "add", "5", "3"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#5" in out
+        assert "#3" in out
+        mock_tasks.add_dependency.assert_called_once_with(5, 3)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_add_cycle(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Task"}
+        mock_tasks.add_dependency.return_value = False
+        result = runner.invoke(app, ["dep", "add", "5", "3"])
+        assert result.exit_code == 1
+        assert "cycle" in _out(result).lower() or "Cannot add" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_add_task_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["dep", "add", "999", "1"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_dep_add_requires_both_args(self):
+        result = runner.invoke(app, ["dep", "add", "5"])
+        assert result.exit_code != 0
+
+
+class TestTaskDepRm:
+    """Tests for task dep rm command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_rm_success(self, mock_tasks):
+        mock_tasks.remove_dependency.return_value = True
+        result = runner.invoke(app, ["dep", "rm", "5", "3"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#5" in out
+        assert "#3" in out
+        mock_tasks.remove_dependency.assert_called_once_with(5, 3)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_rm_not_found(self, mock_tasks):
+        mock_tasks.remove_dependency.return_value = False
+        result = runner.invoke(app, ["dep", "rm", "5", "3"])
+        assert result.exit_code == 0
+        assert "No such dependency" in _out(result)
+
+
+class TestTaskDepList:
+    """Tests for task dep list command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_list_shows_both_directions(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 5, "title": "Middle task"}
+        mock_tasks.get_dependencies.return_value = [
+            {"id": 3, "title": "Blocker", "status": "active"},
+        ]
+        mock_tasks.get_dependents.return_value = [
+            {"id": 8, "title": "Downstream", "status": "open"},
+        ]
+        result = runner.invoke(app, ["dep", "list", "5"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#5 depends on:" in out
+        assert "#3" in out
+        assert "Blocker" in out
+        assert "#5 blocks:" in out
+        assert "#8" in out
+        assert "Downstream" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_list_no_deps(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Solo task"}
+        mock_tasks.get_dependencies.return_value = []
+        mock_tasks.get_dependents.return_value = []
+        result = runner.invoke(app, ["dep", "list", "1"])
+        assert result.exit_code == 0
+        assert "no dependencies" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_list_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["dep", "list", "999"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_dep_list_json(self, mock_tasks):
+        mock_tasks.get_task.return_value = {"id": 5, "title": "Task"}
+        mock_tasks.get_dependencies.return_value = [
+            {"id": 3, "title": "Dep", "status": "done"},
+        ]
+        mock_tasks.get_dependents.return_value = []
+        result = runner.invoke(app, ["dep", "list", "5", "--json"])
+        assert result.exit_code == 0
+        import json
+
+        data = json.loads(result.stdout)
+        assert data["task_id"] == 5
+        assert len(data["depends_on"]) == 1
+        assert data["depends_on"][0]["id"] == 3
+        assert data["blocks"] == []
+
+
+class TestTaskChain:
+    """Tests for task chain command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_chain_shows_upstream_and_downstream(self, mock_tasks):
+        mock_tasks.get_task.return_value = {
+            "id": 5,
+            "title": "Middle task",
+            "status": "open",
+        }
+        # Walk up: task 5 depends on 3
+        mock_tasks.get_dependencies.side_effect = lambda tid: (
+            [{"id": 3, "title": "First", "status": "done"}] if tid == 5 else []
+        )
+        # Walk down: task 8 depends on 5
+        mock_tasks.get_dependents.side_effect = lambda tid: (
+            [{"id": 8, "title": "Last", "status": "open"}] if tid == 5 else []
+        )
+        result = runner.invoke(app, ["chain", "5"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Chain for #5" in out
+        assert "Upstream" in out
+        assert "#3" in out
+        assert "First" in out
+        assert "you are here" in out
+        assert "Downstream" in out
+        assert "#8" in out
+        assert "Last" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_chain_no_deps(self, mock_tasks):
+        mock_tasks.get_task.return_value = {
+            "id": 1,
+            "title": "Solo task",
+            "status": "open",
+        }
+        mock_tasks.get_dependencies.return_value = []
+        mock_tasks.get_dependents.return_value = []
+        result = runner.invoke(app, ["chain", "1"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "No dependencies in either direction" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_chain_not_found(self, mock_tasks):
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["chain", "999"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_chain_json(self, mock_tasks):
+        mock_tasks.get_task.return_value = {
+            "id": 5,
+            "title": "Middle",
+            "status": "open",
+        }
+        mock_tasks.get_dependencies.side_effect = lambda tid: (
+            [{"id": 3, "title": "Up", "status": "done"}] if tid == 5 else []
+        )
+        mock_tasks.get_dependents.side_effect = lambda tid: (
+            [{"id": 8, "title": "Down", "status": "open"}] if tid == 5 else []
+        )
+        result = runner.invoke(app, ["chain", "5", "--json"])
+        assert result.exit_code == 0
+        import json
+
+        data = json.loads(result.stdout)
+        assert data["task"]["id"] == 5
+        assert len(data["upstream"]) == 1
+        assert data["upstream"][0]["id"] == 3
+        assert len(data["downstream"]) == 1
+        assert data["downstream"][0]["id"] == 8

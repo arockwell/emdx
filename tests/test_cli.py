@@ -52,35 +52,23 @@ class TestCLIBasics:
             or result.exit_code == 2
         )
 
-    @patch("emdx.commands.browse.db")
-    @patch("emdx.commands.browse.list_documents")
-    def test_list_command(self, mock_list_docs, mock_db):
-        """Test list command."""
+    @patch("emdx.models.documents.list_documents")
+    def test_find_all_command(self, mock_list_docs):
+        """Test find --all command (replaces old list command)."""
         mock_list_docs.return_value = []
 
-        result = runner.invoke(app, ["list"])
+        result = runner.invoke(app, ["find", "--all"])
         # Should work even with empty database
         assert result.exit_code == 0 or "no documents" in result.stdout.lower()
 
-    def test_recent_command(self):
-        """Test recent command."""
-        result = runner.invoke(app, ["recent"])
+    @patch("emdx.models.documents.get_recent_documents")
+    def test_find_recent_command(self, mock_recent_docs):
+        """Test find --recent command (replaces old recent command)."""
+        mock_recent_docs.return_value = []
+
+        result = runner.invoke(app, ["find", "--recent", "10"])
         # Should work even with empty database
         assert result.exit_code == 0 or "no documents" in result.stdout.lower()
-
-    @patch("emdx.commands.browse.db")
-    @patch("emdx.commands.browse.get_stats")
-    def test_stats_command(self, mock_get_stats, mock_db):
-        """Test stats command."""
-        mock_get_stats.return_value = {
-            "total": 0,
-            "by_project": {},
-            "recent_activity": []
-        }
-
-        result = runner.invoke(app, ["stats"])
-        # Should show some statistics
-        assert result.exit_code == 0
 
     @patch("emdx.models.tags.db")
     def test_tags_list_command(self, mock_db):

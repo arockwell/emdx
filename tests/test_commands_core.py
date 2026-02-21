@@ -170,8 +170,8 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-    @patch("emdx.commands.core.db")
-    def test_find_basic(self, mock_db, mock_search, mock_get_tags):
+
+    def test_find_basic(self, mock_search, mock_get_tags):
         """Basic search returns results."""
         mock_search.return_value = [
             {
@@ -189,16 +189,16 @@ class TestFindCommand:
         assert result.exit_code == 0
         assert "Found Doc" in _out(result)
 
-    @patch("emdx.commands.core.db")
-    def test_find_no_args(self, mock_db):
+
+    def test_find_no_args(self):
         """Find with no search terms and no tags should error."""
         result = runner.invoke(app, ["find"])
         assert result.exit_code != 0
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-    @patch("emdx.commands.core.db")
-    def test_find_no_results(self, mock_db, mock_search, mock_get_tags):
+
+    def test_find_no_results(self, mock_search, mock_get_tags):
         """Search with no results shows appropriate message."""
         mock_search.return_value = []
 
@@ -209,8 +209,8 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-    @patch("emdx.commands.core.db")
-    def test_find_ids_only(self, mock_db, mock_search, mock_get_tags):
+
+    def test_find_ids_only(self, mock_search, mock_get_tags):
         """--ids-only outputs just IDs."""
         mock_search.return_value = [
             {
@@ -230,8 +230,8 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-    @patch("emdx.commands.core.db")
-    def test_find_json_output(self, mock_db, mock_search, mock_get_tags):
+
+    def test_find_json_output(self, mock_search, mock_get_tags):
         """--json outputs JSON array."""
         mock_search.return_value = [
             {
@@ -252,8 +252,8 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_by_tags")
-    @patch("emdx.commands.core.db")
-    def test_find_by_tags(self, mock_db, mock_search_tags, mock_get_tags):
+
+    def test_find_by_tags(self, mock_search_tags, mock_get_tags):
         """Find with --tags does tag-based search."""
         mock_search_tags.return_value = [
             {
@@ -279,8 +279,8 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_view_by_id(self, mock_db, mock_get_doc, mock_get_tags):
+
+    def test_view_by_id(self, mock_get_doc, mock_get_tags):
         """View a document by numeric ID."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -297,8 +297,8 @@ class TestViewCommand:
         assert "My Doc" in _out(result)
 
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_view_not_found(self, mock_db, mock_get_doc):
+
+    def test_view_not_found(self, mock_get_doc):
         """View nonexistent document shows error."""
         mock_get_doc.return_value = None
 
@@ -308,8 +308,8 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_view_raw(self, mock_db, mock_get_doc, mock_get_tags):
+
+    def test_view_raw(self, mock_get_doc, mock_get_tags):
         """View with --raw shows raw content."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -327,8 +327,8 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_view_no_header(self, mock_db, mock_get_doc, mock_get_tags):
+
+    def test_view_no_header(self, mock_get_doc, mock_get_tags):
         """View with --no-header hides header."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -348,8 +348,8 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_view_json(self, mock_db, mock_get_doc, mock_get_tags):
+
+    def test_view_json(self, mock_get_doc, mock_get_tags):
         """View with --json outputs valid JSON."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -387,8 +387,8 @@ class TestEditCommand:
 
     @patch("emdx.commands.core.update_document")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_edit_title_only(self, mock_db, mock_get_doc, mock_update):
+
+    def test_edit_title_only(self, mock_get_doc, mock_update):
         """Edit with --title updates title without opening editor."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -405,8 +405,8 @@ class TestEditCommand:
         mock_update.assert_called_once_with(1, "New Title", "content")
 
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_edit_doc_not_found(self, mock_db, mock_get_doc):
+
+    def test_edit_doc_not_found(self, mock_get_doc):
         """Edit nonexistent document shows error."""
         mock_get_doc.return_value = None
 
@@ -416,8 +416,8 @@ class TestEditCommand:
 
     @patch("emdx.commands.core.update_document")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_edit_title_failure(self, mock_db, mock_get_doc, mock_update):
+
+    def test_edit_title_failure(self, mock_get_doc, mock_update):
         """Edit that fails to update shows error."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -446,8 +446,8 @@ class TestDeleteCommand:
 
     @patch("emdx.commands.core.delete_document")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_delete_soft(self, mock_db, mock_get_doc, mock_delete):
+
+    def test_delete_soft(self, mock_get_doc, mock_delete):
         """Soft delete with --force skips confirmation."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -466,8 +466,8 @@ class TestDeleteCommand:
 
     @patch("emdx.commands.core.delete_document")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_delete_hard_force(self, mock_db, mock_get_doc, mock_delete):
+
+    def test_delete_hard_force(self, mock_get_doc, mock_delete):
         """Hard delete with --force --hard."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -484,8 +484,8 @@ class TestDeleteCommand:
         mock_delete.assert_called_once_with("1", hard_delete=True)
 
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_delete_not_found(self, mock_db, mock_get_doc):
+
+    def test_delete_not_found(self, mock_get_doc):
         """Deleting a non-existent document shows error."""
         mock_get_doc.return_value = None
 
@@ -495,8 +495,8 @@ class TestDeleteCommand:
         assert "not found" in out.lower() or "No valid" in out
 
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_delete_dry_run(self, mock_db, mock_get_doc):
+
+    def test_delete_dry_run(self, mock_get_doc):
         """--dry-run shows what would be deleted without deleting."""
         mock_get_doc.return_value = {
             "id": 1,
@@ -512,8 +512,8 @@ class TestDeleteCommand:
 
     @patch("emdx.commands.core.delete_document")
     @patch("emdx.commands.core.get_document")
-    @patch("emdx.commands.core.db")
-    def test_delete_multiple(self, mock_db, mock_get_doc, mock_delete):
+
+    def test_delete_multiple(self, mock_get_doc, mock_delete):
         """Delete multiple documents at once."""
 
         def side_effect(identifier):

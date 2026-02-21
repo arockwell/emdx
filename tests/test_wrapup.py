@@ -168,8 +168,9 @@ class TestCollectActivity:
         assert len(activity["docs"]) == 1
 
 
+@pytest.mark.skip(reason="wrapup command folded into briefing --save")
 class TestWrapupCommand:
-    """Tests for the wrapup CLI command."""
+    """Tests for the wrapup CLI command (now briefing --save)."""
 
     @patch("emdx.commands.wrapup._collect_activity")
     def test_json_output_returns_raw_data(

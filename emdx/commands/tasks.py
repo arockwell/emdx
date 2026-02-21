@@ -49,6 +49,9 @@ def add(
     description: str | None = typer.Option(None, "-D", "--description", help="Task description"),
     epic: int | None = typer.Option(None, "-e", "--epic", help="Add to epic (task ID)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Category key (e.g. SEC)"),
+    after: list[int] | None = typer.Option(
+        None, "--after", help="Task IDs this depends on (repeatable)"
+    ),
 ) -> None:
     """Add a task to the work queue.
 
@@ -58,6 +61,7 @@ def add(
         emdx task add "Refactor tests" -D "Split into unit and integration"
         emdx task add "Test task" --epic 510
         emdx task add "Another task" --cat SEC
+        emdx task add "Deploy" --after 10 --after 11
     """
     parent_task_id = None
     epic_key = cat.upper() if cat else None
@@ -72,18 +76,24 @@ def add(
         if not epic_key and parent_task.get("epic_key"):
             epic_key = parent_task["epic_key"]
 
+    depends_on = after if after else None
+
     task_id = tasks.create_task(
         title,
         description=description or "",
         source_doc_id=doc,
         parent_task_id=parent_task_id,
         epic_key=epic_key,
+        depends_on=depends_on,
     )
     msg = f"[green]✅ Task #{task_id}:[/green] {title}"
     if doc:
         msg += f" [dim](doc #{doc})[/dim]"
     if epic_key:
         msg += f" [dim]({epic_key})[/dim]"
+    if depends_on:
+        dep_ids = " ".join(f"#{d}" for d in depends_on)
+        msg += f" [dim](after {dep_ids})[/dim]"
     console.print(msg)
 
 
@@ -300,28 +310,6 @@ def log(
 
 
 @app.command()
-def note(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    message: str = typer.Argument(..., help="Progress note"),
-) -> None:
-    """Log a progress note on a task without changing its status.
-
-    Shorthand for 'emdx task log <id> "message"'.
-
-    Examples:
-        emdx task note 42 "Root cause is in auth middleware"
-        emdx task note 42 "Tried approach X, didn't work — switching to Y"
-    """
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    tasks.log_progress(task_id, message)
-    console.print(f"[green]Logged:[/green] #{task_id} — {message}")
-
-
-@app.command()
 def blocked(
     task_id: int = typer.Argument(..., help="Task ID"),
     reason: str = typer.Option("", "-r", "--reason", help="Why the task is blocked"),
@@ -458,3 +446,185 @@ def delete(
 
     tasks.delete_task(task_id)
     console.print(f"[green]✅ Deleted #{task_id}[/green]")
+
+
+# --- Task dependency subcommands ---
+
+dep_app = typer.Typer(help="Manage task dependencies")
+app.add_typer(dep_app, name="dep")
+
+
+@dep_app.command("add")
+def dep_add(
+    task_id: int = typer.Argument(..., help="Task that needs the dependency done first"),
+    depends_on: int = typer.Argument(..., help="Task that must be completed first"),
+) -> None:
+    """Add a dependency between tasks.
+
+    TASK_ID will be blocked until DEPENDS_ON is done.
+
+    Examples:
+        emdx task dep add 5 3    # task 5 depends on task 3
+    """
+    for tid in (task_id, depends_on):
+        if not tasks.get_task(tid):
+            console.print(f"[red]Task #{tid} not found[/red]")
+            raise typer.Exit(1)
+
+    ok = tasks.add_dependency(task_id, depends_on)
+    if ok:
+        console.print(f"[green]✅ #{task_id} now depends on #{depends_on}[/green]")
+    else:
+        console.print("[red]Cannot add: dependency already exists or would create a cycle[/red]")
+        raise typer.Exit(1)
+
+
+@dep_app.command("rm")
+def dep_rm(
+    task_id: int = typer.Argument(..., help="Task to remove dependency from"),
+    depends_on: int = typer.Argument(..., help="Dependency to remove"),
+) -> None:
+    """Remove a dependency between tasks.
+
+    Examples:
+        emdx task dep rm 5 3    # task 5 no longer depends on task 3
+    """
+    ok = tasks.remove_dependency(task_id, depends_on)
+    if ok:
+        console.print(f"[green]✅ Removed: #{task_id} no longer depends on #{depends_on}[/green]")
+    else:
+        console.print("[yellow]No such dependency[/yellow]")
+
+
+@dep_app.command("list")
+def dep_list(
+    task_id: int = typer.Argument(..., help="Task ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show dependencies for a task.
+
+    Lists what this task depends on (blockers) and what depends on it (blocked by this).
+
+    Examples:
+        emdx task dep list 5
+    """
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    deps = tasks.get_dependencies(task_id)
+    dependents = tasks.get_dependents(task_id)
+
+    if json_output:
+
+        def _dep_summary(d: TaskDict) -> dict[str, str | int]:
+            return {"id": d["id"], "title": d["title"], "status": d["status"]}
+
+        print_json(
+            {
+                "task_id": task_id,
+                "depends_on": [_dep_summary(d) for d in deps],
+                "blocks": [_dep_summary(d) for d in dependents],
+            }
+        )
+        return
+
+    if not deps and not dependents:
+        console.print(f"[yellow]#{task_id} has no dependencies[/yellow]")
+        return
+
+    if deps:
+        console.print(f"[bold]#{task_id} depends on:[/bold]")
+        for d in deps:
+            icon = ICONS.get(d["status"], "?")
+            console.print(f"  {icon} #{d['id']} {d['title']}")
+
+    if dependents:
+        console.print(f"[bold]#{task_id} blocks:[/bold]")
+        for d in dependents:
+            icon = ICONS.get(d["status"], "?")
+            console.print(f"  {icon} #{d['id']} {d['title']}")
+
+
+@app.command()
+def chain(
+    task_id: int = typer.Argument(..., help="Task ID to trace"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show the full dependency chain for a task.
+
+    Traces upward through blockers and downward through dependents
+    to show the complete dependency graph rooted at this task.
+
+    Examples:
+        emdx task chain 5
+    """
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    # Walk upward: everything this task is waiting on (transitively)
+    upstream = _walk_deps(task_id, direction="up")
+    # Walk downward: everything waiting on this task (transitively)
+    downstream = _walk_deps(task_id, direction="down")
+
+    if json_output:
+
+        def _task_summary(t: TaskDict) -> dict[str, str | int]:
+            return {"id": t["id"], "title": t["title"], "status": t["status"]}
+
+        print_json(
+            {
+                "task": _task_summary(task),
+                "upstream": [_task_summary(t) for t in upstream],
+                "downstream": [_task_summary(t) for t in downstream],
+            }
+        )
+        return
+
+    icon = ICONS.get(task["status"], "?")
+    console.print(f"\n[bold]Chain for #{task_id}: {task['title']}[/bold]")
+
+    if upstream:
+        console.print("\n[bold]Upstream (must finish first):[/bold]")
+        for t in upstream:
+            t_icon = ICONS.get(t["status"], "?")
+            console.print(f"  {t_icon} #{t['id']} {t['title']}")
+
+    console.print(f"\n  [bold cyan]{icon} #{task_id} {task['title']}[/bold cyan]  ← you are here")
+
+    if downstream:
+        console.print("\n[bold]Downstream (waiting on this):[/bold]")
+        for t in downstream:
+            t_icon = ICONS.get(t["status"], "?")
+            console.print(f"  {t_icon} #{t['id']} {t['title']}")
+
+    if not upstream and not downstream:
+        console.print("\n[yellow]No dependencies in either direction[/yellow]")
+
+
+def _walk_deps(task_id: int, direction: str) -> list[TaskDict]:
+    """BFS walk of dependency graph. Returns tasks in traversal order."""
+    visited: set[int] = set()
+    queue = [task_id]
+    result: list[TaskDict] = []
+
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+
+        if direction == "up":
+            neighbors = tasks.get_dependencies(current)
+        else:
+            neighbors = tasks.get_dependents(current)
+
+        for n in neighbors:
+            if n["id"] not in visited:
+                result.append(n)
+                queue.append(n["id"])
+
+    return result

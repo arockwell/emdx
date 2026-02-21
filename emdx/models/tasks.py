@@ -403,6 +403,17 @@ def add_dependency(task_id: int, depends_on: int) -> bool:
             return False
 
 
+def remove_dependency(task_id: int, depends_on: int) -> bool:
+    """Remove a dependency. Returns True if it existed."""
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM task_deps WHERE task_id = ? AND depends_on = ?",
+            (task_id, depends_on),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def _would_cycle(task_id: int, new_dep: int) -> bool:
     """Check if adding dep would create cycle (DFS)."""
     visited, stack = set(), [new_dep]

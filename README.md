@@ -147,7 +147,7 @@ emdx compact --auto                              # Merge discovered clusters
 emdx distill "authentication"                    # Synthesize a topic summary
 emdx distill --for coworkers "sprint progress"   # Audience-aware summaries
 emdx status                                      # Delegate activity dashboard
-emdx exec running                                # Monitor running agents
+emdx delegate running                            # Monitor running agents
 emdx gui                                         # Interactive TUI browser
 ```
 

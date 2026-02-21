@@ -205,6 +205,15 @@ emdx find "query"                      # Hybrid search (default when index exist
 emdx find "concept" --mode semantic    # Semantic/conceptual search
 emdx find "query" --extract            # Extract key info from results
 emdx find --tags "gameplan,active"     # Tag filtering (comma = AND, use --any-tags for OR)
+emdx find --all                        # List all documents
+emdx find --recent 10                  # Show 10 most recently accessed docs
+emdx find --similar 42                 # Find docs similar to doc #42
+emdx find --ask "question"             # RAG: retrieve context + LLM answer
+emdx find --context "question" | claude  # Output retrieved context for piping
+
+# View
+emdx view 42                           # View document content
+emdx view 42 --links                   # Show document's link graph
 
 # Tasks (use --epic and --cat, NOT --tags)
 emdx task add "Title" -D "Details" --epic 898 --cat FEAT
@@ -218,10 +227,15 @@ emdx task cat list                     # See available categories
 emdx tag add 42 gameplan active
 emdx tag list
 
-# AI search
-# Note: emdx find now supports semantic search natively via --mode semantic
-emdx ai search "concept"
-emdx ai context "question" | claude
+# Status
+emdx status                            # Delegate activity overview
+emdx status --stats                    # Knowledge base statistics
+emdx status --stats --detailed         # Detailed stats with project breakdown
+
+# Maintenance
+emdx maintain compact --dry-run        # Find similar docs to merge
+emdx maintain index                    # Build/update embedding index
+emdx maintain link --all               # Auto-link related documents
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
@@ -309,4 +323,12 @@ just bump 0.X.Y         # Bump version in pyproject.toml + emdx/__init__.py
 git tag vX.Y.Z && git push --tags
 ```
 
-Version files that must stay in sync: `pyproject.toml` and `emdx/__init__.py`.
+Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and `.claude-plugin/plugin.json`.
+
+## Claude Code Plugin
+
+emdx ships as a Claude Code plugin with skills in the `skills/` directory. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
+
+**Available skills:** `/emdx:save`, `/emdx:delegate`, `/emdx:research`, `/emdx:prime`, `/emdx:wrapup`, `/emdx:tasks`
+
+The plugin manifest lives at `.claude-plugin/plugin.json`. Skills follow the [Agent Skills](https://agentskills.io) open standard.

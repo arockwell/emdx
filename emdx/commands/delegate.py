@@ -1174,3 +1174,13 @@ def delegate(
             if not quiet:
                 sys.stderr.write(f"delegate: cleaning up worktree {worktree_path}\n")
             cleanup_worktree(worktree_path)
+
+
+# =============================================================================
+# Execution management subcommands (formerly `emdx exec`)
+# Registered as flat subcommands: `emdx delegate list`, `emdx delegate show`, etc.
+# =============================================================================
+from .executions import app as _executions_app  # noqa: E402
+
+for _cmd in _executions_app.registered_commands:
+    app.registered_commands.append(_cmd)
