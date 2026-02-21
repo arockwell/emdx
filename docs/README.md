@@ -6,7 +6,7 @@ This folder contains detailed documentation for EMDX.
 
 ### Getting Started
 - [CLI Reference](cli-api.md) - Complete command documentation
-- [AI System](ai-system.md) - Semantic search and Q&A over your knowledge base
+- [CLI Reference — Find](cli-api.md#find) - Semantic search and Q&A (folded into `find` command)
 
 ### Architecture & Design
 - [Architecture Overview](architecture.md) - System design and component relationships
@@ -24,7 +24,7 @@ This folder contains detailed documentation for EMDX.
 | I want to... | Read this |
 |--------------|-----------|
 | Learn all CLI commands | [CLI Reference](cli-api.md) |
-| Use semantic search & Q&A | [AI System](ai-system.md) |
+| Use semantic search & Q&A | [CLI Reference — Find](cli-api.md#find) |
 | Understand the codebase | [Architecture](architecture.md) |
 | Contribute code | [Development Setup](development-setup.md) |
 | Write tests | [Testing Guide](testing.md) |

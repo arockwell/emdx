@@ -239,7 +239,7 @@ emdx maintain link --all               # Auto-link related documents
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
-For AI system docs, see [AI System](docs/ai-system.md).
+For AI system docs, see [CLI Reference — Find](docs/cli-api.md#find).
 
 ## Experimental Commands
 
