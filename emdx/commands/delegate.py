@@ -37,6 +37,7 @@ from pathlib import Path
 
 import typer
 
+from ..config.cli_config import get_model_display_name, resolve_model_version
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..database.documents import get_document, save_document
 from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
@@ -470,6 +471,16 @@ def _run_single(
     """Run a single task via UnifiedExecutor. Returns SingleResult."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
+    # Add model tags: model:opus for filtering, model-ver:claude-opus-4-6 for version
+    alias_tag = f"model:{get_model_display_name(model)}"
+    ver_tag = f"model-ver:{resolve_model_version(model)}"
+    new_tags = list(tags)
+    if alias_tag not in new_tags:
+        new_tags.append(alias_tag)
+    if ver_tag not in new_tags:
+        new_tags.append(ver_tag)
+    tags = new_tags
+
     # Create task before execution
     task_id = _safe_create_task(
         title=doc_title,
@@ -497,7 +508,7 @@ def _run_single(
     output_instruction = (
         "\n\nIMPORTANT — SAVE YOUR OUTPUT:\n"
         f"1. Write your complete findings/analysis to: {output_file}\n"
-        f'2. Save it: emdx save {output_file} --title "{doc_title}" '
+        f'2. Save it: emdx save --file {output_file} --title "{doc_title}" '
         f'--tags "{tags_str}"\n'
         "3. Report the document ID shown after saving."
     )
@@ -879,6 +890,16 @@ def delegate(
         "-m",
         help="Model to use (overrides default)",
     ),
+    sonnet: bool = typer.Option(
+        False,
+        "--sonnet",
+        help="Use Sonnet model (shortcut for --model sonnet)",
+    ),
+    opus: bool = typer.Option(
+        False,
+        "--opus",
+        help="Use Opus model (shortcut for --model opus)",
+    ),
     quiet: bool = typer.Option(
         False,
         "--quiet",
@@ -986,6 +1007,21 @@ def delegate(
         typer.echo("Error: --pr and --branch are mutually exclusive", err=True)
         raise typer.Exit(1) from None
 
+    # Resolve model shortcut flags (use `is True` to avoid truthy typer.Option objects)
+    if sonnet is True and opus is True:
+        typer.echo("Error: --sonnet and --opus are mutually exclusive", err=True)
+        raise typer.Exit(1) from None
+    if sonnet is True:
+        if model is not None:
+            typer.echo("Error: --sonnet conflicts with --model", err=True)
+            raise typer.Exit(1) from None
+        model = "sonnet"
+    elif opus is True:
+        if model is not None:
+            typer.echo("Error: --opus conflicts with --model", err=True)
+            raise typer.Exit(1) from None
+        model = "opus"
+
     task_list = list(tasks) if tasks else []
 
     # Guard: detect flags accidentally consumed as task arguments.
@@ -1001,6 +1037,8 @@ def delegate(
         "-j",
         "--model",
         "-m",
+        "--sonnet",
+        "--opus",
         "--quiet",
         "-q",
         "--doc",

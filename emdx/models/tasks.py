@@ -125,6 +125,57 @@ def create_epic(name: str, category_key: str, description: str = "") -> int:
     )
 
 
+def delete_epic(epic_id: int, force: bool = False) -> dict[str, int]:
+    """Delete an epic task and handle orphaned children.
+
+    If force=False (default), refuses to delete if open/active child tasks exist.
+    If force=True, unlinks all children (clears parent_task_id), then deletes the epic.
+
+    Returns dict with counts: children_unlinked.
+    Raises ValueError if epic not found, not an epic, or has open children (when not forced).
+    """
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM tasks WHERE id = ? AND type = 'epic'",
+            (epic_id,),
+        )
+        epic = cursor.fetchone()
+        if not epic:
+            raise ValueError(f"Epic #{epic_id} not found")
+
+        # Count open/active children
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE parent_task_id = ? AND status IN ('open', 'active')",
+            (epic_id,),
+        )
+        open_count = cursor.fetchone()[0]
+
+        if open_count > 0 and not force:
+            raise ValueError(
+                f"Epic #{epic_id} has {open_count} open/active child task(s). "
+                f"Use --force to delete anyway."
+            )
+
+        # Count children that will be unlinked
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE parent_task_id = ?",
+            (epic_id,),
+        )
+        children_unlinked = cursor.fetchone()[0]
+
+        # Unlink children (don't delete them)
+        conn.execute(
+            "UPDATE tasks SET parent_task_id = NULL WHERE parent_task_id = ?",
+            (epic_id,),
+        )
+
+        # Delete the epic task itself
+        conn.execute("DELETE FROM tasks WHERE id = ?", (epic_id,))
+        conn.commit()
+
+    return {"children_unlinked": children_unlinked}
+
+
 def get_task(task_id: int) -> TaskDict | None:
     """Get task by ID."""
     with db.get_connection() as conn:

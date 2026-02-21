@@ -11,14 +11,15 @@ emdx [OPTIONS] COMMAND [ARGS]...
 ## 📚 **Document Management**
 
 ### **emdx save**
-Save content to the knowledge base.
+Save content to the knowledge base. Content sources in priority order: stdin > `--file` > positional argument.
 
 ```bash
-# Save file with auto-detected title
-emdx save document.md
+# Save inline content (positional arg is always content, never a file path)
+emdx save "Quick note about the auth module"
 
-# Save with custom title
-emdx save document.md --title "Custom Title"
+# Save from file (explicit --file flag)
+emdx save --file document.md
+emdx save --file document.md --title "Custom Title"
 
 # Save from stdin
 echo "Content here" | emdx save --title "My Note"
@@ -29,19 +30,24 @@ echo "Gameplan content" | emdx save --title "Auth Gameplan" --tags "gameplan,act
 # Save from command output
 ls -la | emdx save --title "Directory Listing"
 
+# Save and auto-link to related documents
+emdx save --file notes.md --auto-link
+
 # Save and create a secret gist
 echo "Shareable notes" | emdx save --title "Notes" --gist
 
 # Save and create a public gist, copy URL
-emdx save notes.md --public --copy
+emdx save --file notes.md --gist --public --copy
 ```
 
 **Options:**
+- `--file, -f TEXT` - Read content from a file path
 - `--title, -t TEXT` - Custom title (auto-detected from filename if not provided)
 - `--tags TEXT` - Comma-separated tags
 - `--project, -p TEXT` - Override project detection
 - `--group, -g INTEGER` - Add document to group
 - `--group-role TEXT` - Role in group (primary, exploration, synthesis, variant, member)
+- `--auto-link` - Auto-link to semantically similar documents (requires `emdx ai index`)
 - `--auto-tag` - Automatically apply suggested tags
 - `--suggest-tags` - Show tag suggestions after saving
 - `--supersede` - Auto-link to existing doc with same title
@@ -716,7 +722,7 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 - `compact`, `distill`, `review` - AI-powered maintenance
 - `gist` - GitHub Gist integration
 - `exec` - Execution monitoring (read-only)
-- `group`, `task`, `epic`, `cat`, `trash` - Organization commands
+- `group`, `task` (including `task epic`, `task cat`), `trash` - Organization commands
 - `stale`, `touch` - Staleness tracking
 
 **Error message:**
@@ -744,7 +750,7 @@ echo "Bug in auth system" | emdx save --title "Auth Bug" --tags "bug,urgent"
 ### **Research Documentation**
 ```bash
 # Save research findings
-emdx save research.md --tags "analysis,done"
+emdx save --file research.md --tags "analysis,done"
 
 # Find related research later
 emdx find --tags "analysis"
@@ -855,6 +861,8 @@ emdx delegate --worktree --pr "fix X"
 | `--synthesize` | `-s` | Combine parallel outputs with synthesis |
 | `--jobs` | `-j` | Max parallel tasks (default: auto) |
 | `--model` | `-m` | Override default model |
+| `--sonnet` | | Shortcut for `--model sonnet` |
+| `--opus` | | Shortcut for `--model opus` |
 | `--quiet` | `-q` | Suppress metadata on stderr |
 | `--doc` | `-d` | Document ID to use as input context |
 | `--pr` | | Instruct agent to create a PR (implies `--worktree`) |
@@ -910,6 +918,44 @@ emdx ai search "caching strategy" --threshold 0.5
 emdx ai similar 42
 emdx ai similar 42 --limit 10
 ```
+
+### Document Links (Knowledge Graph)
+
+Auto-discover and manage links between related documents:
+
+```bash
+# Create links for a document using semantic similarity
+emdx ai link 42
+
+# Backfill links for all indexed documents
+emdx ai link 0 --all
+
+# Adjust similarity threshold and max links
+emdx ai link 42 --threshold 0.6 --max 3
+
+# View a document's links
+emdx ai links 42
+
+# Traverse two hops (document → linked → linked)
+emdx ai links 42 --depth 2
+
+# Output as JSON
+emdx ai links 42 --json
+
+# Remove a link between two documents
+emdx ai unlink 42 57
+```
+
+**`emdx ai link` options:**
+- `--all` - Backfill links for all indexed documents
+- `--threshold, -t FLOAT` - Minimum similarity (0-1, default: 0.5)
+- `--max, -m INTEGER` - Maximum links per document (default: 5)
+
+**`emdx ai links` options:**
+- `--depth, -d INTEGER` - Traversal depth (1=direct, 2=two hops, default: 1)
+- `--json` - Output as JSON
+
+Links are also created automatically when using `emdx save --auto-link`. The `emdx view` header shows related documents when links exist.
 
 ### Q&A with Claude API
 
@@ -968,6 +1014,9 @@ emdx ai clear --yes
 | `emdx ai index` | Build/update embedding index | No |
 | `emdx ai search` | Semantic search | No |
 | `emdx ai similar` | Find similar documents | No |
+| `emdx ai link` | Create semantic links for a document | No |
+| `emdx ai links` | Show document links | No |
+| `emdx ai unlink` | Remove a link between documents | No |
 | `emdx ai stats` | Show index statistics | No |
 | `emdx ai clear` | Clear embedding index | No |
 | `emdx ai ask` | Q&A with Claude API | **Yes** |
@@ -1072,6 +1121,22 @@ emdx task note 1 "Halfway through the refactor"
 emdx task delete 1
 ```
 
+### Deleting Categories and Epics
+
+```bash
+# Delete a category (unlinks tasks, doesn't delete them)
+emdx task cat delete SEC
+
+# Force delete even if open/active tasks exist
+emdx task cat delete SEC --force
+
+# Delete an epic (unlinks child tasks, doesn't delete them)
+emdx task epic delete 510
+
+# Force delete even if open/active children exist
+emdx task epic delete 510 --force
+```
+
 ### Task Statuses
 
 | Status | Icon | Description |
@@ -1083,42 +1148,48 @@ emdx task delete 1
 
 ---
 
-## 🏔️ Epic Management (`emdx epic`)
+## 🏔️ Epic Management (`emdx task epic`)
 
 Organize tasks into epics for larger initiatives.
 
 ```bash
 # Create an epic
-emdx epic create "Auth System Overhaul"
+emdx task epic create "Auth System Overhaul"
 
 # List all epics with task counts
-emdx epic list
+emdx task epic list
 
 # View an epic and its tasks
-emdx epic view 510
+emdx task epic view 510
 
 # Mark epic as active
-emdx epic active 510
+emdx task epic active 510
 
 # Mark epic as done
-emdx epic done 510
+emdx task epic done 510
+
+# Delete an epic (unlinks child tasks)
+emdx task epic delete 510
 ```
 
 ---
 
-## 🏷️ Category Management (`emdx cat`)
+## 🏷️ Category Management (`emdx task cat`)
 
 Manage task categories for auto-numbered task titles (e.g., SEC-1, SEC-2).
 
 ```bash
 # Create a category
-emdx cat create SEC --description "Security tasks"
+emdx task cat create SEC --description "Security tasks"
 
 # List all categories with task counts
-emdx cat list
+emdx task cat list
 
 # Backfill existing tasks into the category system
-emdx cat adopt SEC
+emdx task cat adopt SEC
+
+# Delete a category (unlinks tasks)
+emdx task cat delete SEC
 ```
 
 ---
@@ -1239,6 +1310,43 @@ emdx distill "auth" --quiet
 - `--save, -s` - Save the output to the knowledge base
 - `--title TEXT` - Title for saved document
 - `--quiet, -q` - Output only the distilled content
+
+---
+
+## 🗺️ Explore (`emdx explore`)
+
+Discover what your knowledge base covers by clustering documents into topics.
+
+```bash
+# Topic map — cluster labels, doc counts, freshness, staleness
+emdx explore
+
+# Detect coverage gaps (thin topics, stale areas, lonely tags)
+emdx explore --gaps
+
+# Generate answerable questions per topic (uses Claude)
+emdx explore --questions
+
+# Structured output for agents
+emdx explore --json
+
+# Rich formatted output
+emdx explore --rich
+
+# Adjust clustering sensitivity (lower = more grouping)
+emdx explore --threshold 0.3
+
+# Limit number of topics shown
+emdx explore --limit 10
+```
+
+**Options:**
+- `--threshold, -t FLOAT` - Similarity threshold for clustering (0.0-1.0, lower = more grouping, default: 0.5)
+- `--questions, -q` - Generate answerable questions per topic (uses Claude API)
+- `--gaps, -g` - Detect coverage gaps (thin topics, stale areas, lonely tags)
+- `--json` - Output results as JSON
+- `--rich` - Enable colored Rich output
+- `--limit, -n INTEGER` - Max topics to show (0 = all, default: 0)
 
 ---
 

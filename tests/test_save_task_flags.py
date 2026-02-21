@@ -45,7 +45,7 @@ class TestSaveTaskFlag:
         mock_get_task.return_value = {"id": 10, "title": "Some task", "status": "active"}
         mock_update_task.return_value = True
 
-        result = runner.invoke(app, ["save", str(f), "--task", "10"])
+        result = runner.invoke(app, ["save", "--file", str(f), "--task", "10"])
         assert result.exit_code == 0
         out = _out(result)
         assert "Task:" in out or "#10" in out
@@ -119,7 +119,7 @@ class TestSaveDoneFlag:
         }
         mock_update_task.return_value = True
 
-        result = runner.invoke(app, ["save", str(f), "--task", "15", "--done"])
+        result = runner.invoke(app, ["save", "--file", str(f), "--task", "15", "--done"])
         assert result.exit_code == 0
         out = _out(result)
         assert "(done)" in out or "done" in out.lower()
@@ -153,7 +153,7 @@ class TestSaveDoneFlag:
         mock_get_task.return_value = {"id": 20, "title": "Final task", "status": "active"}
         mock_update_task.return_value = True
 
-        result = runner.invoke(app, ["save", str(f), "--task", "20", "--done"])
+        result = runner.invoke(app, ["save", "--file", str(f), "--task", "20", "--done"])
         assert result.exit_code == 0
         out = _out(result)
         # Output should indicate task is marked done
@@ -168,7 +168,7 @@ class TestSaveDoneWithoutTask:
         f = tmp_path / "doc.md"
         f.write_text("content")
 
-        result = runner.invoke(app, ["save", str(f), "--done"])
+        result = runner.invoke(app, ["save", "--file", str(f), "--done"])
         assert result.exit_code != 0
         out = _out(result)
         assert "--done requires --task" in out
@@ -192,7 +192,7 @@ class TestSaveTaskNotFound:
 
         mock_get_task.return_value = None
 
-        result = runner.invoke(app, ["save", str(f), "--task", "999"])
+        result = runner.invoke(app, ["save", "--file", str(f), "--task", "999"])
         assert result.exit_code != 0
         out = _out(result)
         assert "Task #999 not found" in out
@@ -207,7 +207,7 @@ class TestSaveTaskNotFound:
 
         mock_get_task.return_value = None
 
-        result = runner.invoke(app, ["save", str(f), "--task", "123", "--done"])
+        result = runner.invoke(app, ["save", "--file", str(f), "--task", "123", "--done"])
         assert result.exit_code != 0
         out = _out(result)
         assert "Task #123 not found" in out
@@ -225,7 +225,7 @@ class TestSaveTaskNotFound:
         # If document creation was attempted, we'd see different behavior
         # This test ensures validation is upfront
         with patch("emdx.commands.core.create_document") as mock_create:
-            result = runner.invoke(app, ["save", str(f), "--task", "456"])
+            result = runner.invoke(app, ["save", "--file", str(f), "--task", "456"])
             assert result.exit_code != 0
             # Document should NOT be created if task doesn't exist
             mock_create.assert_not_called()

@@ -13,7 +13,7 @@ def create_category(key: str, name: str, description: str = "") -> str:
     Validates: uppercase alpha only, 2-8 chars.
     """
     key = key.upper()
-    if not re.match(r'^[A-Z]{2,8}$', key):
+    if not re.match(r"^[A-Z]{2,8}$", key):
         raise ValueError(f"Category key must be 2-8 uppercase letters, got: {key!r}")
 
     with db.get_connection() as conn:
@@ -58,7 +58,7 @@ def list_categories() -> list[CategoryWithStatsDict]:
 def ensure_category(key: str) -> str:
     """Auto-create category with key as name if doesn't exist. Returns key."""
     key = key.upper()
-    if not re.match(r'^[A-Z]{2,8}$', key):
+    if not re.match(r"^[A-Z]{2,8}$", key):
         raise ValueError(f"Category key must be 2-8 uppercase letters, got: {key!r}")
 
     with db.get_connection() as conn:
@@ -73,6 +73,60 @@ def ensure_category(key: str) -> str:
     return key
 
 
+def delete_category(key: str, force: bool = False) -> dict[str, int]:
+    """Delete a category and handle orphaned tasks.
+
+    If force=False (default), refuses to delete if open/active tasks exist.
+    If force=True, clears epic_key/epic_seq on all associated tasks, then deletes.
+
+    Returns dict with counts: tasks_cleared, epics_cleared.
+    Raises ValueError if category not found or has open tasks (when not forced).
+    """
+    key = key.upper()
+    cat = get_category(key)
+    if not cat:
+        raise ValueError(f"Category {key!r} not found")
+
+    with db.get_connection() as conn:
+        # Count open/active tasks in this category
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE epic_key = ? AND status IN ('open', 'active')",
+            (key,),
+        )
+        open_count = cursor.fetchone()[0]
+
+        if open_count > 0 and not force:
+            raise ValueError(
+                f"Category {key!r} has {open_count} open/active task(s). "
+                f"Use --force to delete anyway."
+            )
+
+        # Count tasks and epics that will be affected
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE epic_key = ? AND type != 'epic'",
+            (key,),
+        )
+        tasks_cleared = cursor.fetchone()[0]
+
+        cursor = conn.execute(
+            "SELECT COUNT(*) FROM tasks WHERE epic_key = ? AND type = 'epic'",
+            (key,),
+        )
+        epics_cleared = cursor.fetchone()[0]
+
+        # Clear epic_key/epic_seq on all associated tasks (don't delete the tasks)
+        conn.execute(
+            "UPDATE tasks SET epic_key = NULL, epic_seq = NULL WHERE epic_key = ?",
+            (key,),
+        )
+
+        # Delete the category
+        conn.execute("DELETE FROM categories WHERE key = ?", (key,))
+        conn.commit()
+
+    return {"tasks_cleared": tasks_cleared, "epics_cleared": epics_cleared}
+
+
 def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
     """Backfill existing tasks with KEY-N: titles into the category system.
 
@@ -82,7 +136,7 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
     Returns dict with counts: adopted, skipped, epics_found.
     """
     key = key.upper()
-    pattern = re.compile(rf'^{re.escape(key)}-(\d+):\s*')
+    pattern = re.compile(rf"^{re.escape(key)}-(\d+):\s*")
 
     # Ensure category exists
     if name:
@@ -102,9 +156,7 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
 
     with db.get_connection() as conn:
         # Find tasks matching KEY-N: pattern that aren't already adopted
-        cursor = conn.execute(
-            "SELECT id, title, parent_task_id FROM tasks WHERE epic_key IS NULL"
-        )
+        cursor = conn.execute("SELECT id, title, parent_task_id FROM tasks WHERE epic_key IS NULL")
         rows = cursor.fetchall()
 
         for row in rows:

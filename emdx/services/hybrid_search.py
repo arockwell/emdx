@@ -1,9 +1,8 @@
 """
 Hybrid search service for EMDX.
 
-Combines FTS5 keyword search with chunk-level semantic search,
-providing unified search that finds both exact matches and
-conceptually related content.
+Combines FTS5 keyword search with chunk-level semantic search
+using Reciprocal Rank Fusion (RRF) for better relevance ranking.
 """
 
 from __future__ import annotations
@@ -39,8 +38,8 @@ class HybridSearchResult:
     title: str
     project: str | None
     score: float  # Normalized 0-1, combined score
-    keyword_score: float  # FTS5 score component
-    semantic_score: float  # Semantic score component
+    keyword_score: float  # FTS5 score component (normalized)
+    semantic_score: float  # Semantic score component (cosine similarity)
     source: str  # "keyword", "semantic", or "hybrid"
     snippet: str
     tags: list[str] = field(default_factory=list)
@@ -49,10 +48,13 @@ class HybridSearchResult:
     chunk_text: str | None = None
 
 
-# Weights for combining keyword and semantic scores
+# Reciprocal Rank Fusion constant (standard default from Cormack et al.)
+# Higher k reduces the impact of high rankings from a single list.
+RRF_K = 60
+
+# Legacy weight constants kept for backward compatibility in tests
 KEYWORD_WEIGHT = 0.4
 SEMANTIC_WEIGHT = 0.6
-# Boost for documents found by both methods
 HYBRID_BOOST = 0.15
 
 
@@ -66,6 +68,59 @@ def normalize_fts5_score(rank: float) -> float:
         return 0.5
     # Convert negative rank to positive score
     return max(0.0, min(1.0, 1.0 + (rank / 20.0)))
+
+
+def normalize_fts5_scores_minmax(
+    results: list[HybridSearchResult],
+) -> None:
+    """Normalize FTS5 keyword_score values in-place using min-max scaling.
+
+    This produces better relative ranking within a result set than the
+    fixed-range normalize_fts5_score() function.
+    """
+    if not results:
+        return
+
+    scores = [r.keyword_score for r in results]
+    min_score = min(scores)
+    max_score = max(scores)
+    score_range = max_score - min_score
+
+    if score_range == 0:
+        # All same score — assign uniform 0.5
+        for r in results:
+            r.keyword_score = 0.5
+        return
+
+    for r in results:
+        r.keyword_score = (r.keyword_score - min_score) / score_range
+
+
+def rrf_score(
+    keyword_rank: int | None,
+    semantic_rank: int | None,
+    k: int = RRF_K,
+) -> float:
+    """Compute Reciprocal Rank Fusion score for a document.
+
+    RRF(d) = sum( 1 / (k + rank_i(d)) ) for each list where d appears.
+    Ranks are 1-based. If a document doesn't appear in a list, that term
+    is omitted (not penalized).
+
+    Args:
+        keyword_rank: 1-based rank in keyword results, or None if absent.
+        semantic_rank: 1-based rank in semantic results, or None if absent.
+        k: RRF constant (default 60).
+
+    Returns:
+        Combined RRF score (higher is better).
+    """
+    score = 0.0
+    if keyword_rank is not None:
+        score += 1.0 / (k + keyword_rank)
+    if semantic_rank is not None:
+        score += 1.0 / (k + semantic_rank)
+    return score
 
 
 class HybridSearchService:
@@ -110,7 +165,7 @@ class HybridSearchService:
             return False
 
     def determine_mode(self, requested_mode: str | None = None) -> SearchMode:
-        """Determine the search mode based on request and index availability."""
+        """Determine the search mode based on request and availability."""
         if requested_mode:
             try:
                 return SearchMode(requested_mode.lower())
@@ -130,13 +185,12 @@ class HybridSearchService:
         extract: bool = False,
         project: str | None = None,
     ) -> list[HybridSearchResult]:
-        """
-        Execute hybrid search combining keyword and semantic search.
+        """Execute hybrid search combining keyword and semantic search.
 
         Args:
             query: Search query text
             limit: Maximum results to return
-            mode: "keyword", "semantic", or "hybrid" (default: auto-detect)
+            mode: "keyword", "semantic", or "hybrid" (auto-detect)
             extract: If True, include chunk-level text in results
             project: Filter by project name
 
@@ -174,12 +228,22 @@ class HybridSearchService:
                 )
             )
 
+        # Re-normalize keyword scores within result set
+        normalize_fts5_scores_minmax(results)
+        # Set score = keyword_score after normalization
+        for r in results:
+            r.score = r.keyword_score
+
         # Fetch tags
         self._populate_tags(results)
         return results
 
     def _search_semantic(
-        self, query: str, limit: int, project: str | None, extract: bool
+        self,
+        query: str,
+        limit: int,
+        project: str | None,
+        extract: bool,
     ) -> list[HybridSearchResult]:
         """Execute semantic search using chunks or documents."""
         if not self.embedding_service:
@@ -219,7 +283,11 @@ class HybridSearchService:
         return results
 
     def _search_chunks(
-        self, query: str, limit: int, project: str | None, extract: bool
+        self,
+        query: str,
+        limit: int,
+        project: str | None,
+        extract: bool,
     ) -> list[HybridSearchResult]:
         """Search at chunk level for more precise results."""
         if not self.embedding_service:
@@ -239,22 +307,22 @@ class HybridSearchService:
         if project:
             matches = [m for m in matches if m.project == project]
 
-        # Deduplicate by document, keeping highest-scoring chunk per doc
+        # Deduplicate by document, keeping highest-scoring chunk
         seen_docs: set[int] = set()
         results: list[HybridSearchResult] = []
 
         for match in matches:
             if match.doc_id in seen_docs:
-                # Boost existing result if this chunk also matches well
+                # Boost existing result slightly for multi-chunk hits
                 for r in results:
                     if r.doc_id == match.doc_id:
-                        r.score = min(1.0, r.score + 0.05)  # Small boost
+                        r.score = min(1.0, r.score + 0.05)
+                        r.semantic_score = r.score
                         break
                 continue
 
             seen_docs.add(match.doc_id)
 
-            # Build snippet from chunk
             chunk_preview = (
                 match.chunk_text[:200] + "..." if len(match.chunk_text) > 200 else match.chunk_text
             )
@@ -270,7 +338,7 @@ class HybridSearchService:
                     source="semantic",
                     snippet=chunk_preview,
                     chunk_heading=match.heading_path,
-                    chunk_text=match.chunk_text if extract else None,
+                    chunk_text=(match.chunk_text if extract else None),
                 )
             )
 
@@ -281,68 +349,106 @@ class HybridSearchService:
         return results
 
     def _search_hybrid(
-        self, query: str, limit: int, project: str | None, extract: bool
+        self,
+        query: str,
+        limit: int,
+        project: str | None,
+        extract: bool,
     ) -> list[HybridSearchResult]:
-        """
-        Combine keyword and semantic search results.
+        """Combine keyword and semantic results with Reciprocal Rank Fusion.
 
         Strategy:
-        1. Run FTS5 keyword search
-        2. Run semantic search (chunks preferred)
-        3. Merge results with weighted scoring
-        4. Boost documents found by both methods
-        5. Deduplicate and return top results
+        1. Run FTS5 keyword search (returns ranked list)
+        2. Run semantic search — chunks preferred (returns ranked list)
+        3. Assign 1-based ranks to each list
+        4. Merge using RRF: score(d) = sum(1/(k + rank_i(d)))
+        5. Preserve component scores for observability
+        6. Return top results sorted by RRF score
         """
-        # Run both searches
+        # Run both searches — fetch extra candidates for better fusion
         keyword_results = self._search_keyword(query, limit * 2, project)
         semantic_results = self._search_semantic(query, limit * 2, project, extract)
 
-        # Build lookup map
+        # Build rank maps (1-based)
+        keyword_ranks: dict[int, int] = {
+            r.doc_id: rank for rank, r in enumerate(keyword_results, start=1)
+        }
+        semantic_ranks: dict[int, int] = {
+            r.doc_id: rank for rank, r in enumerate(semantic_results, start=1)
+        }
+
+        # Collect all doc IDs
+        all_doc_ids = set(keyword_ranks.keys()) | set(semantic_ranks.keys())
+
+        # Build lookup maps for metadata
+        keyword_by_id = {r.doc_id: r for r in keyword_results}
         semantic_by_id = {r.doc_id: r for r in semantic_results}
 
-        # Merge results
-        merged: dict[int, HybridSearchResult] = {}
+        # Compute RRF score for each document and build results
+        merged: list[HybridSearchResult] = []
+        for doc_id in all_doc_ids:
+            kw_rank = keyword_ranks.get(doc_id)
+            sem_rank = semantic_ranks.get(doc_id)
 
-        # Process keyword results
-        for result in keyword_results:
-            if result.doc_id in semantic_by_id:
-                # Found in both - combine scores with boost
-                sem_result = semantic_by_id[result.doc_id]
-                combined_score = (
-                    KEYWORD_WEIGHT * result.keyword_score
-                    + SEMANTIC_WEIGHT * sem_result.semantic_score
-                    + HYBRID_BOOST  # Boost for appearing in both
-                )
-                combined_score = min(1.0, combined_score)
+            score = rrf_score(kw_rank, sem_rank)
 
-                merged[result.doc_id] = HybridSearchResult(
-                    doc_id=result.doc_id,
-                    title=result.title,
-                    project=result.project,
-                    score=combined_score,
-                    keyword_score=result.keyword_score,
-                    semantic_score=sem_result.semantic_score,
-                    source="hybrid",
-                    # Prefer semantic snippet (chunk-based)
-                    snippet=sem_result.snippet or result.snippet,
-                    tags=result.tags or sem_result.tags,
-                    chunk_heading=sem_result.chunk_heading,
-                    chunk_text=sem_result.chunk_text,
-                )
+            kw_result = keyword_by_id.get(doc_id)
+            sem_result = semantic_by_id.get(doc_id)
+
+            # Determine source label
+            if kw_result and sem_result:
+                source = "hybrid"
+            elif kw_result:
+                source = "keyword"
             else:
-                # Keyword only
-                result.score = KEYWORD_WEIGHT * result.keyword_score
-                merged[result.doc_id] = result
+                source = "semantic"
 
-        # Add semantic-only results
-        for result in semantic_results:
-            if result.doc_id not in merged:
-                result.score = SEMANTIC_WEIGHT * result.semantic_score
-                merged[result.doc_id] = result
+            # Pick best metadata from available results
+            # Prefer semantic snippet (chunk-based, more precise)
+            if sem_result and kw_result:
+                snippet = sem_result.snippet or kw_result.snippet
+                title = kw_result.title
+                proj = kw_result.project
+                tags = kw_result.tags or sem_result.tags
+            elif sem_result:
+                snippet = sem_result.snippet
+                title = sem_result.title
+                proj = sem_result.project
+                tags = sem_result.tags
+            else:
+                assert kw_result is not None
+                snippet = kw_result.snippet
+                title = kw_result.title
+                proj = kw_result.project
+                tags = kw_result.tags
 
-        # Sort by combined score and limit
-        final_results = sorted(merged.values(), key=lambda r: r.score, reverse=True)
-        return final_results[:limit]
+            merged.append(
+                HybridSearchResult(
+                    doc_id=doc_id,
+                    title=title,
+                    project=proj,
+                    score=score,
+                    keyword_score=(kw_result.keyword_score if kw_result else 0.0),
+                    semantic_score=(sem_result.semantic_score if sem_result else 0.0),
+                    source=source,
+                    snippet=snippet,
+                    tags=tags,
+                    chunk_heading=(sem_result.chunk_heading if sem_result else None),
+                    chunk_text=(sem_result.chunk_text if sem_result else None),
+                )
+            )
+
+        # Sort by RRF score descending
+        merged.sort(key=lambda r: r.score, reverse=True)
+
+        # Normalize RRF scores to 0-1 for display consistency
+        if merged:
+            max_rrf = merged[0].score
+            if max_rrf > 0:
+                for r in merged:
+                    r.score = r.score / max_rrf
+
+        return merged[:limit]
 
     def _populate_tags(self, results: list[HybridSearchResult]) -> None:
         """Fetch and populate tags for all results."""

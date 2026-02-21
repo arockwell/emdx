@@ -5,11 +5,14 @@ from unittest.mock import MagicMock, patch
 from emdx.services.hybrid_search import (
     HYBRID_BOOST,
     KEYWORD_WEIGHT,
+    RRF_K,
     SEMANTIC_WEIGHT,
     HybridSearchResult,
     HybridSearchService,
     SearchMode,
     normalize_fts5_score,
+    normalize_fts5_scores_minmax,
+    rrf_score,
 )
 
 
@@ -45,6 +48,116 @@ class TestNormalizeFts5Score:
         for val in test_values:
             score = normalize_fts5_score(val)
             assert 0.0 <= score <= 1.0
+
+
+class TestNormalizeFts5ScoresMinmax:
+    """Tests for min-max normalization of FTS5 scores."""
+
+    def _make_result(self, keyword_score: float) -> HybridSearchResult:
+        return HybridSearchResult(
+            doc_id=1,
+            title="T",
+            project=None,
+            score=0.0,
+            keyword_score=keyword_score,
+            semantic_score=0.0,
+            source="keyword",
+            snippet="",
+        )
+
+    def test_empty_list_is_noop(self):
+        """Empty list doesn't raise."""
+        normalize_fts5_scores_minmax([])
+
+    def test_single_result_gets_half(self):
+        """Single result gets 0.5 (range is zero)."""
+        results = [self._make_result(0.75)]
+        normalize_fts5_scores_minmax(results)
+        assert results[0].keyword_score == 0.5
+
+    def test_two_results_scaled_to_zero_one(self):
+        """Min becomes 0.0, max becomes 1.0."""
+        results = [self._make_result(0.3), self._make_result(0.9)]
+        normalize_fts5_scores_minmax(results)
+        assert results[0].keyword_score == 0.0
+        assert results[1].keyword_score == 1.0
+
+    def test_three_results_linear_interpolation(self):
+        """Middle value is linearly interpolated."""
+        results = [
+            self._make_result(0.2),
+            self._make_result(0.6),
+            self._make_result(1.0),
+        ]
+        normalize_fts5_scores_minmax(results)
+        assert results[0].keyword_score == 0.0
+        assert abs(results[1].keyword_score - 0.5) < 1e-9
+        assert results[2].keyword_score == 1.0
+
+    def test_all_same_score_gets_half(self):
+        """Uniform scores all become 0.5."""
+        results = [self._make_result(0.7) for _ in range(3)]
+        normalize_fts5_scores_minmax(results)
+        for r in results:
+            assert r.keyword_score == 0.5
+
+
+class TestRrfScore:
+    """Tests for Reciprocal Rank Fusion scoring."""
+
+    def test_both_ranks_present(self):
+        """RRF with both keyword and semantic ranks."""
+        score = rrf_score(1, 1, k=60)
+        expected = 1.0 / 61 + 1.0 / 61
+        assert abs(score - expected) < 1e-9
+
+    def test_keyword_only(self):
+        """RRF with only keyword rank present."""
+        score = rrf_score(1, None, k=60)
+        expected = 1.0 / 61
+        assert abs(score - expected) < 1e-9
+
+    def test_semantic_only(self):
+        """RRF with only semantic rank present."""
+        score = rrf_score(None, 2, k=60)
+        expected = 1.0 / 62
+        assert abs(score - expected) < 1e-9
+
+    def test_both_none_returns_zero(self):
+        """RRF with no ranks returns 0."""
+        assert rrf_score(None, None) == 0.0
+
+    def test_higher_rank_gives_higher_score(self):
+        """Rank 1 produces a higher RRF contribution than rank 10."""
+        score_rank1 = rrf_score(1, None)
+        score_rank10 = rrf_score(10, None)
+        assert score_rank1 > score_rank10
+
+    def test_both_lists_beats_one_list(self):
+        """Document in both lists scores higher than in just one."""
+        both = rrf_score(1, 1)
+        keyword_only = rrf_score(1, None)
+        semantic_only = rrf_score(None, 1)
+        assert both > keyword_only
+        assert both > semantic_only
+
+    def test_custom_k_value(self):
+        """Custom k value changes the score."""
+        score_k10 = rrf_score(1, 1, k=10)
+        score_k60 = rrf_score(1, 1, k=60)
+        # Smaller k gives higher scores (more weight to rank)
+        assert score_k10 > score_k60
+
+    def test_rrf_k_constant_is_sixty(self):
+        """Default RRF_K constant is 60."""
+        assert RRF_K == 60
+
+    def test_rank_ordering_preserved(self):
+        """Higher ranked documents always score higher in RRF."""
+        scores = [rrf_score(r, r) for r in range(1, 11)]
+        # Should be strictly decreasing
+        for i in range(len(scores) - 1):
+            assert scores[i] > scores[i + 1]
 
 
 class TestSearchMode:
@@ -119,11 +232,10 @@ class TestHybridSearchResult:
 
 
 class TestWeightConstants:
-    """Tests for weight constants used in hybrid scoring."""
+    """Tests for weight constants (legacy, kept for compatibility)."""
 
     def test_weights_sum_reasonable(self):
         """Keyword + semantic weights sum to reasonable value."""
-        # Weights should sum to ~1.0 (before boost)
         assert 0.9 <= KEYWORD_WEIGHT + SEMANTIC_WEIGHT <= 1.1
 
     def test_boost_is_small(self):
@@ -212,45 +324,41 @@ class TestHybridSearchService:
 
 
 class TestHybridMerging:
-    """Tests for score merging in hybrid search."""
+    """Tests for RRF-based score merging in hybrid search."""
 
-    def test_hybrid_boost_applied_when_found_in_both(self):
-        """Documents found in both searches get hybrid boost."""
-        # This tests the logic conceptually - in actual hybrid search,
-        # documents appearing in both keyword and semantic results
-        # should have their scores boosted by HYBRID_BOOST
+    def test_document_in_both_lists_scores_highest(self):
+        """Documents found in both searches get highest RRF score."""
+        # Doc in both at rank 1 beats doc in only one list at rank 1
+        both_score = rrf_score(1, 1)
+        keyword_only_score = rrf_score(1, None)
+        semantic_only_score = rrf_score(None, 1)
+        assert both_score > keyword_only_score
+        assert both_score > semantic_only_score
 
-        keyword_score = 0.6
-        semantic_score = 0.7
+    def test_rrf_gives_diminishing_returns_for_lower_ranks(self):
+        """Lower-ranked results contribute less to RRF score."""
+        top_pair = rrf_score(1, 1)
+        mid_pair = rrf_score(5, 5)
+        low_pair = rrf_score(20, 20)
+        assert top_pair > mid_pair > low_pair
 
-        # Expected combined score
-        expected = (
-            KEYWORD_WEIGHT * keyword_score
-            + SEMANTIC_WEIGHT * semantic_score
-            + HYBRID_BOOST
-        )
+    def test_keyword_only_score_less_than_original(self):
+        """Keyword-only results get reduced RRF score vs both-list."""
+        keyword_only = rrf_score(1, None)
+        both = rrf_score(1, 1)
+        assert keyword_only < both
 
-        # Should be clamped to max 1.0
-        expected = min(1.0, expected)
+    def test_semantic_only_score_less_than_original(self):
+        """Semantic-only results get reduced RRF score vs both-list."""
+        semantic_only = rrf_score(None, 1)
+        both = rrf_score(1, 1)
+        assert semantic_only < both
 
-        # The actual calculation in _search_hybrid
-        actual = (
-            KEYWORD_WEIGHT * keyword_score
-            + SEMANTIC_WEIGHT * semantic_score
-            + HYBRID_BOOST
-        )
-        actual = min(1.0, actual)
-
-        assert actual == expected
-
-    def test_keyword_only_score_weighted(self):
-        """Keyword-only results get weighted score."""
-        keyword_score = 0.8
-        expected = KEYWORD_WEIGHT * keyword_score
-        assert expected < keyword_score  # Should be reduced
-
-    def test_semantic_only_score_weighted(self):
-        """Semantic-only results get weighted score."""
-        semantic_score = 0.7
-        expected = SEMANTIC_WEIGHT * semantic_score
-        assert expected < semantic_score  # Should be reduced
+    def test_high_rank_in_one_list_beats_low_in_both(self):
+        """Rank 1 in one list can beat poor ranks in both lists."""
+        rank1_one_list = rrf_score(1, None)
+        rank20_both = rrf_score(20, 20)
+        # Rank 1 in one list: 1/61 ≈ 0.0164
+        # Rank 20 in both: 2/80 = 0.025
+        # Both at rank 20 still wins because of two contributions
+        assert rank20_both > rank1_one_list

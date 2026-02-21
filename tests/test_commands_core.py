@@ -24,20 +24,20 @@ class TestGetInputContent:
     """Tests for the get_input_content helper."""
 
     @patch("sys.stdin")
-    def test_reads_file_path(self, mock_stdin, tmp_path):
-        """File path argument returns file content."""
+    def test_reads_file_via_file_path_kwarg(self, mock_stdin, tmp_path):
+        """--file kwarg returns file content."""
         mock_stdin.isatty.return_value = True
         f = tmp_path / "note.md"
         f.write_text("hello world")
 
-        result = get_input_content(str(f))
+        result = get_input_content(None, file_path=str(f))
         assert result.content == "hello world"
         assert result.source_type == "file"
         assert result.source_path == f
 
     @patch("sys.stdin")
-    def test_direct_text_when_not_a_file(self, mock_stdin):
-        """Non-file string is treated as direct content."""
+    def test_positional_arg_is_always_content(self, mock_stdin):
+        """Positional arg is treated as direct content (never a file path)."""
         mock_stdin.isatty.return_value = True
         result = get_input_content("just some text")
         assert result.content == "just some text"
@@ -109,7 +109,7 @@ class TestSaveCommand:
         mock_create.return_value = 42
         mock_tags.return_value = []
 
-        result = runner.invoke(app, ["save", str(f)])
+        result = runner.invoke(app, ["save", "--file", str(f)])
         assert result.exit_code == 0
         mock_create.assert_called_once()
         args = mock_create.call_args
@@ -129,7 +129,7 @@ class TestSaveCommand:
         mock_tags.return_value = []
 
         result = runner.invoke(app, [
-            "save", str(f),
+            "save", "--file", str(f),
             "--title", "Custom Title",
             "--project", "my-project",
         ])
@@ -151,7 +151,7 @@ class TestSaveCommand:
         mock_tags.return_value = ["python", "testing"]
 
         result = runner.invoke(app, [
-            "save", str(f), "--tags", "python,testing",
+            "save", "--file", str(f), "--tags", "python,testing",
         ])
         assert result.exit_code == 0
         mock_tags.assert_called_once_with(5, "python,testing")
