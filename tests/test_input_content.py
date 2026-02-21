@@ -1,4 +1,4 @@
-"""Tests for get_input_content — stdin, --file, and positional content."""
+"""Tests for get_input_content — --file, positional content, and stdin."""
 
 import io
 import tempfile
@@ -11,20 +11,32 @@ from emdx.commands.core import get_input_content
 
 
 class TestStdinInput:
-    """Stdin takes highest priority when it has content."""
+    """Stdin is used as fallback when no explicit input is provided."""
 
-    def test_stdin_with_content_wins_over_positional_arg(self):
-        stdin_content = "# From stdin\n\nShould take priority."
+    def test_stdin_used_when_no_explicit_input(self):
+        stdin_content = "# From stdin\n\nPiped content."
         mock_stdin = io.StringIO(stdin_content)
+
+        with patch('sys.stdin', mock_stdin):
+            with patch('sys.stdin.isatty', return_value=False):
+                result = get_input_content(None)
+
+        assert result.source_type == "stdin"
+        assert "From stdin" in result.content
+
+    def test_positional_arg_wins_over_stdin(self):
+        """Fix for #715: positional arg takes priority over stdin to avoid
+        blocking on stdin.read() in non-TTY contexts (e.g., heredoc subshell)."""
+        mock_stdin = io.StringIO("stdin content")
 
         with patch('sys.stdin', mock_stdin):
             with patch('sys.stdin.isatty', return_value=False):
                 result = get_input_content("positional text")
 
-        assert result.source_type == "stdin"
-        assert "From stdin" in result.content
+        assert result.source_type == "direct"
+        assert result.content == "positional text"
 
-    def test_stdin_with_content_wins_over_file_flag(self):
+    def test_file_flag_wins_over_stdin(self):
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
             f.write("file content")
             fpath = f.name
@@ -35,35 +47,54 @@ class TestStdinInput:
                 with patch('sys.stdin.isatty', return_value=False):
                     result = get_input_content(None, file_path=fpath)
 
-            assert result.source_type == "stdin"
-            assert result.content == "stdin content"
-        finally:
-            Path(fpath).unlink()
-
-    def test_empty_stdin_falls_through_to_file(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write("# File Content\n\nRead from file.")
-            fpath = f.name
-
-        try:
-            empty_stdin = io.StringIO("")
-            with patch('sys.stdin', empty_stdin):
-                with patch('sys.stdin.isatty', return_value=False):
-                    result = get_input_content(None, file_path=fpath)
-
             assert result.source_type == "file"
-            assert "Read from file" in result.content
-            assert result.source_path == Path(fpath)
+            assert result.content == "file content"
         finally:
             Path(fpath).unlink()
 
-    def test_whitespace_only_stdin_falls_through(self):
+    def test_empty_stdin_falls_through_to_error(self):
+        import typer
+
+        empty_stdin = io.StringIO("")
+        with patch('sys.stdin', empty_stdin):
+            with patch('sys.stdin.isatty', return_value=False):
+                with pytest.raises(typer.Exit):
+                    get_input_content(None)
+
+    def test_whitespace_only_stdin_falls_through_to_error(self):
+        import typer
+
         with patch('sys.stdin', io.StringIO("   \n\t  \n  ")):
             with patch('sys.stdin.isatty', return_value=False):
-                result = get_input_content("direct text")
+                with pytest.raises(typer.Exit):
+                    get_input_content(None)
+
+
+class TestHeredocSubshell:
+    """Regression tests for #715: heredoc subshell expansion must not hang."""
+
+    def test_heredoc_content_as_positional_arg_non_tty(self):
+        """Simulates: emdx save "$(cat <<'HEREDOC' ... HEREDOC)" in non-TTY."""
+        heredoc_content = "# Analysis\n\nMulti-line heredoc content."
+
+        # stdin.isatty() returns False but stdin has no data (empty)
+        with patch('sys.stdin', io.StringIO("")):
+            with patch('sys.stdin.isatty', return_value=False):
+                result = get_input_content(heredoc_content)
 
         assert result.source_type == "direct"
-        assert result.content == "direct text"
+        assert result.content == heredoc_content
+
+    def test_long_heredoc_content_as_positional_arg(self):
+        """Long heredoc content that triggered #714 still works."""
+        long_content = "A" * 1000
+
+        with patch('sys.stdin', io.StringIO("")):
+            with patch('sys.stdin.isatty', return_value=False):
+                result = get_input_content(long_content)
+
+        assert result.source_type == "direct"
+        assert result.content == long_content
 
 
 class TestFileInput:

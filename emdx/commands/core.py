@@ -62,20 +62,18 @@ class DocumentMetadata:
 def get_input_content(
     input_arg: str | None, file_path: str | None = None
 ) -> InputContent:
-    """Handle input from stdin, --file, or positional content argument.
+    """Handle input from --file, positional content argument, or stdin.
 
-    Priority: stdin > --file > positional content arg.
+    Priority: --file > positional content arg > stdin.
+
+    Explicit input (--file or positional arg) is checked first to avoid
+    blocking on stdin.read() in non-TTY contexts where no data is piped
+    (e.g., heredoc subshell expansion passes content as a positional arg
+    but leaves stdin non-TTY and empty, causing an indefinite hang).
     """
     import sys
 
-    # Priority 1: Check if stdin has data
-    if not sys.stdin.isatty():
-        content = sys.stdin.read()
-        if content.strip():  # Only use stdin if it has actual content
-            return InputContent(content=content, source_type="stdin")
-        # Fall through if stdin is empty
-
-    # Priority 2: Explicit --file flag
+    # Priority 1: Explicit --file flag
     if file_path:
         fp = Path(file_path)
         if not fp.exists() or not fp.is_file():
@@ -88,9 +86,16 @@ def get_input_content(
             console.print(f"[red]Error reading file: {e}[/red]")
             raise typer.Exit(1) from e
 
-    # Priority 3: Positional argument is always treated as content
+    # Priority 2: Positional argument is always treated as content
     if input_arg:
         return InputContent(content=input_arg, source_type="direct")
+
+    # Priority 3: Check if stdin has data (only when no explicit input given)
+    if not sys.stdin.isatty():
+        content = sys.stdin.read()
+        if content.strip():  # Only use stdin if it has actual content
+            return InputContent(content=content, source_type="stdin")
+        # Fall through if stdin is empty
 
     # No input provided
     console.print(
@@ -225,7 +230,7 @@ def save(
 ) -> None:
     """Save content to the knowledge base.
 
-    Content sources (in priority order): stdin > --file > positional argument.
+    Content sources (in priority order): --file > positional argument > stdin.
     """
     # Validate --done requires --task
     if mark_done and task is None:
