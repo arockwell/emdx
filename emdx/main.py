@@ -3,8 +3,8 @@
 Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
-Core KB commands (save, find, view, tag, list) are imported eagerly since they're
-fast. Heavy commands (delegate, ai, etc.) are only imported when
+Core KB commands (save, find, view, tag, etc.) are imported eagerly since they're
+fast. Heavy commands (delegate, compact, etc.) are only imported when
 actually invoked.
 """
 
@@ -13,7 +13,7 @@ from collections.abc import Callable
 
 import typer
 
-from emdx import __build_id__, __version__
+from emdx import __version__
 from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
 
 # =============================================================================
@@ -25,10 +25,6 @@ LAZY_SUBCOMMANDS = {
     # Execution/orchestration (imports subprocess, async, executor)
     "recipe": "emdx.commands.recipe:app",
     "delegate": "emdx.commands.delegate:app",
-    # AI features (imports ML libraries, can be slow)
-    "ai": "emdx.commands.ask:app",
-    "distill": "emdx.commands.distill:app",
-    "compact": "emdx.commands.compact:app",
     "explore": "emdx.commands.explore:app",
 }
 
@@ -36,9 +32,6 @@ LAZY_SUBCOMMANDS = {
 LAZY_HELP = {
     "recipe": "Manage and run EMDX recipes",
     "delegate": "One-shot AI execution (parallel, worktree, PR)",
-    "ai": "AI-powered Q&A and semantic search",
-    "distill": "Distill KB content into audience-aware summaries",
-    "compact": "Compact related documents through AI-powered synthesis",
     "explore": "Explore what your knowledge base knows",
 }
 
@@ -94,21 +87,16 @@ register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
 # Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
 from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
-from emdx.commands.browse import app as browse_app  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
-from emdx.commands.executions import app as executions_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.groups import app as groups_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
-from emdx.commands.review import app as review_app  # noqa: E402
 from emdx.commands.stale import app as stale_app  # noqa: E402
-from emdx.commands.stale import touch as touch_command  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
 from emdx.commands.trash import app as trash_app  # noqa: E402
-from emdx.commands.wrapup import wrapup as wrapup_command  # noqa: E402
 from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
@@ -134,9 +122,6 @@ app_info.cls = LazyTyperGroup
 for command in core_app.registered_commands:
     app.registered_commands.append(command)
 
-# Browse commands (list, recent, stats)
-for command in browse_app.registered_commands:
-    app.registered_commands.append(command)
 
 # Gist commands
 for command in gist_app.registered_commands:
@@ -148,9 +133,6 @@ app.add_typer(tag_app, name="tag", help="Manage document tags")
 # Trash commands (subcommand group: emdx trash <subcommand>)
 app.add_typer(trash_app, name="trash", help="Manage deleted documents")
 
-# Add executions as a subcommand group
-app.add_typer(executions_app, name="exec", help="Manage Claude executions")
-
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Agent work queue")
 
@@ -158,17 +140,12 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 app.add_typer(groups_app, name="group", help="Organize documents into hierarchical groups")
 
 
-# Add review commands for triaging agent outputs
-app.add_typer(review_app, name="review", help="Triage agent-produced documents")
 
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
 
 # Add stale as a subcommand group for knowledge decay
 app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
-
-# Add touch as a top-level command for convenience
-app.command(name="touch")(touch_command)
 
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
@@ -182,9 +159,6 @@ app.command(name="briefing")(briefing_command)
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
 
-# Add the wrapup command for session summaries
-app.command(name="wrapup")(wrapup_command)
-
 
 # =============================================================================
 # Handle safe mode for unsafe commands
@@ -194,15 +168,6 @@ if is_safe_mode():
     for cmd_name in UNSAFE_COMMANDS:
         if cmd_name in LAZY_SUBCOMMANDS:
             app.command(name=cmd_name)(create_disabled_command(cmd_name))
-
-
-# Version command
-@app.command()
-def version() -> None:
-    """Show emdx version"""
-    typer.echo(f"emdx version {__version__}")
-    typer.echo(f"Build ID: {__build_id__}")
-    typer.echo("A knowledge base for developers and AI agents")
 
 
 # Callback for global options
@@ -236,7 +201,7 @@ def main(
     Examples:
 
     Save a file:
-        [cyan]emdx save README.md[/cyan]
+        [cyan]emdx save --file README.md[/cyan]
 
     Save text directly:
         [cyan]emdx save "Remember to fix the API endpoint"[/cyan]

@@ -16,7 +16,6 @@ import typer
 from rich.panel import Panel
 from rich.table import Table
 
-from emdx.database import db
 from emdx.database.documents import (
     find_supersede_candidate,
     set_parent,
@@ -207,15 +206,6 @@ def save(
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
-    gist: bool = typer.Option(
-        False, "--gist/--no-gist", "--share", help="Create a GitHub gist after saving"
-    ),  # noqa: E501
-    public: bool = typer.Option(False, "--public", help="Make gist public (default: secret)"),
-    secret: bool = typer.Option(
-        False, "--secret", help="Make gist secret (default, for explicitness)"
-    ),  # noqa: E501
-    copy_url: bool = typer.Option(False, "--copy", "-c", help="Copy gist URL to clipboard"),
-    open_browser: bool = typer.Option(False, "--open", "-o", help="Open gist in browser"),
     auto_link: bool = typer.Option(
         False, "--auto-link", help="Auto-link to semantically similar documents (requires ai index)"
     ),
@@ -343,68 +333,6 @@ def save(
                 console.print(f"   • {tag} [dim]({confidence:.0%})[/dim]")
             console.print(f"\n[dim]Apply with: emdx tag {doc_id} <tags>[/dim]")
 
-    # Step 10: Create gist if requested (--secret or --public imply --gist)
-    if secret or public:
-        gist = True
-    if gist:
-        if public and secret:
-            console.print("[red]Error: Cannot use both --public and --secret[/red]")
-            raise typer.Exit(1)
-
-        import webbrowser as wb
-
-        from emdx.commands.gist import (
-            copy_to_clipboard,
-            create_gist_with_gh,
-            get_github_auth,
-            sanitize_filename,
-        )
-
-        token = get_github_auth()
-        if not token:
-            console.print(
-                "[yellow]⚠ Gist skipped: GitHub auth not configured (run 'gh auth login')[/yellow]"
-            )  # noqa: E501
-        else:
-            filename = sanitize_filename(metadata.title)
-            description = f"{metadata.title} - emdx knowledge base"
-            if metadata.project:
-                description += f" (Project: {metadata.project})"
-
-            console.print(f"[dim]Creating {'public' if public else 'secret'} gist...[/dim]")
-
-            result = create_gist_with_gh(input_content.content, filename, description, public)
-
-            if result:
-                gist_id_str = result["id"]
-                gist_url = result["url"]
-
-                # Record in gists table
-                try:
-                    with db.get_connection() as conn:
-                        conn.execute(
-                            "INSERT INTO gists (document_id, gist_id, gist_url, is_public) VALUES (?, ?, ?, ?)",  # noqa: E501
-                            (doc_id, gist_id_str, gist_url, public),
-                        )
-                        conn.commit()
-                except Exception as e:
-                    console.print(f"   [dim]Warning: Failed to record gist in database: {e}[/dim]")
-
-                console.print(f"   [green]Gist:[/green] {gist_url}")
-
-                if copy_url:
-                    if copy_to_clipboard(gist_url):
-                        console.print("   [green]✓ URL copied to clipboard[/green]")
-                    else:
-                        console.print("   [yellow]⚠ Could not copy to clipboard[/yellow]")
-
-                if open_browser:
-                    wb.open(gist_url)
-                    console.print("   [green]✓ Opened in browser[/green]")
-            else:
-                console.print(
-                    "[yellow]⚠ Gist creation failed (document was saved successfully)[/yellow]"
-                )  # noqa: E501
 
 
 @app.command()
@@ -421,8 +349,8 @@ def find(
     no_tags: str | None = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
     ids_only: bool = typer.Option(
         False, "--ids-only", help="Output only document IDs (for piping)"
-    ),  # noqa: E501
-    json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
+    ),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output results as JSON"),
     created_after: str | None = typer.Option(
         None,
         "--created-after",
@@ -456,6 +384,21 @@ def find(
         "-e",
         help="Show matching chunk text instead of document snippets",
     ),
+    all_docs: bool = typer.Option(
+        False, "--all", "-a", help="List all documents (no search query needed)"
+    ),
+    recent: int | None = typer.Option(
+        None, "--recent", help="Show N most recently accessed documents"
+    ),
+    similar: int | None = typer.Option(
+        None, "--similar", help="Find documents similar to this doc ID"
+    ),
+    ask: bool = typer.Option(
+        False, "--ask", help="Answer the query using RAG (retrieves context + LLM)"
+    ),
+    context: bool = typer.Option(
+        False, "--context", help="Output retrieved context as plain text (for piping to claude)"
+    ),
 ) -> None:
     """Search the knowledge base with full-text search.
 
@@ -465,15 +408,54 @@ def find(
       - hybrid: Both combined (default when index exists)
 
     Use --extract to see the matching paragraph/section instead of the full document.
+    Use --all to list all documents, --recent N to show recently accessed docs.
+    Use --similar N to find documents similar to doc #N.
+    Use --ask to get an AI-powered answer to your question.
+    Use --context to retrieve docs as plain text for piping to claude.
 
     Examples:
         emdx find "authentication patterns"              # hybrid search
         emdx find "auth" --mode keyword                  # keyword only
         emdx find "how to configure logging" --extract   # show matching chunks
+        emdx find --all                                  # list all documents
+        emdx find --recent 10                            # recently accessed
+        emdx find --similar 42                           # docs similar to #42
+        emdx find --ask "What's our caching strategy?"   # RAG Q&A
+        emdx find --context "auth" | claude              # pipe context to claude
     """
     search_query = " ".join(query) if query else ""
 
     try:
+        # Handle --all: list all documents
+        if all_docs:
+            _find_list_all(project, limit, json_output)
+            return
+
+        # Handle --recent: show recently accessed documents
+        if recent is not None:
+            _find_recent(recent, project, json_output)
+            return
+
+        # Handle --similar: find documents similar to a given one
+        if similar is not None:
+            _find_similar(similar, limit, json_output)
+            return
+
+        # Handle --ask: RAG Q&A
+        if ask:
+            if not search_query:
+                console.print("[red]Error: --ask requires a question[/red]")
+                raise typer.Exit(1)
+            _find_ask(search_query, limit, project, tags)
+            return
+
+        # Handle --context: retrieve context for piping
+        if context:
+            if not search_query:
+                console.print("[red]Error: --context requires a query[/red]")
+                raise typer.Exit(1)
+            _find_context(search_query, limit, project, tags)
+            return
 
         # Validate that we have something to search for
         has_date_filters = any([created_after, created_before, modified_after, modified_before])
@@ -629,6 +611,245 @@ def find(
     except Exception as e:
         console.print(f"[red]Error searching documents: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+def _find_list_all(
+    project: str | None,
+    limit: int,
+    json_output: bool,
+) -> None:
+    """List all documents (replaces old `list` command)."""
+    from emdx.models.documents import list_documents
+    from emdx.utils.text_formatting import truncate_title
+
+    docs = list_documents(project=project, limit=limit)
+
+    if not docs:
+        console.print("[yellow]No documents found[/yellow]")
+        return
+
+    if json_output:
+        from typing import Any
+
+        json_docs = []
+        for doc in docs:
+            d: dict[str, Any] = dict(doc)
+            if d["created_at"]:
+                d["created_at"] = d["created_at"].isoformat()
+            if d.get("accessed_at"):
+                d["accessed_at"] = d["accessed_at"].isoformat()
+            json_docs.append(d)
+        print(json.dumps(json_docs, indent=2))
+        return
+
+    from rich.table import Table
+
+    title = "Knowledge Base Documents"
+    if project:
+        title += f" - Project: {project}"
+    table = Table(title=title)
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title", style="magenta")
+    table.add_column("Project", style="green")
+    table.add_column("Created", style="yellow")
+    table.add_column("Views", justify="right", style="blue")
+
+    for doc in docs:
+        created = doc["created_at"].strftime("%Y-%m-%d") if doc["created_at"] else ""
+        table.add_row(
+            str(doc["id"]),
+            truncate_title(doc["title"]),
+            doc["project"] or "None",
+            created,
+            str(doc["access_count"]),
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Showing {len(docs)} documents[/dim]")
+
+
+def _find_recent(
+    limit: int,
+    project: str | None,
+    json_output: bool,
+) -> None:
+    """Show recently accessed documents (replaces old `recent` command)."""
+    from emdx.models.documents import get_recent_documents
+    from emdx.utils.text_formatting import truncate_title
+
+    docs = get_recent_documents(limit=limit)
+    if project:
+        docs = [d for d in docs if d.get("project") == project]
+
+    if not docs:
+        console.print("[yellow]No recently accessed documents found[/yellow]")
+        return
+
+    if json_output:
+        from typing import Any
+
+        json_docs = []
+        for doc in docs:
+            d: dict[str, Any] = dict(doc)
+            if d.get("created_at"):
+                d["created_at"] = d["created_at"].isoformat()
+            if d.get("accessed_at"):
+                d["accessed_at"] = d["accessed_at"].isoformat()
+            json_docs.append(d)
+        print(json.dumps(json_docs, indent=2))
+        return
+
+    from rich.table import Table
+
+    table = Table(title=f"Last {limit} Accessed Documents")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title", style="magenta")
+    table.add_column("Project", style="green")
+    table.add_column("Last Accessed", style="yellow")
+    table.add_column("Views", justify="right", style="blue")
+
+    for doc in docs:
+        accessed_str = "Never"
+        if doc["accessed_at"]:
+            accessed_str = doc["accessed_at"].strftime("%Y-%m-%d %H:%M")
+        table.add_row(
+            str(doc["id"]),
+            truncate_title(doc["title"]),
+            doc["project"] or "None",
+            accessed_str,
+            str(doc["access_count"]),
+        )
+
+    console.print(table)
+    console.print(f"\n[dim]Showing {len(docs)} recently accessed documents[/dim]")
+
+
+def _find_similar(
+    doc_id: int,
+    limit: int,
+    json_output: bool,
+) -> None:
+    """Find documents similar to a given document."""
+    try:
+        from ..services.embedding_service import EmbeddingService
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    from ..database import db
+
+    service = EmbeddingService()
+
+    # Get source document title
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT title FROM documents WHERE id = ?", (doc_id,))
+        row = cursor.fetchone()
+        if not row:
+            console.print(f"[red]Document {doc_id} not found[/red]")
+            raise typer.Exit(1) from None
+        source_title = row[0]
+
+    results = service.find_similar(doc_id, limit=limit)
+    if not results:
+        console.print("[yellow]No similar documents found[/yellow]")
+        return
+
+    if json_output:
+        items = [
+            {"id": r.doc_id, "title": r.title, "similarity": round(r.similarity, 3)}
+            for r in results
+        ]
+        print(json.dumps(items, indent=2))
+        return
+
+    console.print(f"[bold]Documents similar to #{doc_id} '{source_title}':[/bold]\n")
+    from rich.table import Table as RichTable
+
+    table = RichTable()
+    table.add_column("ID", style="cyan", width=6)
+    table.add_column("Score", style="green", width=6)
+    table.add_column("Title", width=50)
+
+    for r in results:
+        table.add_row(str(r.doc_id), f"{r.similarity:.0%}", r.title)
+
+    console.print(table)
+
+
+def _find_ask(
+    question: str,
+    limit: int,
+    project: str | None,
+    tags: str | None,
+) -> None:
+    """Answer a question using RAG (retrieves context + LLM)."""
+    from ..services.ask_service import AskService
+
+    service = AskService()
+    try:
+        with console.status("[bold blue]Thinking...", spinner="dots"):
+            result = service.ask(
+                question,
+                limit=limit,
+                project=project,
+                tags=tags,
+            )
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    from rich.panel import Panel
+
+    confidence_colors = {"high": "green", "medium": "yellow", "low": "red"}
+    confidence_color = confidence_colors.get(result.confidence, "dim")
+    panel_title = f"Answer [{result.confidence.upper()} confidence]"
+    console.print()
+    console.print(Panel(result.text, title=panel_title, border_style=confidence_color))
+
+    if result.source_titles:
+        console.print()
+        source_strs = [f'#{doc_id} "{title}"' for doc_id, title in result.source_titles]
+        console.print(f"[dim]Sources: {', '.join(source_strs)}[/dim]")
+
+
+def _find_context(
+    question: str,
+    limit: int,
+    project: str | None,
+    tags: str | None,
+) -> None:
+    """Retrieve context as plain text for piping to claude."""
+    import sys
+
+    from ..services.ask_service import AskService
+
+    service = AskService()
+    try:
+        if not service._has_embeddings():
+            docs, method = service._retrieve_keyword(
+                question, limit, project, tags=tags
+            )
+        else:
+            docs, method = service._retrieve_semantic(
+                question, limit, project, tags=tags
+            )
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]", highlight=False)
+        raise typer.Exit(1) from None
+
+    if not docs:
+        print("No relevant documents found.", file=sys.stderr)
+        raise typer.Exit(1) from None
+
+    output_parts = [f"Question: {question}\n", "=" * 60 + "\n"]
+    for doc_id, title, content in docs:
+        truncated = content[:4000] if len(content) > 4000 else content
+        output_parts.append(f"# Document #{doc_id}: {title}\n\n{truncated}\n")
+        output_parts.append("-" * 60 + "\n")
+
+    print("\n".join(output_parts))
+    print(f"Retrieved {len(docs)} docs via {method} search", file=sys.stderr)
 
 
 def _find_keyword_search(
@@ -872,7 +1093,10 @@ def view(
     ),
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
-    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+    links: bool = typer.Option(
+        False, "--links", help="Show document links (semantic and manual)"
+    ),
 ) -> None:
     """View a document from the knowledge base"""
     try:
@@ -930,6 +1154,40 @@ def view(
                 "line_count": content.count("\n") + 1 if content else 0,
             }
             print(json.dumps(output, indent=2))
+            return
+
+        # Handle --links: show detailed link information
+        if links:
+            if not doc_links:
+                console.print(
+                    f"[yellow]No links found for document #{doc['id']}[/yellow]"
+                )
+                return
+
+            console.print(
+                f"[bold]Links for #{doc['id']} '{doc['title']}':[/bold]\n"
+            )
+            from rich.table import Table as LinksTable
+
+            table = LinksTable()
+            table.add_column("ID", style="cyan", width=6)
+            table.add_column("Score", style="green", width=6)
+            table.add_column("Title", width=50)
+            table.add_column("Method", style="dim", width=8)
+
+            for link in doc_links:
+                if link["source_doc_id"] == doc["id"]:
+                    other_id = link["target_doc_id"]
+                    other_title = link["target_title"]
+                else:
+                    other_id = link["source_doc_id"]
+                    other_title = link["source_title"]
+                score = f"{link['similarity_score']:.0%}"
+                table.add_row(
+                    str(other_id), score, other_title, link["method"]
+                )
+
+            console.print(table)
             return
 
         def _render_output() -> None:

@@ -3,6 +3,7 @@
 import re
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from emdx.commands.tasks import app
@@ -680,8 +681,9 @@ class TestTaskLog:
         assert result.exit_code != 0
 
 
+@pytest.mark.skip(reason="task note removed — use task log instead")
 class TestTaskNote:
-    """Tests for task note command."""
+    """Tests for task note command (removed)."""
 
     @patch("emdx.commands.tasks.tasks")
     def test_note_logs_message(self, mock_tasks):

@@ -171,13 +171,13 @@ class TestTouchCommand:
 
     def test_touch_help(self) -> None:
         """Touch command shows help."""
-        result = runner.invoke(app, ["touch", "--help"])
+        result = runner.invoke(app, ["stale", "touch", "--help"])
         assert result.exit_code == 0
         assert "staleness" in result.output.lower()
 
     def test_touch_nonexistent(self) -> None:
         """Touching nonexistent document reports not found."""
-        result = runner.invoke(app, ["touch", "99999"])
+        result = runner.invoke(app, ["stale", "touch", "99999"])
         assert "not found" in result.output.lower() or result.exit_code == 1
 
     def test_touch_existing_doc(self) -> None:
@@ -187,7 +187,7 @@ class TestTouchCommand:
 
         doc_id = save_document("Test Doc", "Test content")
 
-        result = runner.invoke(app, ["touch", str(doc_id)])
+        result = runner.invoke(app, ["stale", "touch", str(doc_id)])
         assert result.exit_code == 0
         assert "touched" in result.output.lower()
 
@@ -198,7 +198,7 @@ class TestTouchCommand:
         doc1 = save_document("Test Doc 1", "Content 1")
         doc2 = save_document("Test Doc 2", "Content 2")
 
-        result = runner.invoke(app, ["touch", str(doc1), str(doc2)])
+        result = runner.invoke(app, ["stale", "touch", str(doc1), str(doc2)])
         assert result.exit_code == 0
         assert "2" in result.output  # Should mention 2 documents
 

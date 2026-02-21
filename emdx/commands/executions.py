@@ -320,8 +320,8 @@ def kill_execution(exec_id: int | None = typer.Argument(None)) -> None:
         for i, exec in enumerate(executions, 1):
             console.print(f"{i}. [cyan]{exec.id}[/cyan] - {exec.doc_title}")
 
-        console.print("\n[dim]Usage: emdx exec kill <exec_id>[/dim]")
-        console.print(f"[dim]Example: emdx exec kill {executions[0].id}[/dim]")
+        console.print("\n[dim]Usage: emdx delegate kill <exec_id>[/dim]")
+        console.print(f"[dim]Example: emdx delegate kill {executions[0].id}[/dim]")
         return
 
     # Find execution by ID
@@ -455,7 +455,9 @@ def execution_health() -> None:
     # Show recommendations if there are unhealthy executions
     if metrics["unhealthy_running"] > 0:
         console.print("\n[yellow]⚠ Found unhealthy executions![/yellow]")
-        console.print("Run [cyan]emdx maintain cleanup --executions --execute[/cyan] to clean up")
+        console.print(
+            "Run [cyan]emdx maintain cleanup --executions --execute[/cyan] to clean up"
+        )
 
 
 @app.command(name="monitor")

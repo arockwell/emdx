@@ -310,28 +310,6 @@ def log(
 
 
 @app.command()
-def note(
-    task_id: int = typer.Argument(..., help="Task ID"),
-    message: str = typer.Argument(..., help="Progress note"),
-) -> None:
-    """Log a progress note on a task without changing its status.
-
-    Shorthand for 'emdx task log <id> "message"'.
-
-    Examples:
-        emdx task note 42 "Root cause is in auth middleware"
-        emdx task note 42 "Tried approach X, didn't work — switching to Y"
-    """
-    task = tasks.get_task(task_id)
-    if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
-        raise typer.Exit(1)
-
-    tasks.log_progress(task_id, message)
-    console.print(f"[green]Logged:[/green] #{task_id} — {message}")
-
-
-@app.command()
 def blocked(
     task_id: int = typer.Argument(..., help="Task ID"),
     reason: str = typer.Option("", "-r", "--reason", help="Why the task is blocked"),

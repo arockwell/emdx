@@ -394,21 +394,45 @@ def briefing(
         "-j",
         help="Output as JSON for agent consumption",
     ),
+    save: bool = typer.Option(
+        False,
+        "--save",
+        help="Generate AI summary and save to knowledge base",
+    ),
+    hours: int = typer.Option(
+        4,
+        "--hours",
+        "-h",
+        help="Window for --save synthesis (default: 4 hours)",
+    ),
+    model: str | None = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Model for --save synthesis",
+    ),
 ) -> None:
     """
     Show what happened in recent emdx activity.
 
     By default shows activity from the last 24 hours.
+    Use --save to generate an AI-synthesized session summary and persist it.
 
     Examples:
         emdx briefing
         emdx briefing --since '2 days ago'
         emdx briefing --since 2026-02-14
-        emdx briefing --since yesterday
         emdx briefing --json
+        emdx briefing --save                   # AI summary of last 4 hours
+        emdx briefing --save --hours 8          # AI summary of last 8 hours
     """
     # If a subcommand was invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
+        return
+
+    # Handle --save: AI-synthesized session summary (replaces old `wrapup` command)
+    if save:
+        _briefing_save(hours=hours, model=model)
         return
 
     # Parse since argument (default to 24 hours ago)
@@ -434,3 +458,104 @@ def briefing(
         _display_human_briefing(
             since_dt, documents, tasks_completed, tasks_added, blockers, exec_stats
         )
+
+
+def _briefing_save(hours: int, model: str | None) -> None:
+    """Generate AI summary of recent activity and save to KB."""
+    import sys
+
+    from ..database.documents import get_docs_in_window, save_document
+    from ..models.executions import get_execution_stats_in_window
+    from ..models.tasks import get_delegate_tasks_in_window, get_tasks_in_window
+    from ..services.synthesis_service import _execute_prompt
+
+    activity = {
+        "window_hours": hours,
+        "tasks": get_tasks_in_window(hours),
+        "docs": get_docs_in_window(hours),
+        "delegate_tasks": get_delegate_tasks_in_window(hours),
+        "execution_stats": get_execution_stats_in_window(hours),
+    }
+
+    total_items = (
+        len(activity["tasks"]) + len(activity["docs"]) + len(activity["delegate_tasks"])
+    )
+    if total_items == 0:
+        print(f"No activity in the last {hours} hours.")
+        return
+
+    # Build synthesis prompt
+    sections = []
+    sections.append(
+        f"Generate a concise session summary for the last {hours} hours.\n"
+        "Focus on: what was accomplished, what's in progress, and what needs attention."
+    )
+
+    tasks = activity["tasks"]
+    if tasks:
+        done = [t for t in tasks if t["status"] == "done"]
+        active_tasks = [t for t in tasks if t["status"] == "active"]
+        blocked = [t for t in tasks if t["status"] == "blocked"]
+        task_lines = []
+        if done:
+            task_lines.append("## Completed Tasks")
+            task_lines.extend(f"- {t['title']}" for t in done[:10])
+        if active_tasks:
+            task_lines.append("## In-Progress Tasks")
+            task_lines.extend(f"- {t['title']}" for t in active_tasks[:5])
+        if blocked:
+            task_lines.append("## Blocked Tasks")
+            task_lines.extend(f"- {t['title']}" for t in blocked[:5])
+        if task_lines:
+            sections.append("\n".join(task_lines))
+
+    docs = activity["docs"]
+    if docs:
+        doc_lines = ["## Documents Created"]
+        doc_lines.extend(f"- #{d['id']}: {d['title']}" for d in docs[:15])
+        sections.append("\n".join(doc_lines))
+
+    exec_stats = activity["execution_stats"]
+    delegate_tasks = activity["delegate_tasks"]
+    if delegate_tasks or exec_stats["total"] > 0:
+        dl = ["## Delegate Activity"]
+        dl.append(
+            f"- Total executions: {exec_stats['total']} "
+            f"(completed: {exec_stats['completed']}, failed: {exec_stats['failed']})"
+        )
+        sections.append("\n".join(dl))
+
+    sections.append(
+        "---\n\nBased on the above, write a concise session summary:\n"
+        "1. Key accomplishments\n2. Work in progress\n"
+        "3. Blockers needing attention\n4. Suggested next steps\n\n"
+        "Format as markdown."
+    )
+
+    prompt = "\n\n".join(sections)
+    title = f"Session Summary ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
+
+    sys.stderr.write(f"briefing: synthesizing {total_items} items...\n")
+
+    system_prompt = (
+        "You are a session summarizer. Generate concise, actionable summaries "
+        "of work activity. Focus on accomplishments, blockers, and next steps."
+    )
+    try:
+        result = _execute_prompt(
+            system_prompt=system_prompt,
+            user_message=prompt,
+            title=title,
+            model=model or "claude-sonnet-4-5-20250929",
+        )
+        if result.success and result.output_content:
+            print(result.output_content)
+            tags = ["session-summary", "active"]
+            doc_id = save_document(title=title, content=result.output_content, tags=tags)
+            sys.stderr.write(f"briefing: saved as doc #{doc_id}\n")
+        else:
+            sys.stderr.write("briefing: synthesis failed\n")
+            raise typer.Exit(1)
+    except RuntimeError as e:
+        sys.stderr.write(f"briefing: synthesis failed: {e}\n")
+        raise typer.Exit(1) from None
