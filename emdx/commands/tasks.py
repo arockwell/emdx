@@ -18,6 +18,8 @@ app = typer.Typer(help="Agent work queue")
 app.add_typer(epics_app, name="epic", help="Manage task epics")
 app.add_typer(categories_app, name="cat", help="Manage task categories")
 
+TASK_ID_HELP = "Task ID (e.g. 42 or TOOL-12)"
+
 ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocked": "⊘", "closed": "✓"}
 STATUS_STYLE = {
     "open": "default",
@@ -40,6 +42,25 @@ def _blocker_summary(task_id: int) -> str:
     names = ", ".join(f"#{d['id']}" for d in open_deps[:3])
     extra = f" +{len(open_deps) - 3}" if len(open_deps) > 3 else ""
     return f"{names}{extra}"
+
+
+def _resolve_id(
+    identifier: str,
+    json_output: bool = False,
+) -> int:
+    """Resolve a task identifier string to a database ID.
+
+    Prints an error and raises typer.Exit(1) if resolution fails.
+    """
+    task_id = tasks.resolve_task_id(identifier)
+    if task_id is None:
+        msg = f"Invalid task ID: {identifier}"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise typer.Exit(1)
+    return task_id
 
 
 @app.command()
@@ -131,7 +152,7 @@ def ready(
 
 @app.command()
 def done(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     note: str | None = typer.Option(None, "-n", "--note", help="Completion note"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -139,8 +160,10 @@ def done(
 
     Examples:
         emdx task done 42
+        emdx task done TOOL-12
         emdx task done 42 --note "Fixed in PR #123"
     """
+    task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
     if not task:
         if json_output:
@@ -162,7 +185,7 @@ def done(
 
 @app.command()
 def view(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
 ) -> None:
     """View full task details.
 
@@ -171,7 +194,9 @@ def view(
 
     Examples:
         emdx task view 42
+        emdx task view TOOL-12
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -251,7 +276,7 @@ def view(
 
 @app.command()
 def active(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     note: str | None = typer.Option(None, "-n", "--note", help="Progress note"),
 ) -> None:
     """Mark a task as in-progress.
@@ -260,8 +285,10 @@ def active(
 
     Examples:
         emdx task active 42
+        emdx task active TOOL-12
         emdx task active 42 --note "Starting work on auth refactor"
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -276,7 +303,7 @@ def active(
 
 @app.command()
 def log(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     message: str | None = typer.Argument(None, help="Log message (omit to view log)"),
 ) -> None:
     """View or add to a task's work log.
@@ -286,8 +313,10 @@ def log(
 
     Examples:
         emdx task log 42
+        emdx task log TOOL-12
         emdx task log 42 "Investigated root cause — issue is in auth middleware"
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -310,8 +339,31 @@ def log(
 
 
 @app.command()
+def note(
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
+    message: str = typer.Argument(..., help="Progress note"),
+) -> None:
+    """Log a progress note on a task without changing its status.
+
+    Shorthand for 'emdx task log <id> "message"'.
+
+    Examples:
+        emdx task note 42 "Root cause is in auth middleware"
+        emdx task note TOOL-12 "Tried approach X, didn't work — switching to Y"
+    """
+    task_id = _resolve_id(task_id_str)
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    tasks.log_progress(task_id, message)
+    console.print(f"[green]Logged:[/green] #{task_id} — {message}")
+
+
+@app.command()
 def blocked(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     reason: str = typer.Option("", "-r", "--reason", help="Why the task is blocked"),
 ) -> None:
     """Mark a task as blocked.
@@ -320,8 +372,10 @@ def blocked(
 
     Examples:
         emdx task blocked 42
+        emdx task blocked TOOL-12
         emdx task blocked 42 --reason "Waiting on API key from infra team"
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -423,15 +477,17 @@ def _display_title(task: TaskDict) -> str:
 
 @app.command()
 def delete(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ) -> None:
     """Delete a task.
 
     Examples:
         emdx task delete 42
+        emdx task delete TOOL-12
         emdx task delete 42 --force
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
