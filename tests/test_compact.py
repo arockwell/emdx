@@ -6,14 +6,14 @@ Tests cover:
 - Integration tests for the compact command
 """
 
+import re
 from unittest.mock import patch
 
 import pytest
 
 # Skip all tests if sklearn not installed - must come before module imports
 sklearn = pytest.importorskip(
-    "sklearn",
-    reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')"
+    "sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')"
 )
 
 
@@ -149,11 +149,13 @@ class TestClusteringLogic:
         from emdx.commands.compact import _find_clusters
 
         # Low similarity matrix
-        matrix = np.array([
-            [1.0, 0.1, 0.1],
-            [0.1, 1.0, 0.1],
-            [0.1, 0.1, 1.0],
-        ])
+        matrix = np.array(
+            [
+                [1.0, 0.1, 0.1],
+                [0.1, 1.0, 0.1],
+                [0.1, 0.1, 1.0],
+            ]
+        )
         clusters = _find_clusters(matrix, [1, 2, 3], threshold=0.5)
         # No clusters with more than 1 document
         assert clusters == []
@@ -165,11 +167,13 @@ class TestClusteringLogic:
         from emdx.commands.compact import _find_clusters
 
         # High similarity between docs 1 and 2
-        matrix = np.array([
-            [1.0, 0.8, 0.1],
-            [0.8, 1.0, 0.1],
-            [0.1, 0.1, 1.0],
-        ])
+        matrix = np.array(
+            [
+                [1.0, 0.8, 0.1],
+                [0.8, 1.0, 0.1],
+                [0.1, 0.1, 1.0],
+            ]
+        )
         clusters = _find_clusters(matrix, [1, 2, 3], threshold=0.5)
         assert len(clusters) == 1
         assert set(clusters[0]) == {1, 2}
@@ -181,11 +185,13 @@ class TestClusteringLogic:
         from emdx.commands.compact import _find_clusters
 
         # A~B and B~C should put A,B,C in same cluster
-        matrix = np.array([
-            [1.0, 0.7, 0.2],
-            [0.7, 1.0, 0.7],
-            [0.2, 0.7, 1.0],
-        ])
+        matrix = np.array(
+            [
+                [1.0, 0.7, 0.2],
+                [0.7, 1.0, 0.7],
+                [0.2, 0.7, 1.0],
+            ]
+        )
         clusters = _find_clusters(matrix, [1, 2, 3], threshold=0.5)
         assert len(clusters) == 1
         assert set(clusters[0]) == {1, 2, 3}
@@ -430,9 +436,10 @@ class TestCompactCommand:
         result = runner.invoke(app, ["maintain", "compact", "--help"])
 
         assert result.exit_code == 0
-        assert "dry-run" in result.stdout.lower()
-        assert "threshold" in result.stdout.lower()
-        assert "auto" in result.stdout.lower()
+        output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout).lower()
+        assert "dry-run" in output
+        assert "threshold" in output
+        assert "auto" in output
 
     def test_compact_empty_db_handles_gracefully(self, clean_db):
         """Empty database shows appropriate message."""
