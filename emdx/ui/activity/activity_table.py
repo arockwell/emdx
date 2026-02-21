@@ -27,7 +27,7 @@ def _item_key(item: ActivityItem) -> ItemKey:
     return (item.item_type, item.item_id)
 
 
-class ActivityTable(DataTable[str]):
+class ActivityTable(DataTable[str | Text]):
     """Flat table widget for the activity stream.
 
     Each row maps to an ActivityItem. The table preserves cursor
@@ -126,9 +126,7 @@ class ActivityTable(DataTable[str]):
         current_key: str | None = None
         try:
             if self.cursor_row is not None and self.row_count > 0:
-                current_key = str(
-                    self.ordered_rows[self.cursor_row].key.value
-                )
+                current_key = str(self.ordered_rows[self.cursor_row].key.value)
         except (IndexError, AttributeError):
             pass
 
@@ -209,9 +207,7 @@ class ActivityTable(DataTable[str]):
                     return i
         return None
 
-    def on_data_table_row_highlighted(
-        self, event: DataTable.RowHighlighted
-    ) -> None:
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Forward row highlight as ItemHighlighted message."""
         item = self.get_selected_item()
         self.post_message(self.ItemHighlighted(item))
@@ -240,10 +236,7 @@ class ActivityTable(DataTable[str]):
 
         time_since_last = current_time - self._last_click_time
 
-        if (
-            self._last_click_row == row_key
-            and time_since_last < self.DOUBLE_CLICK_THRESHOLD
-        ):
+        if self._last_click_row == row_key and time_since_last < self.DOUBLE_CLICK_THRESHOLD:
             # Double-click
             item = self.get_selected_item()
             if item:
