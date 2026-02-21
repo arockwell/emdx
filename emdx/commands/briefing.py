@@ -469,17 +469,12 @@ def _briefing_save(hours: int, model: str | None) -> None:
     from ..models.tasks import get_delegate_tasks_in_window, get_tasks_in_window
     from ..services.synthesis_service import _execute_prompt
 
-    activity = {
-        "window_hours": hours,
-        "tasks": get_tasks_in_window(hours),
-        "docs": get_docs_in_window(hours),
-        "delegate_tasks": get_delegate_tasks_in_window(hours),
-        "execution_stats": get_execution_stats_in_window(hours),
-    }
+    tasks = get_tasks_in_window(hours)
+    docs = get_docs_in_window(hours)
+    delegate_tasks = get_delegate_tasks_in_window(hours)
+    exec_stats = get_execution_stats_in_window(hours)
 
-    total_items = (
-        len(activity["tasks"]) + len(activity["docs"]) + len(activity["delegate_tasks"])
-    )
+    total_items = len(tasks) + len(docs) + len(delegate_tasks)
     if total_items == 0:
         print(f"No activity in the last {hours} hours.")
         return
@@ -491,7 +486,6 @@ def _briefing_save(hours: int, model: str | None) -> None:
         "Focus on: what was accomplished, what's in progress, and what needs attention."
     )
 
-    tasks = activity["tasks"]
     if tasks:
         done = [t for t in tasks if t["status"] == "done"]
         active_tasks = [t for t in tasks if t["status"] == "active"]
@@ -509,14 +503,11 @@ def _briefing_save(hours: int, model: str | None) -> None:
         if task_lines:
             sections.append("\n".join(task_lines))
 
-    docs = activity["docs"]
     if docs:
         doc_lines = ["## Documents Created"]
         doc_lines.extend(f"- #{d['id']}: {d['title']}" for d in docs[:15])
         sections.append("\n".join(doc_lines))
 
-    exec_stats = activity["execution_stats"]
-    delegate_tasks = activity["delegate_tasks"]
     if delegate_tasks or exec_stats["total"] > 0:
         dl = ["## Delegate Activity"]
         dl.append(

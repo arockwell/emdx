@@ -58,9 +58,7 @@ class DocumentMetadata:
     project: str | None = None
 
 
-def get_input_content(
-    input_arg: str | None, file_path: str | None = None
-) -> InputContent:
+def get_input_content(input_arg: str | None, file_path: str | None = None) -> InputContent:
     """Handle input from stdin, --file, or positional content argument.
 
     Priority: --file > stdin > positional content arg.
@@ -180,25 +178,13 @@ def display_save_result(
 
 @app.command()
 def save(
-    input: str | None = typer.Argument(
-        None, help="Text content to save (or pipe via stdin)"
-    ),
-    file: str | None = typer.Option(
-        None, "--file", "-f", help="Read content from a file path"
-    ),
+    input: str | None = typer.Argument(None, help="Text content to save (or pipe via stdin)"),
+    file: str | None = typer.Option(None, "--file", "-f", help="Read content from a file path"),
     title: str | None = typer.Option(None, "--title", "-t", help="Document title"),
     project: str | None = typer.Option(
         None, "--project", "-p", help="Project name (auto-detected from git)"
     ),
     tags: str | None = typer.Option(None, "--tags", help="Comma-separated tags"),
-    group_id: int | None = typer.Option(
-        None, "--group", "-g", help="Add document to group", envvar="EMDX_GROUP_ID"
-    ),
-    group_role: str = typer.Option(
-        "member",
-        "--group-role",
-        help="Role in group (primary, exploration, synthesis, variant, member)",
-    ),
     auto_tag: bool = typer.Option(False, "--auto-tag", help="Automatically apply suggested tags"),
     suggest_tags: bool = typer.Option(
         False, "--suggest-tags", help="Show tag suggestions after saving"
@@ -265,18 +251,6 @@ def save(
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
 
-    # Step 6.5: Add to group if specified
-    if group_id is not None:
-        from emdx.database import groups
-
-        group = groups.get_group(group_id)
-        if group:
-            success = groups.add_document_to_group(group_id, doc_id, role=group_role)
-            if success:
-                console.print(f"   [dim]Group:[/dim] #{group_id} ({group['name']})")
-        else:
-            console.print(f"   [yellow]Warning: Group #{group_id} not found[/yellow]")
-
     # Step 6.6: Auto-link to similar documents if requested
     if auto_link:
         try:
@@ -284,14 +258,10 @@ def save(
 
             link_result = auto_link_document(doc_id)
             if link_result.links_created > 0:
-                console.print(
-                    f"   [dim]Linked to {link_result.links_created}"
-                    f" similar doc(s)[/dim]"
-                )
+                console.print(f"   [dim]Linked to {link_result.links_created} similar doc(s)[/dim]")
         except ImportError:
             console.print(
-                "   [yellow]Auto-link skipped: "
-                "install emdx[ai] for semantic linking[/yellow]"
+                "   [yellow]Auto-link skipped: install emdx[ai] for semantic linking[/yellow]"
             )
         except Exception as e:
             console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
@@ -332,7 +302,6 @@ def save(
             for tag, confidence in suggestions:
                 console.print(f"   • {tag} [dim]({confidence:.0%})[/dim]")
             console.print(f"\n[dim]Apply with: emdx tag {doc_id} <tags>[/dim]")
-
 
 
 @app.command()
@@ -827,13 +796,9 @@ def _find_context(
     service = AskService()
     try:
         if not service._has_embeddings():
-            docs, method = service._retrieve_keyword(
-                question, limit, project, tags=tags
-            )
+            docs, method = service._retrieve_keyword(question, limit, project, tags=tags)
         else:
-            docs, method = service._retrieve_semantic(
-                question, limit, project, tags=tags
-            )
+            docs, method = service._retrieve_semantic(question, limit, project, tags=tags)
     except ImportError as e:
         console.print(f"[red]{e}[/red]", highlight=False)
         raise typer.Exit(1) from None
@@ -1094,13 +1059,10 @@ def view(
     no_pager: bool = typer.Option(False, "--no-pager", help="Disable pager (for piping output)"),
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
     json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
-    links: bool = typer.Option(
-        False, "--links", help="Show document links (semantic and manual)"
-    ),
+    links: bool = typer.Option(False, "--links", help="Show document links (semantic and manual)"),
 ) -> None:
     """View a document from the knowledge base"""
     try:
-
         # Fetch document
         doc = get_document(identifier)
 
@@ -1124,19 +1086,23 @@ def view(
             linked_docs = []
             for link in doc_links:
                 if link["source_doc_id"] == doc["id"]:
-                    linked_docs.append({
-                        "id": link["target_doc_id"],
-                        "title": link["target_title"],
-                        "similarity": link["similarity_score"],
-                        "method": link["method"],
-                    })
+                    linked_docs.append(
+                        {
+                            "id": link["target_doc_id"],
+                            "title": link["target_title"],
+                            "similarity": link["similarity_score"],
+                            "method": link["method"],
+                        }
+                    )
                 else:
-                    linked_docs.append({
-                        "id": link["source_doc_id"],
-                        "title": link["source_title"],
-                        "similarity": link["similarity_score"],
-                        "method": link["method"],
-                    })
+                    linked_docs.append(
+                        {
+                            "id": link["source_doc_id"],
+                            "title": link["source_title"],
+                            "similarity": link["similarity_score"],
+                            "method": link["method"],
+                        }
+                    )
             output = {
                 "id": doc["id"],
                 "title": doc["title"],
@@ -1159,14 +1125,10 @@ def view(
         # Handle --links: show detailed link information
         if links:
             if not doc_links:
-                console.print(
-                    f"[yellow]No links found for document #{doc['id']}[/yellow]"
-                )
+                console.print(f"[yellow]No links found for document #{doc['id']}[/yellow]")
                 return
 
-            console.print(
-                f"[bold]Links for #{doc['id']} '{doc['title']}':[/bold]\n"
-            )
+            console.print(f"[bold]Links for #{doc['id']} '{doc['title']}':[/bold]\n")
             from rich.table import Table as LinksTable
 
             table = LinksTable()
@@ -1183,9 +1145,7 @@ def view(
                     other_id = link["source_doc_id"]
                     other_title = link["source_title"]
                 score = f"{link['similarity_score']:.0%}"
-                table.add_row(
-                    str(other_id), score, other_title, link["method"]
-                )
+                table.add_row(str(other_id), score, other_title, link["method"])
 
             console.print(table)
             return
@@ -1301,17 +1261,21 @@ def _print_related_docs(
     related: list[tuple[int, str, float]] = []
     for link in links:
         if link["source_doc_id"] == doc_id:
-            related.append((
-                link["target_doc_id"],
-                link["target_title"],
-                link["similarity_score"],
-            ))
+            related.append(
+                (
+                    link["target_doc_id"],
+                    link["target_title"],
+                    link["similarity_score"],
+                )
+            )
         else:
-            related.append((
-                link["source_doc_id"],
-                link["source_title"],
-                link["similarity_score"],
-            ))
+            related.append(
+                (
+                    link["source_doc_id"],
+                    link["source_title"],
+                    link["similarity_score"],
+                )
+            )
 
     if rich_mode:
         items = [
@@ -1338,7 +1302,6 @@ def edit(
 ) -> None:
     """Edit a document in the knowledge base"""
     try:
-
         # Fetch document
         doc = get_document(identifier)
 
@@ -1453,7 +1416,6 @@ def delete(
 ) -> None:
     """Delete one or more documents (soft delete by default)"""
     try:
-
         # Collect documents to delete
         docs_to_delete = []
         not_found = []

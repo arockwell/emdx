@@ -4,7 +4,6 @@ EMDX Database Package
 Organized database operations split into focused modules:
 - connection: Database connection management
 - documents: Document CRUD operations
-- groups: Document group operations
 - search: Full-text search operations
 - migrations: Database schema migrations
 This package maintains backward compatibility with the original sqlite_database.py API.
@@ -17,7 +16,6 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Union, cast
 
-from . import groups
 from .connection import DatabaseConnection, db_connection
 from .documents import (
     delete_document,
@@ -72,6 +70,7 @@ class SQLiteDatabase:
         """Get the appropriate DatabaseConnection instance."""
         if self._uses_global_connection:
             from . import connection
+
             return connection.db_connection
         assert self._connection is not None
         return self._connection
@@ -125,7 +124,8 @@ class SQLiteDatabase:
                         tag_id = result[0]
                     else:
                         cursor = conn.execute(
-                            "INSERT INTO tags (name, usage_count) VALUES (?, 0)", (tag_name,),
+                            "INSERT INTO tags (name, usage_count) VALUES (?, 0)",
+                            (tag_name,),
                         )
                         tag_id = cursor.lastrowid
                     conn.execute(
@@ -277,7 +277,9 @@ class SQLiteDatabase:
             return cast(DatabaseStats, dict(cursor.fetchone()))
 
     def list_deleted_documents(
-        self, days: int | None = None, limit: int = 50,
+        self,
+        days: int | None = None,
+        limit: int = 50,
     ) -> list[DeletedDocumentItem]:
         """List soft-deleted documents."""
         if not self._uses_custom_path:
@@ -354,9 +356,16 @@ class SQLiteDatabase:
     ) -> list[SearchResult]:
         """Search documents using FTS."""
         if not self._uses_custom_path:
-            return search_documents(query, project, limit, fuzzy,
-                                    created_after, created_before,
-                                    modified_after, modified_before)
+            return search_documents(
+                query,
+                project,
+                limit,
+                fuzzy,
+                created_after,
+                created_before,
+                modified_after,
+                modified_before,
+            )
 
         # Isolated mode — self-contained FTS search for test databases
         assert self._connection is not None
@@ -385,6 +394,7 @@ class SQLiteDatabase:
             where_clause = " AND ".join(conditions)
 
             from .search import escape_fts5_query
+
             safe_query = escape_fts5_query(query)
 
             cursor = conn.execute(
@@ -406,7 +416,6 @@ __all__ = [
     "db",
     "SQLiteDatabase",
     "db_connection",
-    "groups",
     "save_document",
     "get_document",
     "list_documents",
