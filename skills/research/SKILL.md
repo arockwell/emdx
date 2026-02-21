@@ -27,8 +27,19 @@ emdx find "query" --extract
 
 **Filter by tags:**
 ```bash
-emdx find --tags "gameplan,active"           # AND logic (all tags)
+emdx find --tags "gameplan,active"              # AND logic (all tags)
 emdx find --tags "gameplan,analysis" --any-tags  # OR logic (any tag)
+```
+
+**Exclude tags:**
+```bash
+emdx find "api" --no-tags "archived,draft"
+```
+
+**Filter by date:**
+```bash
+emdx find "query" --created-after 2026-01-01
+emdx find "query" --modified-after 2026-02-01
 ```
 
 **Recent documents:**
@@ -47,12 +58,19 @@ emdx view <id>
 emdx find "query" -s
 ```
 
+**Discover topics and coverage gaps:**
+```bash
+emdx explore              # Cluster docs into topics
+emdx explore --gaps       # Find thin/stale areas
+```
+
 ## Search Strategy
 
 1. Start broad: `emdx find "topic" -s` to see what exists
 2. Narrow with tags: `emdx find --tags "analysis,active"`
 3. Try semantic if keyword search misses: `emdx find "concept" --mode semantic`
 4. Check recent work: `emdx recent`
+5. Explore topics: `emdx explore` for a high-level map
 
 ## Important: FTS5 Limitations
 

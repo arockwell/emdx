@@ -16,6 +16,7 @@ Mark completed work:
 ```bash
 emdx task done <id>      # Finished tasks
 emdx task active <id>    # Still in progress (leave as active)
+emdx task blocked <id>   # Blocked on something
 ```
 
 ### 2. Create Tasks for Remaining Work
@@ -30,22 +31,16 @@ Use `--epic <id>` to group under a parent epic.
 
 **Note:** The subcommand is `task add`, not `task create`.
 
-### 3. Save Session Summary
+### 3. Generate Session Summary
 
-Persist a summary of what was accomplished:
+Use the built-in wrapup command to auto-generate a summary from recent activity:
 ```bash
-echo "## Session Summary
-
-### Completed
-- Implemented X
-- Fixed Y
-
-### In Progress
-- Working on Z (task #123)
-
-### Remaining
-- Need to do W (created task #456)" | emdx save --title "Session Summary - $(date +%Y-%m-%d)" --tags "notes,active"
+emdx wrapup                  # Summarize last 4 hours (default)
+emdx wrapup --hours 8        # Wider time window
+emdx wrapup --dry-run        # Preview what would be summarized
 ```
+
+The summary is auto-saved with `session-summary,active` tags.
 
 ### 4. Tag Completed Documents
 
@@ -59,5 +54,5 @@ emdx tag remove <id> active        # No longer active
 
 - [ ] All completed tasks marked `done`
 - [ ] New tasks created for remaining work
-- [ ] Session summary saved to KB
+- [ ] Session summary generated via `emdx wrapup`
 - [ ] Document tags updated

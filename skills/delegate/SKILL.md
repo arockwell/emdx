@@ -27,23 +27,25 @@ emdx delegate --synthesize "task1" "task2" "task3"
 
 ## Options
 
-| Flag | Purpose |
-|---|---|
-| `--doc <id>` | Pass a KB document as context |
-| `--pr` | Create a PR (implies `--worktree`) |
-| `--branch` | Push branch, no PR (implies `--worktree`) |
-| `--draft` / `--no-draft` | Draft PR toggle |
-| `-b <branch>` | Custom base branch |
-| `--worktree` / `-w` | Run in a git worktree |
-| `--synthesize` | Combine parallel results into a summary |
-| `-j <n>` | Max parallel tasks (default: 5) |
-| `--tags` | Tag saved results |
-| `--title` | Custom title for saved results |
-| `--model` | Override model |
-| `-q` | Quiet mode |
-| `--epic` / `-e` | Assign to epic |
-| `--cat` / `-c` | Assign category |
-| `--cleanup` | Remove stale worktrees |
+| Flag | Short | Purpose |
+|---|---|---|
+| `--doc` | `-d` | Pass a KB document as context |
+| `--pr` | | Create a PR (implies `--worktree`) |
+| `--branch` | | Push branch, no PR (implies `--worktree`) |
+| `--draft` / `--no-draft` | | Draft PR toggle (default: `--no-draft`) |
+| `--base-branch` | `-b` | Custom base branch |
+| `--worktree` | `-w` | Run in a git worktree |
+| `--synthesize` | `-s` | Combine parallel results into a summary |
+| `--jobs` | `-j` | Max parallel tasks (default: auto) |
+| `--tags` | `-t` | Tag saved results |
+| `--title` | `-T` | Custom title for saved results |
+| `--model` | `-m` | Override model |
+| `--sonnet` | | Shortcut for `--model sonnet` |
+| `--opus` | | Shortcut for `--model opus` |
+| `--quiet` | `-q` | Quiet mode |
+| `--epic` | `-e` | Assign to epic |
+| `--cat` | `-c` | Assign category |
+| `--cleanup` | | Remove stale worktrees |
 
 ## Flag Ordering
 
@@ -83,6 +85,9 @@ emdx delegate --doc 42 "implement the plan described here"
 
 # Push branch without PR
 emdx delegate --branch -b develop "add feature X"
+
+# Use a faster model
+emdx delegate --sonnet "quick analysis of the config module"
 
 # Clean up stale worktrees
 emdx delegate --cleanup

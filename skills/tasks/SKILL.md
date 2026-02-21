@@ -13,6 +13,7 @@ Manage emdx tasks: $ARGUMENTS
 **Add a task:**
 ```bash
 emdx task add "Title" -D "Detailed description" --epic <id> --cat FEAT
+emdx task add "Implement this plan" --doc 42     # Link to a document
 ```
 
 **View ready tasks (unblocked):**
@@ -20,16 +21,28 @@ emdx task add "Title" -D "Detailed description" --epic <id> --cat FEAT
 emdx task ready
 ```
 
-**Update task status:**
+**View task details:**
 ```bash
-emdx task active <id>    # Mark in-progress
-emdx task done <id>      # Mark complete
+emdx task view <id>
 ```
 
-**List epics and categories:**
+**Update task status:**
 ```bash
-emdx task epic list      # See active epics
-emdx task cat list       # See available categories
+emdx task active <id>     # Mark in-progress
+emdx task done <id>       # Mark complete
+emdx task blocked <id>    # Mark blocked
+```
+
+**Work log and notes:**
+```bash
+emdx task log <id>                        # View task log
+emdx task log <id> "Started implementation"  # Add log entry
+emdx task note <id> "Progress update"     # Add note without status change
+```
+
+**Delete a task:**
+```bash
+emdx task delete <id>
 ```
 
 ## Categories
@@ -45,9 +58,36 @@ Use `--cat` to classify tasks:
 | `TEST` | Testing |
 | `CHORE` | Maintenance |
 
+**Manage categories:**
+```bash
+emdx task cat list                            # List categories
+emdx task cat create SEC --description "Security tasks"  # Create
+emdx task cat adopt SEC                       # Backfill existing tasks
+emdx task cat delete SEC                      # Delete (unlinks tasks)
+```
+
 ## Epics
 
-Group related tasks under an epic with `--epic <id>`. Use `emdx task epic list` to see active epics.
+Group related tasks under an epic with `--epic <id>`.
+
+**Manage epics:**
+```bash
+emdx task epic list                           # List epics
+emdx task epic create "Auth System Overhaul"  # Create
+emdx task epic view <id>                      # View with tasks
+emdx task epic active <id>                    # Mark in-progress
+emdx task epic done <id>                      # Mark complete
+emdx task epic delete <id>                    # Delete (unlinks tasks)
+```
+
+## Task Statuses
+
+| Status | Icon | Description |
+|---|---|---|
+| `open` | ○ | Not yet started |
+| `active` | ● | Currently being worked on |
+| `blocked` | ⚠ | Waiting on dependencies |
+| `done` | ✓ | Completed |
 
 ## Important
 

@@ -10,14 +10,22 @@ Persist the following to emdx: $ARGUMENTS
 
 ## How to Save
 
-**From stdin (most common for inline content):**
+**Inline content (positional arg):**
 ```bash
-echo "your content here" | emdx save --title "Descriptive Title" --tags "analysis,active"
+emdx save "Quick note about the auth module"
+emdx save "Detailed findings here" --title "Auth Analysis" --tags "analysis,active"
 ```
 
-**From a file:**
+**From a file (explicit --file flag):**
 ```bash
-emdx save path/to/document.md
+emdx save --file document.md
+emdx save --file document.md --title "Custom Title"
+```
+
+**From stdin:**
+```bash
+echo "piped content" | emdx save --title "My Note" --tags "notes"
+ls -la | emdx save --title "Directory Listing"
 ```
 
 **With tags for classification:**
@@ -33,10 +41,14 @@ emdx save path/to/document.md
 **Status tags:** `active` (working), `done` (completed), `blocked` (stuck)
 **Outcome tags:** `success`, `failed`, `partial`
 
-## Common Gotcha
+## Useful Options
 
-**DON'T:** `emdx save "text content"` — this looks for a FILE named "text content"
-**DO:** `echo "text content" | emdx save --title "My Text"` — saves text via stdin
+- `--auto-link` — Auto-link to semantically similar documents (requires `emdx ai index`)
+- `--gist` / `--secret` / `--public` — Create a GitHub gist after saving
+- `--copy` — Copy gist URL to clipboard
+- `--task <id>` — Link saved document to a task as its output
+- `--done` — Also mark the linked task as done (requires `--task`)
+- `--supersede` — Auto-link to existing doc with same title
 
 ## After Saving
 
