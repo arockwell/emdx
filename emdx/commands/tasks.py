@@ -18,6 +18,8 @@ app = typer.Typer(help="Agent work queue")
 app.add_typer(epics_app, name="epic", help="Manage task epics")
 app.add_typer(categories_app, name="cat", help="Manage task categories")
 
+TASK_ID_HELP = "Task ID (e.g. 42 or TOOL-12)"
+
 ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocked": "⊘", "closed": "✓"}
 STATUS_STYLE = {
     "open": "default",
@@ -40,6 +42,25 @@ def _blocker_summary(task_id: int) -> str:
     names = ", ".join(f"#{d['id']}" for d in open_deps[:3])
     extra = f" +{len(open_deps) - 3}" if len(open_deps) > 3 else ""
     return f"{names}{extra}"
+
+
+def _resolve_id(
+    identifier: str,
+    json_output: bool = False,
+) -> int:
+    """Resolve a task identifier string to a database ID.
+
+    Prints an error and raises typer.Exit(1) if resolution fails.
+    """
+    task_id = tasks.resolve_task_id(identifier)
+    if task_id is None:
+        msg = f"Invalid task ID: {identifier}"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise typer.Exit(1)
+    return task_id
 
 
 @app.command()
@@ -131,7 +152,7 @@ def ready(
 
 @app.command()
 def done(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     note: str | None = typer.Option(None, "-n", "--note", help="Completion note"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -139,8 +160,10 @@ def done(
 
     Examples:
         emdx task done 42
+        emdx task done TOOL-12
         emdx task done 42 --note "Fixed in PR #123"
     """
+    task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
     if not task:
         if json_output:
@@ -162,7 +185,7 @@ def done(
 
 @app.command()
 def view(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
 ) -> None:
     """View full task details.
 
@@ -171,7 +194,9 @@ def view(
 
     Examples:
         emdx task view 42
+        emdx task view TOOL-12
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -251,7 +276,7 @@ def view(
 
 @app.command()
 def active(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     note: str | None = typer.Option(None, "-n", "--note", help="Progress note"),
 ) -> None:
     """Mark a task as in-progress.
@@ -260,8 +285,10 @@ def active(
 
     Examples:
         emdx task active 42
+        emdx task active TOOL-12
         emdx task active 42 --note "Starting work on auth refactor"
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -276,7 +303,7 @@ def active(
 
 @app.command()
 def log(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     message: str | None = typer.Argument(None, help="Log message (omit to view log)"),
 ) -> None:
     """View or add to a task's work log.
@@ -286,8 +313,10 @@ def log(
 
     Examples:
         emdx task log 42
+        emdx task log TOOL-12
         emdx task log 42 "Investigated root cause — issue is in auth middleware"
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -310,8 +339,31 @@ def log(
 
 
 @app.command()
+def note(
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
+    message: str = typer.Argument(..., help="Progress note"),
+) -> None:
+    """Log a progress note on a task without changing its status.
+
+    Shorthand for 'emdx task log <id> "message"'.
+
+    Examples:
+        emdx task note 42 "Root cause is in auth middleware"
+        emdx task note TOOL-12 "Tried approach X, didn't work — switching to Y"
+    """
+    task_id = _resolve_id(task_id_str)
+    task = tasks.get_task(task_id)
+    if not task:
+        console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    tasks.log_progress(task_id, message)
+    console.print(f"[green]Logged:[/green] #{task_id} — {message}")
+
+
+@app.command()
 def blocked(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     reason: str = typer.Option("", "-r", "--reason", help="Why the task is blocked"),
 ) -> None:
     """Mark a task as blocked.
@@ -320,8 +372,10 @@ def blocked(
 
     Examples:
         emdx task blocked 42
+        emdx task blocked TOOL-12
         emdx task blocked 42 --reason "Waiting on API key from infra team"
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -423,15 +477,17 @@ def _display_title(task: TaskDict) -> str:
 
 @app.command()
 def delete(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ) -> None:
     """Delete a task.
 
     Examples:
         emdx task delete 42
+        emdx task delete TOOL-12
         emdx task delete 42 --force
     """
+    task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
         console.print(f"[red]Task #{task_id} not found[/red]")
@@ -456,24 +512,30 @@ app.add_typer(dep_app, name="dep")
 
 @dep_app.command("add")
 def dep_add(
-    task_id: int = typer.Argument(..., help="Task that needs the dependency done first"),
-    depends_on: int = typer.Argument(..., help="Task that must be completed first"),
+    task_id: str = typer.Argument(..., help=TASK_ID_HELP),
+    depends_on: str = typer.Argument(
+        ..., help="Task that must be completed first (e.g. 42 or TOOL-12)"
+    ),
 ) -> None:
     """Add a dependency between tasks.
 
     TASK_ID will be blocked until DEPENDS_ON is done.
 
     Examples:
-        emdx task dep add 5 3    # task 5 depends on task 3
+        emdx task dep add 5 3        # task 5 depends on task 3
+        emdx task dep add FEAT-5 3   # FEAT-5 depends on task 3
     """
-    for tid in (task_id, depends_on):
+    resolved_id = _resolve_id(task_id)
+    resolved_dep = _resolve_id(depends_on)
+
+    for tid in (resolved_id, resolved_dep):
         if not tasks.get_task(tid):
             console.print(f"[red]Task #{tid} not found[/red]")
             raise typer.Exit(1)
 
-    ok = tasks.add_dependency(task_id, depends_on)
+    ok = tasks.add_dependency(resolved_id, resolved_dep)
     if ok:
-        console.print(f"[green]✅ #{task_id} now depends on #{depends_on}[/green]")
+        console.print(f"[green]✅ #{resolved_id} now depends on #{resolved_dep}[/green]")
     else:
         console.print("[red]Cannot add: dependency already exists or would create a cycle[/red]")
         raise typer.Exit(1)
@@ -481,24 +543,29 @@ def dep_add(
 
 @dep_app.command("rm")
 def dep_rm(
-    task_id: int = typer.Argument(..., help="Task to remove dependency from"),
-    depends_on: int = typer.Argument(..., help="Dependency to remove"),
+    task_id: str = typer.Argument(..., help=TASK_ID_HELP),
+    depends_on: str = typer.Argument(..., help="Dependency to remove (e.g. 42 or TOOL-12)"),
 ) -> None:
     """Remove a dependency between tasks.
 
     Examples:
-        emdx task dep rm 5 3    # task 5 no longer depends on task 3
+        emdx task dep rm 5 3        # task 5 no longer depends on task 3
+        emdx task dep rm FEAT-5 3   # FEAT-5 no longer depends on task 3
     """
-    ok = tasks.remove_dependency(task_id, depends_on)
+    resolved_id = _resolve_id(task_id)
+    resolved_dep = _resolve_id(depends_on)
+    ok = tasks.remove_dependency(resolved_id, resolved_dep)
     if ok:
-        console.print(f"[green]✅ Removed: #{task_id} no longer depends on #{depends_on}[/green]")
+        console.print(
+            f"[green]✅ Removed: #{resolved_id} no longer depends on #{resolved_dep}[/green]"
+        )
     else:
         console.print("[yellow]No such dependency[/yellow]")
 
 
 @dep_app.command("list")
 def dep_list(
-    task_id: int = typer.Argument(..., help="Task ID"),
+    task_id: str = typer.Argument(..., help=TASK_ID_HELP),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show dependencies for a task.
@@ -507,14 +574,16 @@ def dep_list(
 
     Examples:
         emdx task dep list 5
+        emdx task dep list FEAT-5
     """
-    task = tasks.get_task(task_id)
+    task_id_int = _resolve_id(task_id, json_output)
+    task = tasks.get_task(task_id_int)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task #{task_id_int} not found[/red]")
         raise typer.Exit(1)
 
-    deps = tasks.get_dependencies(task_id)
-    dependents = tasks.get_dependents(task_id)
+    deps = tasks.get_dependencies(task_id_int)
+    dependents = tasks.get_dependents(task_id_int)
 
     if json_output:
 
@@ -523,7 +592,7 @@ def dep_list(
 
         print_json(
             {
-                "task_id": task_id,
+                "task_id": task_id_int,
                 "depends_on": [_dep_summary(d) for d in deps],
                 "blocks": [_dep_summary(d) for d in dependents],
             }
@@ -531,17 +600,17 @@ def dep_list(
         return
 
     if not deps and not dependents:
-        console.print(f"[yellow]#{task_id} has no dependencies[/yellow]")
+        console.print(f"[yellow]#{task_id_int} has no dependencies[/yellow]")
         return
 
     if deps:
-        console.print(f"[bold]#{task_id} depends on:[/bold]")
+        console.print(f"[bold]#{task_id_int} depends on:[/bold]")
         for d in deps:
             icon = ICONS.get(d["status"], "?")
             console.print(f"  {icon} #{d['id']} {d['title']}")
 
     if dependents:
-        console.print(f"[bold]#{task_id} blocks:[/bold]")
+        console.print(f"[bold]#{task_id_int} blocks:[/bold]")
         for d in dependents:
             icon = ICONS.get(d["status"], "?")
             console.print(f"  {icon} #{d['id']} {d['title']}")
@@ -549,7 +618,7 @@ def dep_list(
 
 @app.command()
 def chain(
-    task_id: int = typer.Argument(..., help="Task ID to trace"),
+    task_id: str = typer.Argument(..., help=TASK_ID_HELP),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show the full dependency chain for a task.
@@ -559,16 +628,18 @@ def chain(
 
     Examples:
         emdx task chain 5
+        emdx task chain FEAT-5
     """
-    task = tasks.get_task(task_id)
+    task_id_int = _resolve_id(task_id, json_output)
+    task = tasks.get_task(task_id_int)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task #{task_id_int} not found[/red]")
         raise typer.Exit(1)
 
     # Walk upward: everything this task is waiting on (transitively)
-    upstream = _walk_deps(task_id, direction="up")
+    upstream = _walk_deps(task_id_int, direction="up")
     # Walk downward: everything waiting on this task (transitively)
-    downstream = _walk_deps(task_id, direction="down")
+    downstream = _walk_deps(task_id_int, direction="down")
 
     if json_output:
 
@@ -585,7 +656,7 @@ def chain(
         return
 
     icon = ICONS.get(task["status"], "?")
-    console.print(f"\n[bold]Chain for #{task_id}: {task['title']}[/bold]")
+    console.print(f"\n[bold]Chain for #{task_id_int}: {task['title']}[/bold]")
 
     if upstream:
         console.print("\n[bold]Upstream (must finish first):[/bold]")
@@ -593,7 +664,9 @@ def chain(
             t_icon = ICONS.get(t["status"], "?")
             console.print(f"  {t_icon} #{t['id']} {t['title']}")
 
-    console.print(f"\n  [bold cyan]{icon} #{task_id} {task['title']}[/bold cyan]  ← you are here")
+    console.print(
+        f"\n  [bold cyan]{icon} #{task_id_int} {task['title']}[/bold cyan]  ← you are here"
+    )
 
     if downstream:
         console.print("\n[bold]Downstream (waiting on this):[/bold]")

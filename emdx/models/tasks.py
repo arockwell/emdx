@@ -1,5 +1,6 @@
 """Task operations for emdx."""
 
+import re
 import sqlite3
 from typing import Any, cast
 
@@ -182,6 +183,41 @@ def get_task(task_id: int) -> TaskDict | None:
         cursor = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
         row = cursor.fetchone()
         return cast(TaskDict, dict(row)) if row else None
+
+
+_PREFIXED_ID_RE = re.compile(r"^([A-Za-z]+)-(\d+)$")
+
+
+def resolve_task_id(identifier: str) -> int | None:
+    """Resolve a task identifier to a database ID.
+
+    Accepts:
+      - Category-prefixed IDs like "TOOL-12" (looks up by epic_key + epic_seq)
+      - Raw integer IDs like "42" or "#42"
+
+    Returns the database ID, or None if the format is invalid or task not found.
+    """
+    identifier = identifier.strip().lstrip("#")
+
+    # Try plain integer first
+    if identifier.isdigit():
+        return int(identifier)
+
+    # Try category-prefixed format (e.g. TOOL-12)
+    match = _PREFIXED_ID_RE.match(identifier)
+    if match:
+        epic_key = match.group(1).upper()
+        epic_seq = int(match.group(2))
+        with db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT id FROM tasks WHERE epic_key = ? AND epic_seq = ?",
+                (epic_key, epic_seq),
+            )
+            row = cursor.fetchone()
+            if row:
+                return int(row[0])
+
+    return None
 
 
 def list_tasks(
