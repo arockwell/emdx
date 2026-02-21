@@ -33,11 +33,10 @@ Use `--epic <id>` to group under a parent epic.
 
 ### 3. Generate Session Summary
 
-Use the built-in wrapup command to auto-generate a summary from recent activity:
+Use the briefing command to auto-generate a summary from recent activity:
 ```bash
-emdx wrapup                  # Summarize last 4 hours (default)
-emdx wrapup --hours 8        # Wider time window
-emdx wrapup --dry-run        # Preview what would be summarized
+emdx briefing --save                  # Summarize last 4 hours (default)
+emdx briefing --save --hours 8        # Wider time window
 ```
 
 The summary is auto-saved with `session-summary,active` tags.
@@ -54,5 +53,5 @@ emdx tag remove <id> active        # No longer active
 
 - [ ] All completed tasks marked `done`
 - [ ] New tasks created for remaining work
-- [ ] Session summary generated via `emdx wrapup`
+- [ ] Session summary generated via `emdx briefing --save`
 - [ ] Document tags updated
