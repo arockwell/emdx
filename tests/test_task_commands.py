@@ -1,7 +1,7 @@
 """Tests for task CLI commands (add, list, ready, done, delete)."""
 
 import re
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -168,6 +168,7 @@ class TestTaskDone:
 
     @patch("emdx.commands.tasks.tasks")
     def test_done_marks_task_complete(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["done", "1"])
@@ -180,6 +181,7 @@ class TestTaskDone:
 
     @patch("emdx.commands.tasks.tasks")
     def test_done_with_note(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 2
         mock_tasks.get_task.return_value = {"id": 2, "title": "Bug fix"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["done", "2", "--note", "Fixed in PR #123"])
@@ -191,6 +193,7 @@ class TestTaskDone:
 
     @patch("emdx.commands.tasks.tasks")
     def test_done_with_note_short_flag(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 3
         mock_tasks.get_task.return_value = {"id": 3, "title": "Feature"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["done", "3", "-n", "Completed"])
@@ -199,6 +202,7 @@ class TestTaskDone:
 
     @patch("emdx.commands.tasks.tasks")
     def test_done_task_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["done", "999"])
         assert result.exit_code == 1
@@ -409,6 +413,7 @@ class TestTaskDelete:
 
     @patch("emdx.commands.tasks.tasks")
     def test_delete_with_force(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {"id": 1, "title": "Task to delete"}
         mock_tasks.delete_task.return_value = True
         result = runner.invoke(app, ["delete", "1", "--force"])
@@ -419,6 +424,7 @@ class TestTaskDelete:
 
     @patch("emdx.commands.tasks.tasks")
     def test_delete_with_force_short_flag(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 2
         mock_tasks.get_task.return_value = {"id": 2, "title": "Another task"}
         mock_tasks.delete_task.return_value = True
         result = runner.invoke(app, ["delete", "2", "-f"])
@@ -429,6 +435,7 @@ class TestTaskDelete:
 
     @patch("emdx.commands.tasks.tasks")
     def test_delete_task_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["delete", "999", "--force"])
         assert result.exit_code == 1
@@ -436,6 +443,7 @@ class TestTaskDelete:
 
     @patch("emdx.commands.tasks.tasks")
     def test_delete_with_confirmation(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 3
         mock_tasks.get_task.return_value = {"id": 3, "title": "Confirm delete"}
         mock_tasks.delete_task.return_value = True
         result = runner.invoke(app, ["delete", "3"], input="y\n")
@@ -445,6 +453,7 @@ class TestTaskDelete:
 
     @patch("emdx.commands.tasks.tasks")
     def test_delete_cancelled(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 4
         mock_tasks.get_task.return_value = {"id": 4, "title": "Cancel delete"}
         result = runner.invoke(app, ["delete", "4"], input="n\n")
         assert result.exit_code == 0
@@ -462,6 +471,7 @@ class TestTaskView:
 
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_basic_info(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
         mock_tasks.get_task.return_value = {
             "id": 42,
             "title": "Fix auth bug",
@@ -489,6 +499,7 @@ class TestTaskView:
     @patch("emdx.models.documents.get_document")
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_epic_label(self, mock_tasks, mock_get_doc):
+        mock_tasks.resolve_task_id.return_value = 10
         mock_tasks.get_task.return_value = {
             "id": 10,
             "title": "SEC-1: Harden auth",
@@ -519,6 +530,7 @@ class TestTaskView:
 
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_dependencies(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
         mock_tasks.get_task.return_value = {
             "id": 5,
             "title": "Task with deps",
@@ -550,6 +562,7 @@ class TestTaskView:
 
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_work_log(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 7
         mock_tasks.get_task.return_value = {
             "id": 7,
             "title": "Some task",
@@ -577,6 +590,7 @@ class TestTaskView:
 
     @patch("emdx.commands.tasks.tasks")
     def test_view_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["view", "999"])
         assert result.exit_code == 1
@@ -592,6 +606,7 @@ class TestTaskActive:
 
     @patch("emdx.commands.tasks.tasks")
     def test_active_marks_task(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["active", "1"])
@@ -604,6 +619,7 @@ class TestTaskActive:
 
     @patch("emdx.commands.tasks.tasks")
     def test_active_with_note(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 2
         mock_tasks.get_task.return_value = {"id": 2, "title": "Auth fix"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["active", "2", "--note", "Starting work"])
@@ -613,6 +629,7 @@ class TestTaskActive:
 
     @patch("emdx.commands.tasks.tasks")
     def test_active_with_note_short_flag(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 3
         mock_tasks.get_task.return_value = {"id": 3, "title": "Feature"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["active", "3", "-n", "On it"])
@@ -621,6 +638,7 @@ class TestTaskActive:
 
     @patch("emdx.commands.tasks.tasks")
     def test_active_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["active", "999"])
         assert result.exit_code == 1
@@ -636,6 +654,7 @@ class TestTaskLog:
 
     @patch("emdx.commands.tasks.tasks")
     def test_log_add_message(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
         mock_tasks.log_progress.return_value = 1
         result = runner.invoke(app, ["log", "1", "Found the root cause"])
@@ -648,6 +667,7 @@ class TestTaskLog:
 
     @patch("emdx.commands.tasks.tasks")
     def test_log_view_entries(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
         mock_tasks.get_task.return_value = {"id": 5, "title": "Bug fix"}
         mock_tasks.get_task_log.return_value = [
             {"message": "Started debugging", "created_at": "2026-01-15 10:00"},
@@ -663,6 +683,7 @@ class TestTaskLog:
 
     @patch("emdx.commands.tasks.tasks")
     def test_log_view_empty(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 3
         mock_tasks.get_task.return_value = {"id": 3, "title": "Clean task"}
         mock_tasks.get_task_log.return_value = []
         result = runner.invoke(app, ["log", "3"])
@@ -671,6 +692,7 @@ class TestTaskLog:
 
     @patch("emdx.commands.tasks.tasks")
     def test_log_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["log", "999"])
         assert result.exit_code == 1
@@ -687,6 +709,7 @@ class TestTaskNote:
 
     @patch("emdx.commands.tasks.tasks")
     def test_note_logs_message(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
         mock_tasks.log_progress.return_value = 1
         result = runner.invoke(app, ["note", "1", "Tried approach X"])
@@ -699,6 +722,7 @@ class TestTaskNote:
 
     @patch("emdx.commands.tasks.tasks")
     def test_note_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["note", "999", "some note"])
         assert result.exit_code == 1
@@ -718,6 +742,7 @@ class TestTaskBlocked:
 
     @patch("emdx.commands.tasks.tasks")
     def test_blocked_marks_task(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["blocked", "1"])
@@ -731,6 +756,7 @@ class TestTaskBlocked:
 
     @patch("emdx.commands.tasks.tasks")
     def test_blocked_with_reason(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 2
         mock_tasks.get_task.return_value = {"id": 2, "title": "Auth fix"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["blocked", "2", "--reason", "Waiting on API key"])
@@ -744,6 +770,7 @@ class TestTaskBlocked:
 
     @patch("emdx.commands.tasks.tasks")
     def test_blocked_with_reason_short_flag(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 3
         mock_tasks.get_task.return_value = {"id": 3, "title": "Feature"}
         mock_tasks.update_task.return_value = True
         result = runner.invoke(app, ["blocked", "3", "-r", "Needs review"])
@@ -752,6 +779,7 @@ class TestTaskBlocked:
 
     @patch("emdx.commands.tasks.tasks")
     def test_blocked_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["blocked", "999"])
         assert result.exit_code == 1
@@ -806,6 +834,7 @@ class TestTaskDepAdd:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_add_success(self, mock_tasks):
+        mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
         mock_tasks.get_task.return_value = {"id": 5, "title": "Task"}
         mock_tasks.add_dependency.return_value = True
         result = runner.invoke(app, ["dep", "add", "5", "3"])
@@ -817,6 +846,7 @@ class TestTaskDepAdd:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_add_cycle(self, mock_tasks):
+        mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
         mock_tasks.get_task.return_value = {"id": 1, "title": "Task"}
         mock_tasks.add_dependency.return_value = False
         result = runner.invoke(app, ["dep", "add", "5", "3"])
@@ -825,6 +855,7 @@ class TestTaskDepAdd:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_add_task_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["dep", "add", "999", "1"])
         assert result.exit_code == 1
@@ -840,6 +871,7 @@ class TestTaskDepRm:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_rm_success(self, mock_tasks):
+        mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
         mock_tasks.remove_dependency.return_value = True
         result = runner.invoke(app, ["dep", "rm", "5", "3"])
         assert result.exit_code == 0
@@ -850,6 +882,7 @@ class TestTaskDepRm:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_rm_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
         mock_tasks.remove_dependency.return_value = False
         result = runner.invoke(app, ["dep", "rm", "5", "3"])
         assert result.exit_code == 0
@@ -861,6 +894,7 @@ class TestTaskDepList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_list_shows_both_directions(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
         mock_tasks.get_task.return_value = {"id": 5, "title": "Middle task"}
         mock_tasks.get_dependencies.return_value = [
             {"id": 3, "title": "Blocker", "status": "active"},
@@ -880,6 +914,7 @@ class TestTaskDepList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_list_no_deps(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {"id": 1, "title": "Solo task"}
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
@@ -889,6 +924,7 @@ class TestTaskDepList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_list_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["dep", "list", "999"])
         assert result.exit_code == 1
@@ -896,6 +932,7 @@ class TestTaskDepList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_dep_list_json(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
         mock_tasks.get_task.return_value = {"id": 5, "title": "Task"}
         mock_tasks.get_dependencies.return_value = [
             {"id": 3, "title": "Dep", "status": "done"},
@@ -917,6 +954,7 @@ class TestTaskChain:
 
     @patch("emdx.commands.tasks.tasks")
     def test_chain_shows_upstream_and_downstream(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
         mock_tasks.get_task.return_value = {
             "id": 5,
             "title": "Middle task",
@@ -944,6 +982,7 @@ class TestTaskChain:
 
     @patch("emdx.commands.tasks.tasks")
     def test_chain_no_deps(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
         mock_tasks.get_task.return_value = {
             "id": 1,
             "title": "Solo task",
@@ -958,6 +997,7 @@ class TestTaskChain:
 
     @patch("emdx.commands.tasks.tasks")
     def test_chain_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
         mock_tasks.get_task.return_value = None
         result = runner.invoke(app, ["chain", "999"])
         assert result.exit_code == 1
@@ -965,6 +1005,7 @@ class TestTaskChain:
 
     @patch("emdx.commands.tasks.tasks")
     def test_chain_json(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
         mock_tasks.get_task.return_value = {
             "id": 5,
             "title": "Middle",
@@ -986,3 +1027,187 @@ class TestTaskChain:
         assert data["upstream"][0]["id"] == 3
         assert len(data["downstream"]) == 1
         assert data["downstream"][0]["id"] == 8
+
+
+class TestPrefixedTaskId:
+    """Tests for category-prefixed task ID resolution (e.g. TOOL-12)."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_view_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 78
+        mock_tasks.get_task.return_value = {
+            "id": 78,
+            "title": "TOOL-12: Build widget",
+            "status": "open",
+            "description": "",
+            "epic_key": "TOOL",
+            "epic_seq": 12,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
+            "created_at": "2026-01-15",
+        }
+        mock_tasks.get_dependencies.return_value = []
+        mock_tasks.get_dependents.return_value = []
+        mock_tasks.get_task_log.return_value = []
+
+        result = runner.invoke(app, ["view", "TOOL-12"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "TOOL-12" in out
+        assert "Build widget" in out
+        mock_tasks.resolve_task_id.assert_called_once_with("TOOL-12")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_done_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 78
+        mock_tasks.get_task.return_value = {"id": 78, "title": "TOOL-12: Build widget"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["done", "TOOL-12"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("TOOL-12")
+        mock_tasks.update_task.assert_called_once_with(78, status="done")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_active_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 50
+        mock_tasks.get_task.return_value = {"id": 50, "title": "SEC-3: Fix XSS"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["active", "SEC-3"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("SEC-3")
+        mock_tasks.update_task.assert_called_once_with(50, status="active")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_blocked_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 33
+        mock_tasks.get_task.return_value = {"id": 33, "title": "DEBT-5: Refactor"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["blocked", "DEBT-5"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("DEBT-5")
+        mock_tasks.update_task.assert_called_once_with(33, status="blocked")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_note_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 10
+        mock_tasks.get_task.return_value = {"id": 10, "title": "FEAT-1: Add auth"}
+        mock_tasks.log_progress.return_value = 1
+        result = runner.invoke(app, ["note", "FEAT-1", "Working on it"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("FEAT-1")
+        mock_tasks.log_progress.assert_called_once_with(10, "Working on it")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_log_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 20
+        mock_tasks.get_task.return_value = {"id": 20, "title": "FIX-7: Memory leak"}
+        mock_tasks.get_task_log.return_value = []
+        result = runner.invoke(app, ["log", "FIX-7"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("FIX-7")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_delete_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "ARCH-2: Split module"}
+        mock_tasks.delete_task.return_value = True
+        result = runner.invoke(app, ["delete", "ARCH-2", "--force"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("ARCH-2")
+        mock_tasks.delete_task.assert_called_once_with(42)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_invalid_id_format_exits_with_error(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = None
+        result = runner.invoke(app, ["view", "not-valid-123"])
+        assert result.exit_code == 1
+        assert "Invalid task ID" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_prefixed_id_not_found_exits_with_error(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = None
+        result = runner.invoke(app, ["done", "TOOL-999"])
+        assert result.exit_code == 1
+        assert "Invalid task ID" in _out(result)
+
+
+class TestResolveTaskId:
+    """Unit tests for the resolve_task_id model function."""
+
+    def test_plain_integer(self):
+        from emdx.models.tasks import resolve_task_id
+
+        assert resolve_task_id("42") == 42
+
+    def test_integer_with_hash_prefix(self):
+        from emdx.models.tasks import resolve_task_id
+
+        assert resolve_task_id("#42") == 42
+
+    def test_integer_with_whitespace(self):
+        from emdx.models.tasks import resolve_task_id
+
+        assert resolve_task_id("  42  ") == 42
+
+    def test_hash_prefix_with_whitespace(self):
+        from emdx.models.tasks import resolve_task_id
+
+        assert resolve_task_id(" #42 ") == 42
+
+    def test_empty_string_returns_none(self):
+        from emdx.models.tasks import resolve_task_id
+
+        assert resolve_task_id("") is None
+
+    def test_non_matching_format_returns_none(self):
+        from emdx.models.tasks import resolve_task_id
+
+        assert resolve_task_id("not-a-valid-id") is None
+
+    @patch("emdx.models.tasks.db")
+    def test_prefixed_id_found(self, mock_db):
+        from emdx.models.tasks import resolve_task_id
+
+        mock_conn = MagicMock()
+        mock_db.get_connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db.get_connection.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (78,)
+        mock_conn.execute.return_value = mock_cursor
+
+        assert resolve_task_id("TOOL-12") == 78
+        mock_conn.execute.assert_called_once_with(
+            "SELECT id FROM tasks WHERE epic_key = ? AND epic_seq = ?",
+            ("TOOL", 12),
+        )
+
+    @patch("emdx.models.tasks.db")
+    def test_prefixed_id_case_insensitive(self, mock_db):
+        from emdx.models.tasks import resolve_task_id
+
+        mock_conn = MagicMock()
+        mock_db.get_connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db.get_connection.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (55,)
+        mock_conn.execute.return_value = mock_cursor
+
+        assert resolve_task_id("sec-3") == 55
+        mock_conn.execute.assert_called_once_with(
+            "SELECT id FROM tasks WHERE epic_key = ? AND epic_seq = ?",
+            ("SEC", 3),
+        )
+
+    @patch("emdx.models.tasks.db")
+    def test_prefixed_id_not_found_returns_none(self, mock_db):
+        from emdx.models.tasks import resolve_task_id
+
+        mock_conn = MagicMock()
+        mock_db.get_connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db.get_connection.return_value.__exit__ = MagicMock(return_value=False)
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None
+        mock_conn.execute.return_value = mock_cursor
+
+        assert resolve_task_id("TOOL-999") is None
