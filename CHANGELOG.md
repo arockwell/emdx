@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-02-21
+
+**The consolidation release.** EMDX's CLI surface shrank from ~30 commands to 19, folding related commands under unified namespaces (`briefing` absorbed `wrapup` and `activity`, `find` absorbed `recent`, `maintain` absorbed `compact` and `stale`). Task management gained dependency tracking — tasks can now block each other, and `chain` wires up sequential pipelines in one shot. Category-prefixed IDs (`FEAT-12`, `FIX-7`) work everywhere task IDs are accepted. The activity screen got a flat-table redesign, and EMDX shipped as a Claude Code skills plugin.
+
+### 🚀 Major Features
+
+#### CLI consolidation — ~30 commands to 19 (#731)
+Related commands were folded under shared namespaces to reduce cognitive overhead:
+
+```bash
+# Before → After
+emdx wrapup        → emdx briefing --save
+emdx activity      → emdx briefing
+emdx recent        → emdx find --recent
+emdx compact       → emdx maintain compact
+emdx stale         → emdx maintain stale
+emdx distill       → emdx maintain distill
+```
+
+Commands that moved are gone — no aliases. The `maintain` group houses all KB housekeeping. `briefing` owns both interactive and saved summaries.
+
+#### Task dependencies (#735, #736)
+Tasks can now express ordering constraints. A task blocked by another won't appear in `task ready` until its dependency completes:
+
+```bash
+emdx task dep add 12 7          # Task 12 depends on task 7
+emdx task dep list 12           # Show what blocks task 12
+emdx task dep rm 12 7           # Remove dependency
+emdx task chain 1 2 3 4         # Wire up: 1→2→3→4 (each blocks the next)
+```
+
+Dependencies surface in `task list`, `task ready`, and the TUI.
+
+#### Category-prefixed IDs (#720, #736)
+Task IDs can now be written as `FEAT-12` or `FIX-7` instead of bare numbers. Prefixed IDs work everywhere — `task done FEAT-12`, `task dep add FEAT-12 FIX-7`, `task view ARCH-3`. The prefix is validated against assigned categories.
+
+### 🔧 Improvements
+
+#### Claude Code skills plugin (#727)
+EMDX ships as a Claude Code skills plugin. Drop `emdx` into your `~/.claude/plugins/` and get `/emdx:save`, `/emdx:research`, `/emdx:wrapup` skills inside Claude Code sessions.
+
+#### Activity screen redesign (#730)
+The TUI activity screen was redesigned from a grouped layout to a flat table, making it easier to scan recent executions at a glance.
+
+### 🐛 Bug Fixes
+
+- Prevent `emdx save --file` from hanging on non-TTY stdin (#732, #733)
+- Fix CI test failure from ANSI codes in typer help output (#740)
+- Update plugin skills to match post-consolidation CLI (#741)
+- Fix briefing.py mypy errors from untyped activity dict (#740)
+
+### 📖 Documentation
+- Auto-wikify design document (#739)
+- Task TUI research findings and recommendations (#738)
+- QA screen improvement plan (#737)
+- README version badge update (#729)
+
+### 💥 Breaking Changes
+
+#### CLI commands removed/moved (#731)
+The following top-level commands no longer exist:
+
+| Removed | Replacement |
+|---------|-------------|
+| `emdx wrapup` | `emdx briefing --save` |
+| `emdx activity` | `emdx briefing` |
+| `emdx recent` | `emdx find --recent` |
+| `emdx compact` | `emdx maintain compact` |
+| `emdx stale` | `emdx maintain stale` |
+| `emdx distill` | `emdx maintain distill` |
+
 ## [0.18.0] - 2026-02-20
 
 **The knowledge graph release.** EMDX gained the ability to discover connections between documents automatically — save a document and it finds related ones, building a self-organizing knowledge graph. Search got smarter with Reciprocal Rank Fusion replacing the old weighted-average hybrid scoring. A new `explore` command maps the KB's topic landscape, showing coverage depth and gaps. On the CLI side, `emdx save` was simplified — the positional argument is now always content (no more path-guessing), and delegate gained `--sonnet`/`--opus` shortcuts with automatic model tagging.
@@ -944,6 +1015,7 @@ A sustained cleanup across 10+ PRs deleted dead code from every layer — unused
 - JSON/CSV export
 - User config file support at `~/.config/emdx/.env`
 
+[0.19.0]: https://github.com/arockwell/emdx/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/arockwell/emdx/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/arockwell/emdx/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/arockwell/emdx/compare/v0.15.0...v0.16.0
