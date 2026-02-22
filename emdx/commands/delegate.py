@@ -496,14 +496,16 @@ def _run_single(
     batch_fd, batch_path = tempfile.mkstemp(suffix=".ids", prefix="emdx-batch-")
     os.close(batch_fd)
 
-    # Build environment for hooks
-    env = {
-        **os.environ,
-        "EMDX_AUTO_SAVE": "1",
-        "EMDX_TITLE": doc_title,
-        "EMDX_TAGS": ",".join(all_tags),
-        "EMDX_BATCH_FILE": batch_path,
-    }
+    # Build environment for hooks (strip CLAUDECODE to allow nested sessions)
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    env.update(
+        {
+            "EMDX_AUTO_SAVE": "1",
+            "EMDX_TITLE": doc_title,
+            "EMDX_TAGS": ",".join(all_tags),
+            "EMDX_BATCH_FILE": batch_path,
+        }
+    )
     if task_id is not None:
         env["EMDX_TASK_ID"] = str(task_id)
     if execution_id is not None:
@@ -575,13 +577,9 @@ def _run_single(
         _print_doc_content(doc_id)
         if not quiet:
             pr_info = f" pr:{pr_url}" if pr_url else ""
-            branch_info = (
-                f" branch:{pushed_branch}" if pushed_branch and not pr_url else ""
-            )
+            branch_info = f" branch:{pushed_branch}" if pushed_branch and not pr_url else ""
             sys.stderr.write(
-                f"task_id:{task_id} doc_id:{doc_id} "
-                f"exec_id:{execution_id}"
-                f"{pr_info}{branch_info}\n"
+                f"task_id:{task_id} doc_id:{doc_id} exec_id:{execution_id}{pr_info}{branch_info}\n"
             )
     else:
         _safe_update_task(task_id, status="done")
