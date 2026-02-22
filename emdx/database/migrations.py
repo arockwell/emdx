@@ -2667,6 +2667,14 @@ def migration_049_add_wiki_article_timing(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_050_add_wiki_article_rating(conn: sqlite3.Connection) -> None:
+    """Add rating and rated_at columns to wiki_articles for human quality ratings."""
+    cursor = conn.cursor()
+    cursor.execute("ALTER TABLE wiki_articles ADD COLUMN rating INTEGER")
+    cursor.execute("ALTER TABLE wiki_articles ADD COLUMN rated_at TIMESTAMP")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2719,6 +2727,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (47, "Add wiki runs tracking", migration_047_add_wiki_runs),
     (48, "Add previous_content to wiki_articles", migration_048_add_wiki_previous_content),
     (49, "Add step-level timing to wiki articles", migration_049_add_wiki_article_timing),
+    (50, "Add wiki article quality rating", migration_050_add_wiki_article_rating),
 ]
 
 

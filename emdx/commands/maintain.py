@@ -1838,7 +1838,7 @@ def wiki_list(
             "wa.model, wa.input_tokens, wa.output_tokens, wa.cost_usd, "
             "wa.is_stale, wa.version, wa.generated_at, "
             "wa.prepare_ms, wa.route_ms, wa.outline_ms, "
-            "wa.write_ms, wa.validate_ms, wa.save_ms "
+            "wa.write_ms, wa.validate_ms, wa.save_ms, wa.rating "
             "FROM wiki_articles wa "
             "JOIN documents d ON wa.document_id = d.id "
         )
@@ -1856,6 +1856,7 @@ def wiki_list(
     table = Table(title="Wiki Articles", box=box.SIMPLE)
     table.add_column("Doc", style="cyan", width=6)
     table.add_column("Title")
+    table.add_column("Rating", justify="center", width=7)
     table.add_column("Ver", justify="right", width=4)
     table.add_column("Model", style="dim")
     table.add_column("Cost", justify="right")
@@ -1871,9 +1872,12 @@ def wiki_list(
 
     for row in rows:
         status = "[red]stale[/red]" if row[8] else "[green]fresh[/green]"
+        r = row[17]
+        rating_str = "\u2605" * r + "\u2606" * (5 - r) if r else "[dim]-[/dim]"
         base_cols = [
             f"#{row[2]}",
             str(row[3])[:50],
+            rating_str,
             f"v{row[9]}",
             str(row[4]).split("-")[1] if "-" in str(row[4]) else str(row[4]),
             f"${row[7]:.4f}",
@@ -2080,6 +2084,62 @@ def wiki_diff_command(
 
     syntax = Syntax(diff, "diff", theme="monokai")
     console.print(syntax)
+
+
+@wiki_app.command(name="rate")
+def wiki_rate(
+    topic_id: int = typer.Argument(..., help="Topic ID to rate"),
+    rating: int | None = typer.Argument(None, help="Rating value (1-5)"),
+    up: bool = typer.Option(False, "--up", help="Quick thumbs up (maps to 4)"),
+    down: bool = typer.Option(False, "--down", help="Quick thumbs down (maps to 2)"),
+) -> None:
+    """Rate a wiki article's quality (1-5 scale).
+
+    Examples:
+        emdx maintain wiki rate 5 4            # Rate topic 5 as 4/5
+        emdx maintain wiki rate 5 --up         # Quick thumbs up (4)
+        emdx maintain wiki rate 5 --down       # Quick thumbs down (2)
+    """
+    from ..database import db
+
+    if up and down:
+        print("Error: Cannot use both --up and --down")
+        raise typer.Exit(1)
+
+    if up:
+        resolved_rating = 4
+    elif down:
+        resolved_rating = 2
+    elif rating is not None:
+        resolved_rating = rating
+    else:
+        print("Error: Provide a rating (1-5) or use --up/--down")
+        raise typer.Exit(1)
+
+    if resolved_rating < 1 or resolved_rating > 5:
+        print("Error: Rating must be between 1 and 5")
+        raise typer.Exit(1)
+
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT wa.id, d.title FROM wiki_articles wa "
+            "JOIN documents d ON wa.document_id = d.id "
+            "WHERE wa.topic_id = ?",
+            (topic_id,),
+        ).fetchone()
+
+        if not row:
+            print(f"No wiki article found for topic {topic_id}")
+            raise typer.Exit(1)
+
+        conn.execute(
+            "UPDATE wiki_articles SET rating = ?, rated_at = CURRENT_TIMESTAMP WHERE topic_id = ?",
+            (resolved_rating, topic_id),
+        )
+        conn.commit()
+
+    stars = "\u2605" * resolved_rating + "\u2606" * (5 - resolved_rating)
+    print(f"Rated {row[1]} {stars} ({resolved_rating}/5)")
 
 
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
