@@ -193,7 +193,10 @@ def save(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
     auto_link: bool = typer.Option(
-        False, "--auto-link", help="Auto-link to semantically similar documents (requires ai index)"
+        True, "--auto-link/--no-auto-link", help="Auto-link to semantically similar documents"
+    ),
+    cross_project: bool = typer.Option(
+        False, "--cross-project", help="Allow auto-links across projects"
     ),
     task: int | None = typer.Option(
         None, "--task", help="Link saved document to a task as its output"
@@ -263,18 +266,18 @@ def save(
     except Exception as e:
         console.print(f"   [yellow]Wikify skipped: {e}[/yellow]")
 
-    # Step 6.6: Auto-link to similar documents if requested
+    # Step 6.6: Auto-link to similar documents (default on, use --no-auto-link to skip)
     if auto_link:
         try:
             from emdx.services.link_service import auto_link_document
 
-            link_result = auto_link_document(doc_id)
+            # Scope to same project unless --cross-project is set
+            scope_project = None if cross_project else final_project
+            link_result = auto_link_document(doc_id, project=scope_project)
             if link_result.links_created > 0:
                 console.print(f"   [dim]Linked to {link_result.links_created} similar doc(s)[/dim]")
         except ImportError:
-            console.print(
-                "   [yellow]Auto-link skipped: install emdx[ai] for semantic linking[/yellow]"
-            )
+            pass  # AI extras not installed — silently skip
         except Exception as e:
             console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
 

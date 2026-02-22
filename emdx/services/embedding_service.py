@@ -299,26 +299,47 @@ class EmbeddingService:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, lambda: self._search_sync(query, limit, threshold))
 
-    def find_similar(self, doc_id: int, limit: int = 5) -> list[SemanticMatch]:
-        """Find documents similar to a given document."""
+    def find_similar(
+        self, doc_id: int, limit: int = 5, project: str | None = None
+    ) -> list[SemanticMatch]:
+        """Find documents similar to a given document.
+
+        Args:
+            doc_id: The document to find similar documents for.
+            limit: Maximum number of results to return.
+            project: If set, only match documents in this project.
+        """
         doc_embedding = self.embed_document(doc_id)
 
         with db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT e.document_id, e.embedding, d.title, d.project,
-                       SUBSTR(d.content, 1, 200) as snippet
-                FROM document_embeddings e
-                JOIN documents d ON e.document_id = d.id
-                WHERE e.model_name = ? AND d.is_deleted = 0 AND e.document_id != ?
-            """,
-                (self.MODEL_NAME, doc_id),
-            )
+            if project is not None:
+                cursor.execute(
+                    """
+                    SELECT e.document_id, e.embedding, d.title, d.project,
+                           SUBSTR(d.content, 1, 200) as snippet
+                    FROM document_embeddings e
+                    JOIN documents d ON e.document_id = d.id
+                    WHERE e.model_name = ? AND d.is_deleted = 0
+                          AND e.document_id != ? AND d.project = ?
+                    """,
+                    (self.MODEL_NAME, doc_id, project),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT e.document_id, e.embedding, d.title, d.project,
+                           SUBSTR(d.content, 1, 200) as snippet
+                    FROM document_embeddings e
+                    JOIN documents d ON e.document_id = d.id
+                    WHERE e.model_name = ? AND d.is_deleted = 0 AND e.document_id != ?
+                    """,
+                    (self.MODEL_NAME, doc_id),
+                )
             rows = cursor.fetchall()
 
         results = []
-        for other_id, emb_bytes, title, project, snippet in rows:
+        for other_id, emb_bytes, title, doc_project, snippet in rows:
             other_embedding = np.frombuffer(emb_bytes, dtype=np.float32)
             similarity = float(np.dot(doc_embedding, other_embedding))
 
@@ -326,7 +347,7 @@ class EmbeddingService:
                 SemanticMatch(
                     doc_id=other_id,
                     title=title,
-                    project=project,
+                    project=doc_project,
                     similarity=similarity,
                     snippet=snippet.replace("\n", " ")[:150] + "..." if snippet else "",
                 )
