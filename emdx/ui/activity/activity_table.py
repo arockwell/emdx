@@ -15,7 +15,7 @@ from textual.message import Message
 from textual.widgets import DataTable
 
 from .activity_data import TIER_RECENT, TIER_RUNNING, TIER_TASKS
-from .activity_items import ActivityItem, TaskItem
+from .activity_items import ActivityItem, DocumentItem, TaskItem
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +164,11 @@ class ActivityTable(DataTable[str | Text]):
             title_text = Text(title, style="dim")
         else:
             title_text = Text(title)
+
+        # Add doc_type badge for wiki documents
+        if isinstance(item, DocumentItem) and item.doc_type == "wiki":
+            badge = Text(" wiki ", style="bold magenta")
+            title_text = Text.assemble(badge, " ", title_text)
 
         self.add_row(
             icon,
