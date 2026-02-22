@@ -792,6 +792,114 @@ class TestTaskBlocked:
         assert result.exit_code != 0
 
 
+class TestTaskPriority:
+    """Tests for task priority command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_show_current(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 2}
+        result = runner.invoke(app, ["priority", "42"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#42" in out
+        assert "Fix auth" in out
+        assert "priority 2" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_show_default(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 10
+        mock_tasks.get_task.return_value = {"id": 10, "title": "Some task", "priority": 3}
+        result = runner.invoke(app, ["priority", "10"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "priority 3" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_set_value(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "42", "1"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#42" in out
+        assert "priority set to 1" in out
+        mock_tasks.update_task.assert_called_once_with(42, priority=1)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_set_value_5(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
+        mock_tasks.get_task.return_value = {"id": 5, "title": "Low task", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "5", "5"])
+        assert result.exit_code == 0
+        mock_tasks.update_task.assert_called_once_with(5, priority=5)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_invalid_value_too_high(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        result = runner.invoke(app, ["priority", "42", "6"])
+        assert result.exit_code == 1
+        assert "between 1 and 5" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_invalid_value_too_low(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        result = runner.invoke(app, ["priority", "42", "0"])
+        assert result.exit_code == 1
+        assert "between 1 and 5" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_task_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["priority", "999", "1"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 78
+        mock_tasks.get_task.return_value = {"id": 78, "title": "FEAT-5: Feature", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "FEAT-5", "2"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("FEAT-5")
+        mock_tasks.update_task.assert_called_once_with(78, priority=2)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_show_json(self, mock_tasks):
+        import json
+
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 2}
+        result = runner.invoke(app, ["priority", "42", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["id"] == 42
+        assert data["priority"] == 2
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_set_json(self, mock_tasks):
+        import json
+
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "42", "1", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["id"] == 42
+        assert data["priority"] == 1
+
+    def test_priority_requires_task_id(self):
+        result = runner.invoke(app, ["priority"])
+        assert result.exit_code != 0
+
+
 class TestTaskAddWithAfter:
     """Tests for --after flag on task add."""
 

@@ -96,6 +96,11 @@ module = [
 ]
 ignore_missing_imports = true
 
+# Tests use mock-heavy patterns where type annotations add noise, not safety
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
 # click doesn't ship complete type stubs — suppress type errors in lazy loader
 [[tool.mypy.overrides]]
 module = "emdx.utils.lazy_group"
