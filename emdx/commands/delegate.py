@@ -529,6 +529,7 @@ def _run_single(
     epic_key: str | None = None,
     timeout: int | None = None,
     limit: float | None = None,
+    task_flag: int | None = None,
 ) -> SingleResult:
     """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -585,8 +586,10 @@ def _run_single(
             "EMDX_BATCH_FILE": batch_path,
         }
     )
-    if task_id is not None:
-        env["EMDX_TASK_ID"] = str(task_id)
+    # --task flag overrides auto-created task ID for hook consumption
+    effective_task_id = task_flag if task_flag is not None else task_id
+    if effective_task_id is not None:
+        env["EMDX_TASK_ID"] = str(effective_task_id)
     if execution_id is not None:
         env["EMDX_EXECUTION_ID"] = str(execution_id)
     if source_doc_id is not None:
@@ -825,6 +828,7 @@ def _run_parallel(
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
     limit: float | None = None,
+    task_flag: int | None = None,
 ) -> ParallelResult:
     """Run multiple tasks in parallel via ThreadPoolExecutor."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
@@ -888,6 +892,7 @@ def _run_parallel(
                     seq=idx + 1,
                     epic_key=epic_key,
                     limit=limit,
+                    task_flag=task_flag,
                 ),
             )
             return result
@@ -1116,6 +1121,11 @@ def delegate(
         "-d",
         help="Document ID to use as input context",
     ),
+    task: int | None = typer.Option(
+        None,
+        "--task",
+        help="Existing task ID to associate with this delegate (sets EMDX_TASK_ID)",
+    ),
     pr: bool = typer.Option(
         False,
         "--pr",
@@ -1275,6 +1285,7 @@ def delegate(
         "-q",
         "--doc",
         "-d",
+        "--task",
         "--pr",
         "--branch",
         "--draft",
@@ -1377,6 +1388,7 @@ def delegate(
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
                 limit=limit,
+                task_flag=task,
             )
             if json_output:
                 sys.stdout.write(json.dumps(single_result.to_dict(), indent=2) + "\n")
@@ -1405,6 +1417,7 @@ def delegate(
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
                 limit=limit,
+                task_flag=task,
             )
             if json_output:
                 sys.stdout.write(json.dumps(parallel_result.to_dict(), indent=2) + "\n")
