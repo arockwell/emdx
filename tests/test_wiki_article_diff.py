@@ -9,7 +9,10 @@ from emdx.services.wiki_synthesis_service import get_article_diff
 
 
 def _setup_wiki_tables(conn: sqlite3.Connection) -> None:
-    """Ensure wiki tables and a test topic exist."""
+    """Ensure wiki tables and a test topic exist, clearing stale data."""
+    conn.execute("DELETE FROM wiki_article_sources")
+    conn.execute("DELETE FROM wiki_articles")
+    conn.execute("DELETE FROM wiki_topics")
     # Insert a test topic
     conn.execute(
         "INSERT OR IGNORE INTO wiki_topics "

@@ -2653,6 +2653,20 @@ def migration_048_add_wiki_previous_content(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_049_add_wiki_article_timing(conn: sqlite3.Connection) -> None:
+    """Add step-level timing columns to wiki_articles.
+
+    Tracks milliseconds spent in each pipeline step:
+    prepare, route, outline, write, validate, save.
+    """
+    cursor = conn.cursor()
+
+    for col in ("prepare_ms", "route_ms", "outline_ms", "write_ms", "validate_ms", "save_ms"):
+        cursor.execute(f"ALTER TABLE wiki_articles ADD COLUMN {col} INTEGER DEFAULT 0")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2704,6 +2718,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (46, "Add doc_type column to documents", migration_046_add_doc_type),
     (47, "Add wiki runs tracking", migration_047_add_wiki_runs),
     (48, "Add previous_content to wiki_articles", migration_048_add_wiki_previous_content),
+    (49, "Add step-level timing to wiki articles", migration_049_add_wiki_article_timing),
 ]
 
 
