@@ -8,7 +8,6 @@ Consolidates trash, restore, and purge into a subcommand group:
     emdx trash purge     → permanently delete trash
 """
 
-
 import typer
 from rich.table import Table
 
@@ -17,7 +16,7 @@ from emdx.models.documents import (
     purge_deleted_documents,
     restore_document,
 )
-from emdx.utils.output import console
+from emdx.utils.output import console, is_non_interactive
 
 app = typer.Typer(help="Manage deleted documents (trash)")
 
@@ -25,9 +24,7 @@ app = typer.Typer(help="Manage deleted documents (trash)")
 @app.callback(invoke_without_command=True)
 def trash_callback(
     ctx: typer.Context,
-    days: int | None = typer.Option(
-        None, "--days", "-d", help="Show items deleted in last N days"
-    ),
+    days: int | None = typer.Option(None, "--days", "-d", help="Show items deleted in last N days"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
 ) -> None:
     """Manage deleted documents (trash)."""
@@ -39,9 +36,7 @@ def trash_callback(
 
 @app.command("list")
 def list_cmd(
-    days: int | None = typer.Option(
-        None, "--days", "-d", help="Show items deleted in last N days"
-    ),
+    days: int | None = typer.Option(None, "--days", "-d", help="Show items deleted in last N days"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results to return"),
 ) -> None:
     """List all soft-deleted documents."""
@@ -51,7 +46,6 @@ def list_cmd(
 def _list_trash(days: int | None = None, limit: int = 50) -> None:
     """Shared implementation for listing trash."""
     try:
-
         deleted_docs = list_deleted_documents(days=days, limit=limit)
 
         if not deleted_docs:
@@ -100,7 +94,6 @@ def restore(
 ) -> None:
     """Restore soft-deleted document(s)."""
     try:
-
         if not identifiers and not all:
             console.print("[red]Error: Provide document ID(s) to restore or use --all[/red]")
             raise typer.Exit(1)
@@ -112,7 +105,8 @@ def restore(
                 return
 
             console.print(f"\n[bold]Will restore {len(deleted_docs)} document(s)[/bold]")
-            typer.confirm("Continue?", abort=True)
+            if not is_non_interactive():
+                typer.confirm("Continue?", abort=True)
 
             restored_count = 0
             for doc in deleted_docs:
@@ -124,7 +118,7 @@ def restore(
             restored = []
             not_found = []
 
-            for identifier in (identifiers or []):
+            for identifier in identifiers or []:
                 if restore_document(identifier):
                     restored.append(identifier)
                 else:
@@ -157,15 +151,13 @@ def purge(
 ) -> None:
     """Permanently delete all items in trash."""
     try:
-
         if older_than:
             deleted_docs = list_deleted_documents()
             from datetime import datetime, timedelta
 
             cutoff = datetime.now() - timedelta(days=older_than)
             docs_to_purge = [
-                d for d in deleted_docs
-                if d["deleted_at"] is not None and d["deleted_at"] < cutoff
+                d for d in deleted_docs if d["deleted_at"] is not None and d["deleted_at"] < cutoff
             ]
             count = len(docs_to_purge)
         else:
@@ -187,7 +179,7 @@ def purge(
         )
         console.print("[red]This action cannot be undone![/red]\n")
 
-        if not force:
+        if not force and not is_non_interactive():
             typer.confirm("Are you absolutely sure?", abort=True)
 
         purged_count = purge_deleted_documents(older_than_days=older_than)

@@ -12,7 +12,7 @@ from emdx.commands.categories import app as categories_app
 from emdx.commands.epics import app as epics_app
 from emdx.models import tasks
 from emdx.models.types import TaskDict
-from emdx.utils.output import console, print_json
+from emdx.utils.output import console, is_non_interactive, print_json
 
 app = typer.Typer(help="Agent work queue")
 app.add_typer(epics_app, name="epic", help="Manage task epics")
@@ -493,7 +493,7 @@ def delete(
         console.print(f"[red]Task #{task_id} not found[/red]")
         raise typer.Exit(1)
 
-    if not force:
+    if not force and not is_non_interactive():
         console.print(f"Delete task #{task_id}: {task['title']}?")
         confirm = typer.confirm("Are you sure?")
         if not confirm:
