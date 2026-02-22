@@ -1396,6 +1396,9 @@ def entities_command(
     wikify: bool = typer.Option(
         True, "--wikify/--no-wikify", help="Also create entity-match links"
     ),
+    rebuild: bool = typer.Option(
+        False, "--rebuild", help="Clear entity-match links before regenerating"
+    ),
 ) -> None:
     """Extract entities from documents and create entity-match links.
 
@@ -1423,7 +1426,9 @@ def entities_command(
                 console=console,
             ) as progress:
                 task = progress.add_task("Extracting entities & linking...", total=None)
-                total_entities, total_links, docs = entity_wikify_all()
+                total_entities, total_links, docs = entity_wikify_all(
+                    rebuild=rebuild,
+                )
                 progress.update(task, completed=True)
             console.print(
                 f"[green]Extracted {total_entities} entities, "

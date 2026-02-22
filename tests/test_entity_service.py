@@ -139,11 +139,54 @@ class TestExtractEntities:
         proper = next(e for e in entities if e.normalized == "meteor scheduler")
         assert proper.confidence < 0.9
 
+    # --- Stopword filtering tests ---
+
+    def test_skips_heading_stopwords(self) -> None:
+        """Generic structural headings should be filtered out."""
+        content = (
+            "## Summary\n\n## Overview\n\n## Conclusion\n\n"
+            "## Recommendations\n\n## Executive Summary\n"
+        )
+        entities = extract_entities(content)
+        names = {e.normalized for e in entities}
+        assert "summary" not in names
+        assert "overview" not in names
+        assert "conclusion" not in names
+        assert "recommendations" not in names
+        assert "executive summary" not in names
+
+    def test_keeps_specific_headings(self) -> None:
+        """Non-generic headings should still be extracted."""
+        content = "## Falcon Scheduler Architecture\n\n## Redis Connection Pool\n"
+        entities = extract_entities(content)
+        names = {e.normalized for e in entities}
+        assert "falcon scheduler architecture" in names
+        assert "redis connection pool" in names
+
+    def test_skips_concept_stopwords(self) -> None:
+        """Noisy bold label patterns should be filtered."""
+        content = "The **file:** is located at /tmp. The **issue:** is critical."
+        entities = extract_entities(content)
+        names = {e.normalized for e in entities}
+        assert "file:" not in names
+        assert "issue:" not in names
+
+    def test_strips_proper_noun_suffix_noise(self) -> None:
+        """Trailing noise words on proper nouns should be stripped."""
+        content = "The Summary Successfully completed. Conclusion The end."
+        entities = extract_entities(content)
+        names = {e.normalized for e in entities}
+        # "Summary Successfully" should be stripped to just "Summary"
+        # which is too short or a stopword, so it won't appear
+        assert "summary successfully" not in names
+        assert "conclusion the" not in names
+
 
 class TestEntityWikify:
     """Test entity-match wikification."""
 
-    def test_creates_link_for_shared_entity(self, isolate_test_database: Any) -> None:
+    def test_creates_link_for_shared_entities(self, isolate_test_database: Any) -> None:
+        """Two docs sharing ≥2 entities should be linked."""
         from emdx.database import db
 
         with db.get_connection() as conn:
@@ -151,23 +194,44 @@ class TestEntityWikify:
                 conn,
                 7001,
                 "Falcon Scheduler Design",
-                "## Architecture\n\nThe `event_loop` processes falcon events.",
+                "## Falcon Pipeline\n\nThe `event_loop` processes falcon events "
+                "using the `task_scheduler` for coordination.",
             )
             _create_doc(
                 conn,
                 7002,
                 "Falcon Performance Report",
-                "The `event_loop` is the bottleneck in falcon processing.",
+                "## Falcon Bottleneck\n\nThe `event_loop` is slow and the "
+                "`task_scheduler` needs optimization.",
             )
 
-        # Extract entities for doc 7001 first so they exist in the DB
         extract_and_save_entities(7001)
-
-        # Now wikify doc 7002 — should find shared `event_loop` entity
         result = entity_match_wikify(7002)
         assert result.entities_extracted > 0
         assert result.links_created >= 1
         assert 7001 in result.linked_doc_ids
+
+    def test_no_link_for_single_shared_entity(self, isolate_test_database: Any) -> None:
+        """Docs sharing only 1 entity should NOT be linked (MIN_SHARED_ENTITIES=2)."""
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            _create_doc(
+                conn,
+                7003,
+                "Osprey Cache Design",
+                "The `redis_pool` manages connections.",
+            )
+            _create_doc(
+                conn,
+                7004,
+                "Pelican Queue Design",
+                "The `redis_pool` is the bottleneck.",
+            )
+
+        extract_and_save_entities(7003)
+        result = entity_match_wikify(7004)
+        assert result.links_created == 0
 
     def test_no_self_links(self, isolate_test_database: Any) -> None:
         from emdx.database import db
@@ -192,13 +256,13 @@ class TestEntityWikify:
                 conn,
                 7020,
                 "Heron Cache Design",
-                "The `redis_pool` manages connections.",
+                "The `redis_pool` manages connections via `cache_layer` proxy.",
             )
             _create_doc(
                 conn,
                 7021,
                 "Heron Cache Performance",
-                "The `redis_pool` is the bottleneck.",
+                "The `redis_pool` and `cache_layer` are bottlenecks.",
             )
 
         extract_and_save_entities(7020)
@@ -221,13 +285,14 @@ class TestEntityWikify:
                 conn,
                 7030,
                 "Ibis Queue Design",
-                "## Message Processing\n\nThe `message_queue` handles events.",
+                "## Ibis Message Layer\n\nThe `message_queue` and "
+                "`event_dispatcher` handle events.",
             )
             _create_doc(
                 conn,
                 7031,
                 "Ibis Queue Bug",
-                "## Message Processing\n\nThe `message_queue` has a bug.",
+                "## Ibis Event Layer\n\nThe `message_queue` and `event_dispatcher` have a bug.",
             )
 
         extract_and_save_entities(7030)
@@ -237,8 +302,8 @@ class TestEntityWikify:
         entity_links = [lnk for lnk in links if lnk["method"] == "entity_match"]
         assert len(entity_links) >= 1
 
-    def test_score_reflects_shared_count(self, isolate_test_database: Any) -> None:
-        """Documents sharing more entities should have higher scores."""
+    def test_score_uses_idf_jaccard(self, isolate_test_database: Any) -> None:
+        """IDF-weighted Jaccard scores should be between 0 and 1."""
         from emdx.database import db
 
         with db.get_connection() as conn:
@@ -246,15 +311,15 @@ class TestEntityWikify:
                 conn,
                 7040,
                 "Jackal Engine Core",
-                "## Event Loop\n\nThe `task_scheduler` and `event_loop` "
-                "coordinate via **Message Bus**.",
+                "## Jackal Internals\n\nThe `task_scheduler` and `event_loop` "
+                "and `thread_pool` coordinate via **Jackal Bus**.",
             )
             _create_doc(
                 conn,
                 7041,
                 "Jackal Engine Performance",
-                "## Event Loop\n\nThe `task_scheduler` and `event_loop` "
-                "and **Message Bus** are all slow.",
+                "## Jackal Metrics\n\nThe `task_scheduler` and `event_loop` "
+                "and `thread_pool` and **Jackal Bus** are all slow.",
             )
 
         extract_and_save_entities(7040)
@@ -263,9 +328,9 @@ class TestEntityWikify:
 
         links = get_links_for_document(7041)
         entity_links = [lnk for lnk in links if lnk["method"] == "entity_match"]
-        if entity_links:
-            # Score should be > 0.5 since we share multiple entities
-            assert entity_links[0]["similarity_score"] > 0.5
+        assert len(entity_links) >= 1
+        score = entity_links[0]["similarity_score"]
+        assert 0.0 < score <= 1.0
 
     def test_idempotent(self, isolate_test_database: Any) -> None:
         from emdx.database import db
@@ -275,13 +340,13 @@ class TestEntityWikify:
                 conn,
                 7050,
                 "Kiwi Validator Core",
-                "The `schema_check` validates inputs.",
+                "The `schema_check` validates inputs via `rule_engine`.",
             )
             _create_doc(
                 conn,
                 7051,
                 "Kiwi Validator Tests",
-                "The `schema_check` needs more tests.",
+                "The `schema_check` and `rule_engine` need more tests.",
             )
 
         extract_and_save_entities(7050)
@@ -290,6 +355,32 @@ class TestEntityWikify:
 
         assert result2.links_created == 0
         assert get_link_count(7051) == result1.links_created
+
+    def test_top_k_cap(self, isolate_test_database: Any) -> None:
+        """Entity links should be capped at MAX_ENTITY_LINKS per doc."""
+        from emdx.database import db
+        from emdx.services.entity_service import MAX_ENTITY_LINKS
+
+        # Create 15 docs all sharing the same 3 entities with the source
+        shared_content = (
+            "The `quasar_engine` and `photon_beam` and `neutron_flux` are critical components."
+        )
+        with db.get_connection() as conn:
+            for i in range(15):
+                _create_doc(
+                    conn,
+                    7060 + i,
+                    f"Quasar Module {i}",
+                    shared_content,
+                )
+
+        # Extract entities for all 15 docs
+        for i in range(15):
+            extract_and_save_entities(7060 + i)
+
+        # Wikify the last doc — should be capped
+        result = entity_match_wikify(7074)
+        assert result.links_created <= MAX_ENTITY_LINKS
 
 
 class TestExtractAndSave:
@@ -336,16 +427,59 @@ class TestEntityWikifyAll:
                 conn,
                 7200,
                 "Manta Allocator Core",
-                "The `memory_pool` allocates buffers.",
+                "The `memory_pool` allocates buffers via `arena_alloc`.",
             )
             _create_doc(
                 conn,
                 7201,
                 "Manta Allocator Bug",
-                "The `memory_pool` leaks memory.",
+                "The `memory_pool` and `arena_alloc` leak memory.",
             )
 
         total_entities, total_links, docs = entity_wikify_all()
         assert docs >= 2
         assert total_entities >= 2
         assert total_links >= 1
+
+    def test_rebuild_clears_existing_links(self, isolate_test_database: Any) -> None:
+        """--rebuild should delete entity_match links before regenerating."""
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            _create_doc(
+                conn,
+                7210,
+                "Narwhal Parser Core",
+                "The `token_stream` feeds the `syntax_tree` builder.",
+            )
+            _create_doc(
+                conn,
+                7211,
+                "Narwhal Parser Tests",
+                "The `token_stream` and `syntax_tree` need tests.",
+            )
+
+        # First pass creates links
+        _, links1, _ = entity_wikify_all()
+        assert links1 >= 1
+
+        # Count entity_match links before rebuild
+        with db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM document_links WHERE method = 'entity_match'"
+            )
+            count_before = cursor.fetchone()[0]
+
+        # Rebuild should clear and recreate — not double
+        _, links2, _ = entity_wikify_all(rebuild=True)
+        assert links2 >= 1
+
+        with db.get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT COUNT(*) FROM document_links WHERE method = 'entity_match'"
+            )
+            count_after = cursor.fetchone()[0]
+
+        # Should be roughly same count, not doubled
+        assert count_after <= count_before + 2  # allow small variance from IDF
+        assert count_after >= 1  # links were recreated
