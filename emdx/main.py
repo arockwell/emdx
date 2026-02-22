@@ -23,14 +23,12 @@ from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
 # IMPORTANT: Register BEFORE any Typer app creation
 LAZY_SUBCOMMANDS = {
     # Execution/orchestration (imports subprocess, async, executor)
-    "recipe": "emdx.commands.recipe:app",
     "delegate": "emdx.commands.delegate:app",
     "explore": "emdx.commands.explore:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
 LAZY_HELP = {
-    "recipe": "Manage and run EMDX recipes",
     "delegate": "One-shot AI execution (parallel, worktree, PR)",
     "explore": "Explore what your knowledge base knows",
 }
@@ -39,14 +37,14 @@ LAZY_HELP = {
 def is_safe_mode() -> bool:
     """Check if EMDX is running in safe mode.
 
-    Safe mode disables execution commands (delegate, recipe).
+    Safe mode disables execution commands (delegate).
     Enable with EMDX_SAFE_MODE=1 environment variable.
     """
     return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
 
 
 # Commands disabled in safe mode
-UNSAFE_COMMANDS = {"delegate", "recipe"}
+UNSAFE_COMMANDS = {"delegate"}
 
 
 def get_lazy_subcommands() -> dict[str, str]:
@@ -91,7 +89,6 @@ from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
-from emdx.commands.stale import app as stale_app  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
@@ -138,9 +135,6 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
 
-# Add stale as a subcommand group for knowledge decay
-app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
-
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
 
@@ -178,7 +172,7 @@ def main(
         False,
         "--safe-mode",
         envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (delegate, recipe)",
+        help="Disable execution commands (delegate)",
     ),
 ) -> None:
     """
@@ -189,7 +183,7 @@ def main(
 
     [bold]Safe Mode:[/bold]
     Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands
-    (delegate, recipe). Useful for read-only access
+    (delegate). Useful for read-only access
     or when external execution should be prevented.
 
     Examples:

@@ -35,7 +35,7 @@ def escape_fts5_query(query: str) -> str:
         escaped = term.replace('"', '""')
         quoted_terms.append(f'"{escaped}"')
 
-    return ' '.join(quoted_terms)
+    return " ".join(quoted_terms)
 
 
 def search_documents(
@@ -47,6 +47,7 @@ def search_documents(
     created_before: str | None = None,
     modified_after: str | None = None,
     modified_before: str | None = None,
+    doc_type: str | None = "user",
 ) -> list[SearchResult]:
     """Search documents using FTS5
 
@@ -55,6 +56,7 @@ def search_documents(
         project: Optional project filter
         limit: Maximum number of results to return
         fuzzy: Enable fuzzy search (currently uses regular FTS5)
+        doc_type: Filter by document type. 'user' (default), 'wiki', or None for all types.
 
     Returns:
         List of document dictionaries with search results including snippets and ranking
@@ -85,6 +87,11 @@ def search_documents(
             params = [escape_fts5_query(query)]
 
         conditions = []
+
+        # Add doc_type filter
+        if doc_type is not None:
+            conditions.append("d.doc_type = ?")
+            params.append(doc_type)
 
         # Add project filter
         if project:

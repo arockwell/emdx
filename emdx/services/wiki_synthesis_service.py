@@ -862,3 +862,71 @@ def mark_stale(doc_id: int, reason: str = "source_updated") -> bool:
         doc_id,
     )
     return True
+
+
+# ── Wiki run tracking ────────────────────────────────────────────────
+
+
+def create_wiki_run(model: str, dry_run: bool = False) -> int:
+    """Create a new wiki run record and return its ID."""
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "INSERT INTO wiki_runs (model, dry_run) VALUES (?, ?)",
+            (model, dry_run),
+        )
+        conn.commit()
+        run_id: int = cursor.lastrowid  # type: ignore[assignment]
+    return run_id
+
+
+def complete_wiki_run(
+    run_id: int,
+    *,
+    topics_attempted: int,
+    articles_generated: int,
+    articles_skipped: int,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    total_cost_usd: float,
+) -> None:
+    """Update a wiki run with completion data."""
+    with db.get_connection() as conn:
+        conn.execute(
+            "UPDATE wiki_runs SET "
+            "completed_at = CURRENT_TIMESTAMP, "
+            "topics_attempted = ?, "
+            "articles_generated = ?, "
+            "articles_skipped = ?, "
+            "total_input_tokens = ?, "
+            "total_output_tokens = ?, "
+            "total_cost_usd = ? "
+            "WHERE id = ?",
+            (
+                topics_attempted,
+                articles_generated,
+                articles_skipped,
+                total_input_tokens,
+                total_output_tokens,
+                total_cost_usd,
+                run_id,
+            ),
+        )
+        conn.commit()
+
+
+def list_wiki_runs(limit: int = 10) -> list[dict[str, object]]:
+    """List recent wiki generation runs.
+
+    Returns a list of dicts with run metadata, most recent first.
+    """
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, started_at, completed_at, topics_attempted, "
+            "articles_generated, articles_skipped, "
+            "total_input_tokens, total_output_tokens, "
+            "total_cost_usd, model, dry_run "
+            "FROM wiki_runs ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+
+    return [dict(row) for row in rows]

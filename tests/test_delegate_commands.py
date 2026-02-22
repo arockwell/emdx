@@ -487,6 +487,91 @@ class TestRunSingle:
         call_args = mock_subprocess.run.call_args
         assert call_args[1]["cwd"] == "/custom/path"
 
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_single_task_with_pr_includes_epic_id(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
+    ):
+        """Test that pr=True with epic task includes epic_id in PR instruction."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = 42
+
+        with patch("emdx.models.tasks.get_task") as mock_get_task:
+            mock_get_task.return_value = {
+                "id": 1,
+                "epic_key": "ARCH",
+                "epic_seq": 11,
+            }
+            _run_single(
+                prompt="fix bug",
+                tags=[],
+                title=None,
+                model=None,
+                quiet=False,
+                pr=True,
+            )
+
+        call_args = mock_subprocess.run.call_args
+        prompt_input = call_args[1]["input"]
+        assert "(ARCH-11)" in prompt_input
+
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_single_task_with_pr_no_epic_when_no_key(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
+    ):
+        """Test that pr=True without epic_key does not include epic_id."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = 42
+
+        with patch("emdx.models.tasks.get_task") as mock_get_task:
+            mock_get_task.return_value = {
+                "id": 1,
+                "epic_key": None,
+                "epic_seq": None,
+            }
+            _run_single(
+                prompt="fix bug",
+                tags=[],
+                title=None,
+                model=None,
+                quiet=False,
+                pr=True,
+            )
+
+        call_args = mock_subprocess.run.call_args
+        prompt_input = call_args[1]["input"]
+        assert "ARCH-" not in prompt_input
+        assert "<short title>" in prompt_input
+
 
 # =============================================================================
 # Tests for _run_parallel
@@ -1036,6 +1121,25 @@ class TestPRInstruction:
         """Test without branch with draft=False."""
         result = _make_pr_instruction(None, draft=False)
         assert "--draft" not in result
+
+    def test_make_pr_instruction_with_epic_id(self):
+        """Test that epic_id is included in PR title example."""
+        result = _make_pr_instruction("fix/my-branch", epic_id="ARCH-11")
+        assert "(ARCH-11)" in result
+        assert "feat: <short description> (ARCH-11)" in result
+
+    def test_make_pr_instruction_with_epic_id_no_branch(self):
+        """Test epic_id without branch name."""
+        result = _make_pr_instruction(None, epic_id="FEAT-5")
+        assert "(FEAT-5)" in result
+        assert "feat: <short description> (FEAT-5)" in result
+
+    def test_make_pr_instruction_without_epic_id(self):
+        """Test that without epic_id, a generic title placeholder is used."""
+        result = _make_pr_instruction("fix/my-branch")
+        assert "<short title>" in result
+        assert "ARCH-" not in result
+        assert "FEAT-" not in result
 
     def test_extract_pr_url_found(self):
         text = "Created PR: https://github.com/user/repo/pull/123 done"

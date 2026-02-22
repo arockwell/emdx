@@ -93,7 +93,7 @@ Missing `--json`: `save`, `task add`, `task view`, all `group` commands, all `tr
 
 **Problem:** `--tags` is used on nearly every `save` call. `-t` is taken by `--title`. No short form exists.
 
-**Fix:** Add `--tags` / `-T` (uppercase) on `save`. Already precedent: `recipe create` uses `-T` for `--title`, so swap: `save` gets `-t` for `--tags` and `-T` for `--title` (title is used less often since auto-title exists).
+**Fix:** Add `--tags` / `-T` (uppercase) on `save`. Swap: `save` gets `-t` for `--tags` and `-T` for `--title` (title is used less often since auto-title exists).
 
 ### 5. `-j` for `--json` only in `review` and `briefing`
 
@@ -129,20 +129,7 @@ Current flags: `--file`, `--title`, `--project`, `--tags`, `--group`, `--group-r
 
 ## Bugs Found
 
-### 1. `recipe create` uses broken `save` syntax (BUG)
-
-**File:** `emdx/commands/recipe.py:361`
-
-```python
-cmd = ["emdx", "save", str(path), "--tags", "recipe"]
-```
-
-After 0.18.0, positional arg is always content, not a file path. Should be:
-```python
-cmd = ["emdx", "save", "--file", str(path), "--tags", "recipe"]
-```
-
-### 2. `emdx --help` shows broken example (BUG)
+### 1. `emdx --help` shows broken example (BUG)
 
 **File:** `emdx/main.py:239`
 
@@ -161,7 +148,6 @@ Should be `emdx save --file README.md` (post-0.18.0).
 |-------|----------|-----|
 | `task epic create` docs omit required `--cat` flag | `docs/cli-api.md:1157` | Add `--cat SEC` to example |
 | `task cat create` docs omit required `name` positional arg | `docs/cli-api.md:1183` | Add `"Security"` positional arg to example |
-| `recipe show`, `recipe install` not documented | `docs/cli-api.md` | Add sections |
 | `prime`, `status` have no dedicated docs sections | `docs/cli-api.md` | Add sections |
 | `maintain` wizard, `maintain cleanup-dirs`, `maintain analyze` undocumented | `docs/cli-api.md` | Add sections |
 | `wrapup --save` flag undocumented | `docs/cli-api.md` | Add to options list |
@@ -196,7 +182,6 @@ Should be `emdx save --file README.md` (post-0.18.0).
 | `gui` | TUI browser |
 | `group` | Document groups (evaluate if needed or if tags+epics suffice) |
 | `gist` | Share docs as GitHub gists |
-| `recipe` | Saved prompts |
 
 ### Cut entirely (~9 commands removed)
 - `ai` (folded into `find` + `maintain`)

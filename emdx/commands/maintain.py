@@ -1100,6 +1100,7 @@ def maintain_callback(
         cleanup      Clean up execution resources (branches, processes)
         cleanup-dirs Clean up temporary directories
         analyze      Analyze knowledge base health and patterns
+        stale        Knowledge decay and staleness tracking
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -1642,7 +1643,11 @@ def wiki_generate(
     import time as _time
 
     from ..services.wiki_clustering_service import get_topics as _get_topics
-    from ..services.wiki_synthesis_service import generate_article
+    from ..services.wiki_synthesis_service import (
+        complete_wiki_run,
+        create_wiki_run,
+        generate_article,
+    )
 
     if not all_topics and topic_id is None:
         console.print("[red]Provide a topic ID or use --all[/red]")
@@ -1656,17 +1661,23 @@ def wiki_generate(
         topics_data = _get_topics()
         topic_list = [cast(int, t["id"]) for t in topics_data]
 
+    # Create a run record
+    run_model = model or "claude-sonnet-4-5-20250929"
+    run_id = create_wiki_run(model=run_model, dry_run=dry_run)
+
     generated = 0
     skipped = 0
     total_input = 0
     total_output = 0
     total_cost = 0.0
+    topics_attempted = 0
     batch_start = _time.time()
 
     for i, tid in enumerate(topic_list):
         if generated >= limit:
             break
 
+        topics_attempted += 1
         label = f"[{i + 1}/{len(topic_list)}]"
         console.print(f"  {label} topic {tid}...", end=" ")
         start = _time.time()
@@ -1698,13 +1709,25 @@ def wiki_generate(
         total_output += result.output_tokens
         total_cost += result.cost_usd
 
+    # Update run record with results
+    complete_wiki_run(
+        run_id,
+        topics_attempted=topics_attempted,
+        articles_generated=generated,
+        articles_skipped=skipped,
+        total_input_tokens=total_input,
+        total_output_tokens=total_output,
+        total_cost_usd=total_cost,
+    )
+
     total_elapsed = _time.time() - batch_start
     action = "Estimated" if dry_run else "Generated"
     console.print(
         f"\n[bold]{action} {generated} article(s)[/bold] "
         f"(skipped {skipped}) in {total_elapsed:.1f}s\n"
         f"  Total tokens: {total_input:,} in / {total_output:,} out\n"
-        f"  Total cost:   ${total_cost:.4f}"
+        f"  Total cost:   ${total_cost:.4f}\n"
+        f"  Run ID:       {run_id}"
     )
 
     if dry_run:
@@ -1841,7 +1864,165 @@ def wiki_list(
     console.print(table)
 
 
+@wiki_app.command(name="runs")
+def wiki_runs_command(
+    limit: int = typer.Option(10, "--limit", "-l", help="Max runs to show"),
+) -> None:
+    """List recent wiki generation runs.
+
+    Examples:
+        emdx maintain wiki runs              # Recent runs
+        emdx maintain wiki runs -l 20        # More history
+    """
+    from rich.table import Table
+
+    from ..services.wiki_synthesis_service import list_wiki_runs
+
+    runs = list_wiki_runs(limit=limit)
+
+    if not runs:
+        console.print("[dim]No wiki generation runs found[/dim]")
+        return
+
+    table = Table(title="Wiki Generation Runs", box=box.SIMPLE)
+    table.add_column("ID", style="dim", width=4)
+    table.add_column("Date", style="cyan")
+    table.add_column("Articles", justify="right")
+    table.add_column("Skipped", justify="right", style="dim")
+    table.add_column("Tokens (in/out)", justify="right")
+    table.add_column("Cost", justify="right")
+    table.add_column("Model", style="dim")
+    table.add_column("Type")
+
+    for run in runs:
+        started = str(run["started_at"])[:16] if run["started_at"] else ""
+        run_type = "[yellow]dry-run[/yellow]" if run["dry_run"] else "[green]live[/green]"
+        model_short = str(run["model"])
+        if "-" in model_short:
+            parts = model_short.split("-")
+            model_short = "-".join(parts[1:3]) if len(parts) > 2 else parts[-1]
+        tokens = f"{run['total_input_tokens']:,}/{run['total_output_tokens']:,}"
+        table.add_row(
+            str(run["id"]),
+            started,
+            str(run["articles_generated"]),
+            str(run["articles_skipped"]),
+            tokens,
+            f"${run['total_cost_usd']:.4f}",
+            model_short[:20],
+            run_type,
+        )
+
+    console.print(table)
+
+
+@wiki_app.command(name="coverage")
+def wiki_coverage(
+    limit: int = typer.Option(0, "--limit", "-l", help="Max uncovered docs to show (0=all)"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show which documents are NOT covered by any wiki topic cluster.
+
+    Cross-references all non-deleted user docs (doc_type='user') against
+    the wiki_topic_members table and reports uncovered documents.
+
+    Examples:
+        emdx maintain wiki coverage              # Full coverage report
+        emdx maintain wiki coverage --limit 10   # Show first 10 uncovered
+        emdx maintain wiki coverage --json       # Machine-readable output
+    """
+    import json
+
+    from ..database import db
+
+    with db.get_connection() as conn:
+        # Total non-deleted user docs
+        total_row = conn.execute(
+            "SELECT COUNT(*) FROM documents WHERE is_deleted = 0 AND doc_type = 'user'"
+        ).fetchone()
+        total_docs = total_row[0] if total_row else 0
+
+        # Covered docs (in at least one topic)
+        covered_row = conn.execute(
+            "SELECT COUNT(DISTINCT m.document_id) "
+            "FROM wiki_topic_members m "
+            "JOIN documents d ON m.document_id = d.id "
+            "WHERE d.is_deleted = 0 AND d.doc_type = 'user'"
+        ).fetchone()
+        covered_docs = covered_row[0] if covered_row else 0
+
+        uncovered_count = total_docs - covered_docs
+
+        # Fetch uncovered documents
+        query = (
+            "SELECT d.id, d.title, d.created_at "
+            "FROM documents d "
+            "WHERE d.is_deleted = 0 AND d.doc_type = 'user' "
+            "AND d.id NOT IN ("
+            "  SELECT DISTINCT document_id FROM wiki_topic_members"
+            ") "
+            "ORDER BY d.id"
+        )
+        if limit > 0:
+            query += f" LIMIT {limit}"
+
+        uncovered_rows = conn.execute(query).fetchall()
+
+    if json_output:
+        data = {
+            "total_docs": total_docs,
+            "covered_docs": covered_docs,
+            "uncovered_docs": uncovered_count,
+            "coverage_percent": round(
+                (covered_docs / total_docs * 100) if total_docs > 0 else 0, 1
+            ),
+            "uncovered": [
+                {"id": row[0], "title": row[1], "created_at": row[2]} for row in uncovered_rows
+            ],
+        }
+        print(json.dumps(data, indent=2, default=str))
+        return
+
+    # Rich output
+    coverage_pct = (covered_docs / total_docs * 100) if total_docs > 0 else 0
+    pct_color = "green" if coverage_pct >= 80 else "yellow" if coverage_pct >= 50 else "red"
+
+    console.print(
+        f"\n[bold]Wiki Topic Coverage[/bold]\n\n"
+        f"  Total user docs:  {total_docs}\n"
+        f"  Covered by topic: {covered_docs}\n"
+        f"  Uncovered:        {uncovered_count}\n"
+        f"  Coverage:         [{pct_color}]{coverage_pct:.1f}%[/{pct_color}]"
+    )
+
+    if uncovered_rows:
+        from rich.table import Table
+
+        table = Table(title="Uncovered Documents", box=box.SIMPLE)
+        table.add_column("ID", style="cyan", width=6)
+        table.add_column("Title")
+        table.add_column("Created", style="dim")
+
+        for row in uncovered_rows:
+            created = str(row[2])[:10] if row[2] else ""
+            table.add_row(f"#{row[0]}", str(row[1])[:60], created)
+
+        console.print()
+        console.print(table)
+
+        if limit > 0 and uncovered_count > limit:
+            remaining = uncovered_count - limit
+            console.print(f"\n[dim]...and {remaining} more. Use --limit 0 to see all.[/dim]")
+    else:
+        console.print("\n[green]All user documents are covered by wiki topics![/green]")
+
+
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
+
+# Register stale as a subcommand group of maintain
+from emdx.commands.stale import app as stale_app  # noqa: E402
+
+app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
 
 
 if __name__ == "__main__":

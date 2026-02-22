@@ -32,7 +32,8 @@ class FTS5TestDatabase:
                 accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 access_count INTEGER DEFAULT 0,
                 deleted_at TIMESTAMP,
-                is_deleted BOOLEAN DEFAULT FALSE
+                is_deleted BOOLEAN DEFAULT FALSE,
+                doc_type TEXT NOT NULL DEFAULT 'user'
             )
         """)
 
@@ -68,7 +69,15 @@ class FTS5TestDatabase:
 
         self.conn.commit()
 
-    def save_document(self, title, content, project=None, created_at=None, updated_at=None):
+    def save_document(
+        self,
+        title,
+        content,
+        project=None,
+        created_at=None,
+        updated_at=None,
+        doc_type="user",
+    ):
         """Save a document to the database."""
         if created_at is None:
             created_at = datetime.now().isoformat()
@@ -77,10 +86,10 @@ class FTS5TestDatabase:
 
         cursor = self.conn.execute(
             """
-            INSERT INTO documents (title, content, project, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO documents (title, content, project, created_at, updated_at, doc_type)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (title, content, project, created_at, updated_at),
+            (title, content, project, created_at, updated_at, doc_type),
         )
         self.conn.commit()
         return cursor.lastrowid
@@ -487,7 +496,9 @@ class TestSearchResultFields:
         """Test that search snippet contains context around the match."""
         db = mock_db_connection
 
-        db.save_document("Python Guide", "This is a comprehensive guide to Python programming", "project1")  # noqa: E501
+        db.save_document(
+            "Python Guide", "This is a comprehensive guide to Python programming", "project1"
+        )  # noqa: E501
 
         results = search_documents("Python")
         assert len(results) == 1
@@ -624,15 +635,9 @@ class TestHyphenatedSearch:
         db = mock_db_connection
 
         db.save_document(
-            "Event-Driven Architecture",
-            "Learn about event-driven programming patterns",
-            "project1"
+            "Event-Driven Architecture", "Learn about event-driven programming patterns", "project1"
         )
-        db.save_document(
-            "Other Doc",
-            "Some other content without the term",
-            "project1"
-        )
+        db.save_document("Other Doc", "Some other content without the term", "project1")
 
         # This should NOT fail with "no such column: driven" error
         results = search_documents("event-driven")
@@ -644,9 +649,7 @@ class TestHyphenatedSearch:
         db = mock_db_connection
 
         db.save_document(
-            "Multi-Stage Pipeline",
-            "A multi-stage, event-driven workflow system",
-            "project1"
+            "Multi-Stage Pipeline", "A multi-stage, event-driven workflow system", "project1"
         )
 
         results = search_documents("multi-stage event-driven")
@@ -657,9 +660,7 @@ class TestHyphenatedSearch:
         db = mock_db_connection
 
         db.save_document(
-            "Full-Text Search",
-            "Implementing full-text search with SQLite FTS5",
-            "project1"
+            "Full-Text Search", "Implementing full-text search with SQLite FTS5", "project1"
         )
 
         results = search_documents("full-text SQLite")
@@ -669,14 +670,80 @@ class TestHyphenatedSearch:
         """Test that dash at start doesn't break the query."""
         db = mock_db_connection
 
-        db.save_document(
-            "Test Doc",
-            "Some test content here",
-            "project1"
-        )
+        db.save_document("Test Doc", "Some test content here", "project1")
 
         # This used to be interpreted as NOT operator
         # Now it should search for the literal term
         results = search_documents("-test")
         # Should not error, may or may not find results depending on tokenizer
         assert isinstance(results, list)
+
+
+class TestDocTypeFilter:
+    """Test doc_type filtering in search_documents."""
+
+    def test_default_returns_only_user_docs(self, mock_db_connection):
+        """Test that default search returns only user docs."""
+        db = mock_db_connection
+
+        db.save_document("User Doc", "Python content", "project1", doc_type="user")
+        db.save_document("Wiki Article", "Python wiki content", "project1", doc_type="wiki")
+
+        results = search_documents("Python")
+        assert len(results) == 1
+        assert results[0]["title"] == "User Doc"
+
+    def test_wiki_filter_returns_only_wiki_docs(self, mock_db_connection):
+        """Test that doc_type='wiki' returns only wiki docs."""
+        db = mock_db_connection
+
+        db.save_document("User Doc", "Python content", "project1", doc_type="user")
+        db.save_document("Wiki Article", "Python wiki content", "project1", doc_type="wiki")
+
+        results = search_documents("Python", doc_type="wiki")
+        assert len(results) == 1
+        assert results[0]["title"] == "Wiki Article"
+
+    def test_none_doc_type_returns_all(self, mock_db_connection):
+        """Test that doc_type=None returns all document types."""
+        db = mock_db_connection
+
+        db.save_document("User Doc", "Python content", "project1", doc_type="user")
+        db.save_document("Wiki Article", "Python wiki content", "project1", doc_type="wiki")
+        db.save_document("Synthesis Doc", "Python synthesis", "project1", doc_type="synthesis")
+
+        results = search_documents("Python", doc_type=None)
+        assert len(results) == 3
+
+    def test_wildcard_with_doc_type_filter(self, mock_db_connection):
+        """Test wildcard search respects doc_type filter."""
+        db = mock_db_connection
+
+        db.save_document("User Doc", "Content", "project1", doc_type="user")
+        db.save_document("Wiki Doc", "Content", "project1", doc_type="wiki")
+
+        # Default: only user
+        results = search_documents("*")
+        assert len(results) == 1
+        assert results[0]["title"] == "User Doc"
+
+        # Wiki only
+        results = search_documents("*", doc_type="wiki")
+        assert len(results) == 1
+        assert results[0]["title"] == "Wiki Doc"
+
+        # All types
+        results = search_documents("*", doc_type=None)
+        assert len(results) == 2
+
+    def test_doc_type_with_project_filter(self, mock_db_connection):
+        """Test doc_type filter combines with project filter."""
+        db = mock_db_connection
+
+        db.save_document("User P1", "Python content", "project1", doc_type="user")
+        db.save_document("Wiki P1", "Python wiki", "project1", doc_type="wiki")
+        db.save_document("User P2", "Python content", "project2", doc_type="user")
+
+        results = search_documents("Python", project="project1", doc_type="user")
+        assert len(results) == 1
+        assert results[0]["title"] == "User P1"

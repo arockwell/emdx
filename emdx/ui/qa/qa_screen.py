@@ -15,7 +15,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer
 from textual.widget import Widget
-from textual.widgets import Input, Markdown, Static
+from textual.widgets import Input, Markdown, RichLog, Static
 
 from ..modals import HelpMixin
 from .qa_presenter import QAEntry, QAPresenter, QAStateVM
@@ -100,6 +100,14 @@ class QAScreen(HelpMixin, Widget):
         padding: 0;
     }
 
+    #qa-stream {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        height: auto;
+        max-height: 50%;
+    }
+
     #qa-status {
         height: 1;
         background: $surface-darken-1;
@@ -122,6 +130,9 @@ class QAScreen(HelpMixin, Widget):
         self._source_ids: list[int] = []
         # Background task that survives widget unmount/remount
         self._bg_task: asyncio.Task[None] | None = None
+        # Buffer for streaming text — accumulate until newline for RichLog
+        self._stream_buffer: str = ""
+        self._streaming_started: bool = False
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="qa-input-bar"):
@@ -255,21 +266,64 @@ class QAScreen(HelpMixin, Widget):
             entry = state.entries[-1]
             if entry.is_loading:
                 src_count = len(entry.sources)
-                if src_count > 0:
-                    self._set_thinking(
-                        f"[dim]Found {src_count} sources — generating answer...[/dim]"
-                    )
+                if src_count > 0 and not self._streaming_started:
+                    # Replace thinking indicator with streaming widgets
+                    self._remove_thinking()
+                    self._start_streaming()
 
         # Entry just finished
         if not state.is_asking and state.entries:
             latest = state.entries[-1]
             if not latest.is_loading:
-                self._remove_thinking()
+                self._stop_streaming()
                 self._render_entry(latest)
 
+    def _start_streaming(self) -> None:
+        """Mount the streaming RichLog widget for live answer display."""
+        try:
+            container = self.query_one("#qa-conversation", ScrollableContainer)
+            label = Static("[bold green]A:[/bold green]", classes="qa-message", id=_next_msg_id())
+            container.mount(label)
+            stream_log = RichLog(id="qa-stream", wrap=True, markup=True)
+            container.mount(stream_log)
+            stream_log.scroll_visible()
+            self._streaming_started = True
+            self._stream_buffer = ""
+        except Exception:
+            pass  # Widget not mounted
+
+    def _stop_streaming(self) -> None:
+        """Remove the streaming RichLog and flush any remaining buffer."""
+        # Flush remaining buffer
+        if self._stream_buffer:
+            try:
+                stream_log = self.query_one("#qa-stream", RichLog)
+                stream_log.write(self._stream_buffer)
+            except Exception:
+                pass
+            self._stream_buffer = ""
+        # Remove the streaming widget
+        try:
+            self.query_one("#qa-stream", RichLog).remove()
+        except Exception:
+            pass
+        self._streaming_started = False
+
     async def _on_chunk(self, chunk: str) -> None:
-        """Handle streaming answer chunk. Currently unused (whole-answer mode)."""
-        pass
+        """Handle streaming answer chunk — write complete lines to RichLog."""
+        if not self._is_mounted_in_dom():
+            return
+
+        self._stream_buffer += chunk
+        # Write complete lines to RichLog, keep partial line in buffer
+        while "\n" in self._stream_buffer:
+            line, self._stream_buffer = self._stream_buffer.split("\n", 1)
+            try:
+                stream_log = self.query_one("#qa-stream", RichLog)
+                stream_log.write(line)
+                stream_log.scroll_visible()
+            except Exception:
+                pass
 
     def _cancel_asking(self) -> None:
         """Cancel the current Q&A operation and reset state."""
@@ -277,6 +331,7 @@ class QAScreen(HelpMixin, Widget):
         if self._bg_task and not self._bg_task.done():
             self._bg_task.cancel()
         self._remove_thinking()
+        self._stop_streaming()
         self._append_message("[dim italic]Cancelled[/dim italic]")
         self._append_message("[dim]─────────────────────────────────────────[/dim]")
         self._update_status("Cancelled | Ready")

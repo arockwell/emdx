@@ -528,56 +528,6 @@ emdx group delete 1 --hard
 
 ---
 
-## 📋 **Recipe System**
-
-Recipes are reusable emdx documents tagged with `recipe` that contain instructions for Claude to follow via `emdx delegate`.
-
-### **emdx recipe list**
-List all recipes.
-
-```bash
-# List all recipes (documents tagged "recipe")
-emdx recipe list
-```
-
-### **emdx recipe run**
-Run a recipe by passing it to `emdx delegate`.
-
-```bash
-# Run by ID
-emdx recipe run 42
-
-# Run by title search
-emdx recipe run "Deep Analysis"
-
-# Run with extra arguments
-emdx recipe run 42 -- "analyze auth module"
-
-# Run with PR creation and worktree isolation
-emdx recipe run 42 --pr --worktree
-```
-
-**Options:**
-- `--quiet, -q` - Suppress metadata on stderr
-- `--model, -m TEXT` - Model to use
-- `--pr` - Instruct agent to create a PR
-- `--worktree, -w` - Run in isolated git worktree
-
-### **emdx recipe create**
-Create a recipe from a markdown file.
-
-```bash
-# Save a file as a recipe (tags it with 📋)
-emdx recipe create instructions.md
-
-# With custom title
-emdx recipe create instructions.md --title "Security Audit"
-```
-
-Equivalent to `emdx save <file> --tags "recipe"`.
-
----
-
 ## 🧹 **Maintenance Commands**
 
 ### **emdx maintain**
@@ -807,7 +757,6 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 
 **Disabled commands in safe mode:**
 - `delegate` - One-shot AI execution
-- `recipe` - Recipe execution
 
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
@@ -1235,23 +1184,23 @@ emdx briefing --save --model sonnet
 
 ---
 
-## ⏳ Staleness Tracking (`emdx stale`)
+## ⏳ Staleness Tracking (`emdx maintain stale`)
 
 Track knowledge decay and identify documents needing review.
 
 ```bash
 # Show stale documents prioritized by urgency
-emdx stale list
+emdx maintain stale list
 ```
 
-### **emdx stale touch**
+### **emdx maintain stale touch**
 
 Reset a document's staleness timer without incrementing the view count.
 
 ```bash
 # Touch single document
-emdx stale touch 42
+emdx maintain stale touch 42
 
 # Touch multiple documents
-emdx stale touch 42 43 44
+emdx maintain stale touch 42 43 44
 ```
