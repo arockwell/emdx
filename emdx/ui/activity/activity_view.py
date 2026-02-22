@@ -19,7 +19,7 @@ from textual.widgets import Log, RichLog, Static
 from emdx.utils.datetime_utils import parse_datetime
 
 from ..modals import HelpMixin
-from .activity_data import ActivityDataLoader
+from .activity_data import TIER_RECENT, TIER_RUNNING, TIER_TASKS, ActivityDataLoader
 from .activity_items import ActivityItem as ActivityItemBase
 from .activity_table import ActivityTable
 from .sparkline import sparkline
@@ -130,9 +130,9 @@ class ActivityView(HelpMixin, Widget):
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
         ("c", "toggle_copy_mode", "Copy Mode"),
-        ("R", "toggle_running", "Toggle Running"),
-        ("T", "toggle_tasks", "Toggle Tasks"),
-        ("D", "toggle_docs", "Toggle Docs"),
+        ("R", "jump_running", "Jump Running"),
+        ("T", "jump_tasks", "Jump Tasks"),
+        ("D", "jump_docs", "Jump Docs"),
     ]
 
     DEFAULT_CSS = """
@@ -255,10 +255,6 @@ class ActivityView(HelpMixin, Widget):
         self._zombies_cleaned = False
         self._refresh_in_progress = False
         self._data_loader = ActivityDataLoader()
-        # Section visibility toggles (all visible by default)
-        self._show_running = True
-        self._show_tasks = True
-        self._show_docs = True
 
     def _get_selected_item(self) -> ActivityItem | None:
         """Get the currently selected ActivityItem from the table."""
@@ -267,24 +263,6 @@ class ActivityView(HelpMixin, Widget):
             return table.get_selected_item()
         except Exception:
             return None
-
-    def _filter_by_visibility(
-        self,
-        items: list[ActivityItem],
-    ) -> list[ActivityItem]:
-        """Filter items based on section visibility toggles."""
-        from .activity_data import TIER_RECENT, TIER_RUNNING, TIER_TASKS
-        from .activity_table import _get_tier
-
-        visible_tiers: set[int] = set()
-        if self._show_running:
-            visible_tiers.add(TIER_RUNNING)
-        if self._show_tasks:
-            visible_tiers.add(TIER_TASKS)
-        if self._show_docs:
-            visible_tiers.add(TIER_RECENT)
-
-        return [item for item in items if _get_tier(item) in visible_tiers]
 
     def compose(self) -> ComposeResult:
         # Status bar
@@ -353,9 +331,9 @@ class ActivityView(HelpMixin, Widget):
         )
         self._zombies_cleaned = True
 
-        # Populate table (filtered by section visibility)
+        # Populate table
         table = self.query_one("#activity-table", ActivityTable)
-        table.populate(self._filter_by_visibility(self.activity_items))
+        table.populate(self.activity_items)
 
         await self._update_status_bar()
         if update_preview:
@@ -414,12 +392,6 @@ class ActivityView(HelpMixin, Widget):
             parts.append(f"[red]⚠️ {errors}[/red]")
 
         parts.append(f"[dim]{spark}[/dim]")
-
-        # Section visibility indicators
-        r_label = "R" if self._show_running else "[dim]R[/dim]"
-        t_label = "T" if self._show_tasks else "[dim]T[/dim]"
-        d_label = "D" if self._show_docs else "[dim]D[/dim]"
-        parts.append(f"{r_label}{t_label}{d_label}")
 
         parts.append(datetime.now().strftime("%H:%M"))
         parts.append(f"[dim]{theme_indicator}[/dim]")
@@ -777,7 +749,7 @@ class ActivityView(HelpMixin, Widget):
             self._zombies_cleaned = True
 
             table = self.query_one("#activity-table", ActivityTable)
-            table.refresh_items(self._filter_by_visibility(self.activity_items))
+            table.refresh_items(self.activity_items)
 
             await self._update_status_bar()
         finally:
@@ -816,26 +788,33 @@ class ActivityView(HelpMixin, Widget):
         """Focus previous pane."""
         pass
 
-    async def action_toggle_running(self) -> None:
-        """Toggle visibility of the RUNNING section."""
-        self._show_running = not self._show_running
-        await self._apply_visibility()
+    def action_jump_running(self) -> None:
+        """Jump cursor to the RUNNING section."""
+        self._jump_to_section(TIER_RUNNING)
 
-    async def action_toggle_tasks(self) -> None:
-        """Toggle visibility of the TASKS section."""
-        self._show_tasks = not self._show_tasks
-        await self._apply_visibility()
+    def action_jump_tasks(self) -> None:
+        """Jump cursor to the TASKS section."""
+        self._jump_to_section(TIER_TASKS)
 
-    async def action_toggle_docs(self) -> None:
-        """Toggle visibility of the RECENT/docs section."""
-        self._show_docs = not self._show_docs
-        await self._apply_visibility()
+    def action_jump_docs(self) -> None:
+        """Jump cursor to the DOCS section."""
+        self._jump_to_section(TIER_RECENT)
 
-    async def _apply_visibility(self) -> None:
-        """Re-filter and repopulate after a visibility toggle."""
+    def _jump_to_section(self, tier: int) -> None:
+        """Jump cursor to the first item in the given section."""
+        from .activity_table import HEADER_PREFIX
+
         table = self.query_one("#activity-table", ActivityTable)
-        table.populate(self._filter_by_visibility(self.activity_items))
-        await self._update_status_bar()
+        header_key = f"{HEADER_PREFIX}{tier}"
+
+        for i, row in enumerate(table.ordered_rows):
+            if str(row.key.value) == header_key:
+                # Jump to the row after the header (the first item)
+                if i + 1 < table.row_count:
+                    table.move_cursor(row=i + 1)
+                else:
+                    table.move_cursor(row=i)
+                return
 
     async def on_activity_table_item_highlighted(
         self, event: ActivityTable.ItemHighlighted
