@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import queue
 import shutil
+import subprocess
+import threading
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -336,8 +339,10 @@ class QAPresenter:
         return "\n\n---\n\n".join(parts)
 
     async def _stream_answer(self, question: str, context: str) -> str:
-        """Generate an answer via Claude CLI, delivering the result as a single chunk."""
-        from emdx.services.ask_service import _execute_claude_prompt
+        """Generate an answer via Claude CLI, streaming chunks as they arrive."""
+        from emdx.services.cli_executor.claude import ClaudeCliExecutor
+        from emdx.utils.environment import get_subprocess_env
+        from emdx.utils.stream_json_parser import parse_stream_json_line
 
         system_prompt = (
             "You answer questions using the provided knowledge base context.\n\n"
@@ -352,19 +357,91 @@ class QAPresenter:
         user_message = (
             f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"
         )
+        prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_message}"
 
-        answer = await asyncio.to_thread(
-            _execute_claude_prompt,
-            system_prompt,
-            user_message,
-            f"TUI Ask: {question[:50]}",
-            self.DEFAULT_MODEL,
+        # Build CLI command
+        executor = ClaudeCliExecutor()
+        cmd = executor.build_command(
+            prompt=prompt,
+            model=self.DEFAULT_MODEL,
+            allowed_tools=[],
+            output_format="stream-json",
         )
 
-        if self.on_answer_chunk:
-            await self.on_answer_chunk(answer)
+        # Spawn subprocess
+        process = subprocess.Popen(
+            cmd.args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=cmd.cwd,
+            env=get_subprocess_env(),
+        )
 
-        return answer
+        # Feed prompt via stdin then close
+        if cmd.stdin_data and process.stdin:
+            process.stdin.write(cmd.stdin_data)
+            process.stdin.close()
+
+        # Read stdout via background thread (macOS-safe, see unified_executor.py)
+        stdout_q: queue.Queue[str | None] = queue.Queue()
+
+        def reader_thread() -> None:
+            try:
+                assert process.stdout is not None
+                for line in process.stdout:
+                    stdout_q.put(line)
+            finally:
+                stdout_q.put(None)
+
+        reader = threading.Thread(target=reader_thread, daemon=True)
+        reader.start()
+
+        # Consume queue from async event loop, streaming chunks
+        accumulated: list[str] = []
+        timeout = 120  # seconds
+        deadline = time.time() + timeout
+
+        try:
+            while True:
+                if self._cancel_event and self._cancel_event.is_set():
+                    process.kill()
+                    break
+
+                if time.time() > deadline:
+                    process.kill()
+                    raise TimeoutError("Answer generation timed out")
+
+                try:
+                    line = await asyncio.to_thread(stdout_q.get, timeout=0.5)
+                except Exception:
+                    # Queue.get timeout — check cancel/deadline and retry
+                    continue
+
+                if line is None:
+                    break  # Reader finished
+
+                content_type, text = parse_stream_json_line(line)
+                if content_type == "text" and text:
+                    accumulated.append(text)
+                    if self.on_answer_chunk:
+                        await self.on_answer_chunk(text)
+
+            process.wait(timeout=5)
+        except Exception:
+            process.kill()
+            raise
+        finally:
+            reader.join(timeout=2)
+
+        if process.returncode and process.returncode != 0:
+            stderr_output = ""
+            if process.stderr:
+                stderr_output = process.stderr.read()
+            raise RuntimeError(f"Claude CLI failed (exit {process.returncode}): {stderr_output}")
+
+        return "".join(accumulated)
 
     def clear_history(self) -> None:
         """Clear conversation history."""

@@ -1,6 +1,7 @@
 """Tests for the QA Presenter and related components."""
 
 import asyncio
+import json
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -512,41 +513,149 @@ class TestQAPresenterStateProperty:
         assert state.has_claude_cli is True
 
 
+def _make_stream_lines(*text_chunks: str) -> list[str]:
+    """Build stream-json lines for testing: content_block_delta for each chunk."""
+    lines: list[str] = []
+    # System init
+    lines.append(json.dumps({"type": "system", "subtype": "init", "model": "test"}))
+    # Text deltas
+    for chunk in text_chunks:
+        lines.append(
+            json.dumps(
+                {
+                    "type": "content_block_delta",
+                    "delta": {"type": "text_delta", "text": chunk},
+                }
+            )
+        )
+    # Result
+    lines.append(
+        json.dumps(
+            {
+                "type": "result",
+                "result": "".join(text_chunks),
+                "is_error": False,
+            }
+        )
+    )
+    return lines
+
+
 class TestQAPresenterStreamAnswer:
-    """Tests for _stream_answer method."""
+    """Tests for _stream_answer streaming method."""
 
     @pytest.mark.asyncio
-    async def test_stream_answer_calls_claude_cli(self) -> None:
-        """Test that _stream_answer calls the Claude CLI via _execute_claude_prompt."""
+    async def test_stream_answer_accumulates_chunks(self) -> None:
+        """Test that streaming accumulates text chunks into a full answer."""
         presenter = QAPresenter()
+        stream_lines = _make_stream_lines("Hello", " world", "!")
 
-        with patch(
-            "emdx.services.ask_service._execute_claude_prompt",
-            return_value="Hello world",
+        mock_process = MagicMock()
+        mock_process.stdin = MagicMock()
+        mock_process.stdout = iter(line + "\n" for line in stream_lines)
+        mock_process.stderr = MagicMock()
+        mock_process.stderr.read.return_value = ""
+        mock_process.returncode = 0
+        mock_process.wait = MagicMock()
+        mock_process.kill = MagicMock()
+
+        with (
+            patch("subprocess.Popen", return_value=mock_process),
+            patch(
+                "emdx.utils.environment.get_subprocess_env",
+                return_value={},
+            ),
         ):
             result = await presenter._stream_answer("Test question", "Test context")
 
-        assert result == "Hello world"
+        assert result == "Hello world!"
 
     @pytest.mark.asyncio
-    async def test_stream_answer_calls_chunk_callback(self) -> None:
-        """Test that _stream_answer calls the on_answer_chunk callback."""
+    async def test_stream_answer_calls_chunk_callback_per_delta(self) -> None:
+        """Test that on_answer_chunk is called for each text delta."""
         chunks_received: list[str] = []
 
         async def capture_chunk(chunk: str) -> None:
             chunks_received.append(chunk)
 
         presenter = QAPresenter(on_answer_chunk=capture_chunk)
+        stream_lines = _make_stream_lines("Hello", " world", "!")
 
-        with patch(
-            "emdx.services.ask_service._execute_claude_prompt",
-            return_value="Test answer",
+        mock_process = MagicMock()
+        mock_process.stdin = MagicMock()
+        mock_process.stdout = iter(line + "\n" for line in stream_lines)
+        mock_process.stderr = MagicMock()
+        mock_process.stderr.read.return_value = ""
+        mock_process.returncode = 0
+        mock_process.wait = MagicMock()
+        mock_process.kill = MagicMock()
+
+        with (
+            patch("subprocess.Popen", return_value=mock_process),
+            patch(
+                "emdx.utils.environment.get_subprocess_env",
+                return_value={},
+            ),
         ):
             await presenter._stream_answer("Question", "Context")
 
-        # Should have received the answer as a single chunk
-        assert len(chunks_received) == 1
-        assert chunks_received[0] == "Test answer"
+        # Should have received multiple chunks, not a single blob
+        assert len(chunks_received) == 3
+        assert chunks_received == ["Hello", " world", "!"]
+
+    @pytest.mark.asyncio
+    async def test_stream_answer_cancel_kills_process(self) -> None:
+        """Test that cancellation kills the subprocess."""
+        presenter = QAPresenter()
+        presenter._cancel_event = asyncio.Event()
+        presenter._cancel_event.set()  # Pre-cancel
+
+        # Process that would block forever without cancellation
+        mock_process = MagicMock()
+        mock_process.stdin = MagicMock()
+        # Empty stdout — the cancel check will fire before any reads
+        mock_process.stdout = iter([])
+        mock_process.stderr = MagicMock()
+        mock_process.stderr.read.return_value = ""
+        mock_process.returncode = 0
+        mock_process.wait = MagicMock()
+        mock_process.kill = MagicMock()
+
+        with (
+            patch("subprocess.Popen", return_value=mock_process),
+            patch(
+                "emdx.utils.environment.get_subprocess_env",
+                return_value={},
+            ),
+        ):
+            result = await presenter._stream_answer("Question", "Context")
+
+        mock_process.kill.assert_called()
+        assert result == ""  # No chunks accumulated
+
+    @pytest.mark.asyncio
+    async def test_stream_answer_raises_on_nonzero_exit(self) -> None:
+        """Test that non-zero exit code raises RuntimeError."""
+        presenter = QAPresenter()
+
+        mock_process = MagicMock()
+        mock_process.stdin = MagicMock()
+        mock_process.stdout = iter([])
+        mock_process.stderr = MagicMock()
+        mock_process.stderr.read.return_value = "API error"
+        mock_process.returncode = 1
+        mock_process.wait = MagicMock()
+        mock_process.kill = MagicMock()
+
+        with (
+            patch("subprocess.Popen", return_value=mock_process),
+            patch(
+                "emdx.utils.environment.get_subprocess_env",
+                return_value={},
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="Claude CLI failed"):
+                await presenter._stream_answer("Question", "Context")
 
 
 class TestTerminalStateSaveRestore:
