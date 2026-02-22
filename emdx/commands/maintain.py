@@ -1521,7 +1521,7 @@ def wiki_topics(
     save: bool = typer.Option(False, "--save", help="Save discovered topics to DB"),
     min_size: int = typer.Option(3, "--min-size", help="Minimum cluster size"),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show extra columns (model override)"
+        False, "--verbose", "-v", help="Show extra columns (model override, editorial prompt)"
     ),
 ) -> None:
     """Discover topic clusters using Leiden community detection.
@@ -1530,8 +1530,55 @@ def wiki_topics(
         emdx maintain wiki topics              # Preview topics
         emdx maintain wiki topics --save       # Save to DB
         emdx maintain wiki topics -r 0.01      # Finer resolution
-        emdx maintain wiki topics --verbose    # Show model overrides
+        emdx maintain wiki topics --verbose    # Show model overrides and editorial prompts
     """
+    from rich.table import Table
+
+    if verbose:
+        from ..services.wiki_clustering_service import get_topics
+
+        topics = get_topics()
+        if not topics:
+            console.print("[dim]No saved topics found[/dim]")
+            return
+
+        # Fetch editorial prompts for all topics
+        from ..database import db
+
+        editorial_prompts: dict[int, str | None] = {}
+        with db.get_connection() as conn:
+            for t in topics:
+                tid = t["id"]
+                assert isinstance(tid, int)
+                row = conn.execute(
+                    "SELECT editorial_prompt FROM wiki_topics WHERE id = ?",
+                    (tid,),
+                ).fetchone()
+                editorial_prompts[tid] = row[0] if row else None
+
+        table = Table(title="Saved Topics", box=box.SIMPLE)
+        table.add_column("ID", style="dim", width=4)
+        table.add_column("Label", style="cyan")
+        table.add_column("Docs", justify="right")
+        table.add_column("Status")
+        table.add_column("Editorial Prompt", style="yellow")
+
+        for t in topics:
+            tid = t["id"]
+            assert isinstance(tid, int)
+            prompt = editorial_prompts.get(tid)
+            prompt_display = str(prompt)[:60] if prompt else "[dim]-[/dim]"
+            table.add_row(
+                str(tid),
+                str(t["label"])[:50],
+                str(t["member_count"]),
+                str(t["status"]),
+                prompt_display,
+            )
+
+        console.print(table)
+        return
+
     from ..services.wiki_clustering_service import discover_topics, save_topics
 
     with Progress(
@@ -1548,8 +1595,6 @@ def wiki_topics(
         f"covering {result.docs_clustered}/{result.total_docs} docs "
         f"({result.docs_unclustered} unclustered)"
     )
-
-    from rich.table import Table
 
     table = Table(title="Topic Clusters", box=box.SIMPLE)
     table.add_column("#", style="dim", width=4)
@@ -2385,6 +2430,68 @@ def wiki_model(
             )
             conn.commit()
             print(f"Set model override for topic {topic_id} ({topic_label}): {model_name}")
+
+
+@wiki_app.command(name="prompt")
+def wiki_prompt(
+    topic_id: int = typer.Argument(..., help="Topic ID to set prompt for"),
+    prompt_text: str | None = typer.Argument(None, help="Editorial prompt text"),
+    clear: bool = typer.Option(False, "--clear", help="Remove the editorial prompt"),
+) -> None:
+    """Set or clear an editorial prompt for a wiki topic.
+
+    The editorial prompt is appended to the LLM system prompt when
+    generating or regenerating the article for this topic.
+
+    Examples:
+        emdx maintain wiki prompt 5 "Focus on security implications"
+        emdx maintain wiki prompt 5 --clear
+    """
+    from ..database import db
+
+    if clear and prompt_text is not None:
+        print("Error: Cannot use --clear with a prompt text")
+        raise typer.Exit(1)
+
+    if not clear and prompt_text is None:
+        # Show current prompt
+        with db.get_connection() as conn:
+            row = conn.execute(
+                "SELECT topic_label, editorial_prompt FROM wiki_topics WHERE id = ?",
+                (topic_id,),
+            ).fetchone()
+        if not row:
+            print(f"Topic {topic_id} not found")
+            raise typer.Exit(1)
+        label = row[0]
+        current = row[1]
+        if current:
+            print(f"Topic {topic_id} ({label}):\n{current}")
+        else:
+            print(f"Topic {topic_id} ({label}): no editorial prompt set")
+        return
+
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT topic_label FROM wiki_topics WHERE id = ?",
+            (topic_id,),
+        ).fetchone()
+        if not row:
+            print(f"Topic {topic_id} not found")
+            raise typer.Exit(1)
+        label = row[0]
+
+        new_value = None if clear else prompt_text
+        conn.execute(
+            "UPDATE wiki_topics SET editorial_prompt = ? WHERE id = ?",
+            (new_value, topic_id),
+        )
+        conn.commit()
+
+    if clear:
+        print(f"Cleared editorial prompt for topic {topic_id} ({label})")
+    else:
+        print(f"Set editorial prompt for topic {topic_id} ({label})")
 
 
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")

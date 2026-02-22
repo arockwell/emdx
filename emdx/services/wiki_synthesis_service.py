@@ -217,6 +217,7 @@ def _build_synthesis_prompt(
     outline: SynthesisOutline,
     sources: list[ArticleSource],
     audience: str = "team",
+    editorial_prompt: str | None = None,
 ) -> tuple[str, str]:
     """Build the system and user prompts for wiki article synthesis.
 
@@ -249,6 +250,9 @@ def _build_synthesis_prompt(
         "- If sources disagree, note the discrepancy.\n"
     )
 
+    if editorial_prompt:
+        system_prompt += f"\n## Editorial Guidance\n{editorial_prompt}\n"
+
     # Build source document context
     source_parts: list[str] = []
     for src in sources:
@@ -269,6 +273,7 @@ def _synthesize_article(
     sources: list[ArticleSource],
     audience: str = "team",
     model: str | None = None,
+    editorial_prompt: str | None = None,
 ) -> tuple[str, int, int, float]:
     """Run LLM synthesis to generate the wiki article.
 
@@ -276,7 +281,9 @@ def _synthesize_article(
     """
     from .synthesis_service import _execute_prompt
 
-    system_prompt, user_message = _build_synthesis_prompt(outline, sources, audience)
+    system_prompt, user_message = _build_synthesis_prompt(
+        outline, sources, audience, editorial_prompt=editorial_prompt
+    )
 
     result = _execute_prompt(
         system_prompt=system_prompt,
@@ -311,6 +318,7 @@ def _synthesize_hierarchical(
     sources: list[ArticleSource],
     audience: str = "team",
     model: str | None = None,
+    editorial_prompt: str | None = None,
 ) -> tuple[str, int, int, float]:
     """Hierarchical synthesis for large clusters.
 
@@ -364,7 +372,7 @@ def _synthesize_hierarchical(
     ]
 
     content, merge_input, merge_output, merge_cost = _synthesize_article(
-        outline, merge_sources, audience, model
+        outline, merge_sources, audience, model, editorial_prompt=editorial_prompt
     )
 
     total_input += merge_input
@@ -568,7 +576,8 @@ def generate_article(
     # Look up topic
     with db.get_connection() as conn:
         topic_row = conn.execute(
-            "SELECT id, topic_slug, topic_label, description, status, model_override "
+            "SELECT id, topic_slug, topic_label, description, "
+            "status, model_override, editorial_prompt "
             "FROM wiki_topics WHERE id = ?",
             (topic_id,),
         ).fetchone()
@@ -612,6 +621,8 @@ def generate_article(
     topic_model_override: str | None = topic_row[5]
     if not model and topic_model_override:
         model = topic_model_override
+
+    editorial_prompt: str | None = topic_row[6]
 
     # Parse top entities from description (stored as JSON array)
     import json
@@ -759,11 +770,19 @@ def generate_article(
     )
     if strategy == "hierarchical":
         content, input_tokens, output_tokens, cost_usd = _synthesize_hierarchical(
-            outline, sources, audience, model
+            outline,
+            sources,
+            audience,
+            model,
+            editorial_prompt=editorial_prompt,
         )
     else:
         content, input_tokens, output_tokens, cost_usd = _synthesize_article(
-            outline, sources, audience, model
+            outline,
+            sources,
+            audience,
+            model,
+            editorial_prompt=editorial_prompt,
         )
     logger.info(
         "[topic %d] WRITE — done, %d chars output, %d+%d tokens",
