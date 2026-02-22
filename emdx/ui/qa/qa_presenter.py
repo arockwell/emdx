@@ -19,6 +19,44 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _save_terminal_state() -> list[Any] | None:
+    """Save current terminal attributes so they can be restored later.
+
+    Something in the retrieval/subprocess pipeline resets the terminal
+    from raw mode to cooked mode, which kills Textual's mouse and key
+    handling.  We save before and restore after.
+    """
+    import sys
+    import termios
+
+    try:
+        fd = sys.stdin.fileno()
+        return termios.tcgetattr(fd)  # type: ignore[no-any-return]
+    except Exception:
+        return None
+
+
+def _restore_terminal_state(saved: list[Any] | None) -> None:
+    """Restore terminal attributes saved by _save_terminal_state."""
+    import sys
+    import termios
+
+    if saved is None:
+        return
+    try:
+        fd = sys.stdin.fileno()
+        current = termios.tcgetattr(fd)
+        if current != saved:
+            logger.info(
+                "Terminal state changed — restoring (lflag %#x -> %#x)",
+                current[3],
+                saved[3],
+            )
+            termios.tcsetattr(fd, termios.TCSANOW, saved)
+    except Exception as e:
+        logger.warning("Failed to restore terminal state: %s", e)
+
+
 @dataclass
 class QASource:
     """A source document referenced in an answer."""
@@ -148,7 +186,9 @@ class QAPresenter:
 
         try:
             # 1. Retrieve context documents
+            term_state = _save_terminal_state()
             docs, method = await asyncio.to_thread(self._retrieve, question)
+            _restore_terminal_state(term_state)
             entry.method = method
 
             if self._cancel_event.is_set():
@@ -162,7 +202,9 @@ class QAPresenter:
             await self._notify_update()
 
             context = self._build_context(docs)
+            term_state = _save_terminal_state()
             answer_text = await self._stream_answer(question, context)
+            _restore_terminal_state(term_state)
             entry.answer = answer_text
 
         except asyncio.CancelledError:

@@ -6,7 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from emdx.ui.qa.qa_presenter import QAEntry, QAPresenter, QASource, QAStateVM
+from emdx.ui.qa.qa_presenter import (
+    QAEntry,
+    QAPresenter,
+    QASource,
+    QAStateVM,
+    _restore_terminal_state,
+    _save_terminal_state,
+)
 
 
 class TestQADataclasses:
@@ -540,6 +547,87 @@ class TestQAPresenterStreamAnswer:
         # Should have received the answer as a single chunk
         assert len(chunks_received) == 1
         assert chunks_received[0] == "Test answer"
+
+
+class TestTerminalStateSaveRestore:
+    """Tests for terminal state save/restore functions."""
+
+    def test_save_terminal_state_returns_list_or_none(self) -> None:
+        """_save_terminal_state should return a list of attrs or None."""
+        result = _save_terminal_state()
+        # In test environment (no real terminal), should return None
+        # In real terminal, would return a list
+        assert result is None or isinstance(result, list)
+
+    def test_restore_terminal_state_with_none_is_noop(self) -> None:
+        """_restore_terminal_state(None) should be a no-op."""
+        # Should not raise
+        _restore_terminal_state(None)
+
+    def test_restore_terminal_state_with_saved_state(self) -> None:
+        """_restore_terminal_state with a saved state should attempt restore."""
+        import sys
+
+        mock_attrs = [0, 0, 0, 0x0A00, 0, 0, []]
+        with (
+            patch.object(sys.stdin, "fileno", return_value=0),
+            patch("termios.tcgetattr", return_value=[0, 0, 0, 0x0B00, 0, 0, []]),
+            patch("termios.tcsetattr") as mock_set,
+        ):
+            _restore_terminal_state(mock_attrs)
+
+            mock_set.assert_called_once()
+
+    def test_restore_terminal_state_skips_when_unchanged(self) -> None:
+        """_restore_terminal_state should skip when current == saved."""
+        import sys
+
+        saved = [0, 0, 0, 0x0A00, 0, 0, []]
+        with (
+            patch.object(sys.stdin, "fileno", return_value=0),
+            patch("termios.tcgetattr", return_value=saved),
+            patch("termios.tcsetattr") as mock_set,
+        ):
+            _restore_terminal_state(saved)
+
+            mock_set.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ask_calls_save_restore_around_retrieve(self) -> None:
+        """ask() should save/restore terminal state around _retrieve."""
+        presenter = QAPresenter()
+        presenter._state.has_claude_cli = True
+
+        save_calls: list[str] = []
+
+        def track_save() -> None:
+            save_calls.append("save")
+            return None
+
+        def track_restore(saved: object) -> None:
+            save_calls.append("restore")
+
+        with (
+            patch(
+                "emdx.ui.qa.qa_presenter._save_terminal_state",
+                side_effect=track_save,
+            ),
+            patch(
+                "emdx.ui.qa.qa_presenter._restore_terminal_state",
+                side_effect=track_restore,
+            ),
+            patch.object(presenter, "_retrieve", return_value=([], "keyword")),
+            patch.object(
+                presenter, "_stream_answer", new_callable=AsyncMock, return_value="Answer"
+            ),
+        ):
+            await presenter.ask("Test question")
+
+        # Should have save/restore pairs for both retrieve and stream_answer
+        assert save_calls.count("save") == 2
+        assert save_calls.count("restore") == 2
+        # Pattern should be save, restore, save, restore
+        assert save_calls == ["save", "restore", "save", "restore"]
 
 
 if __name__ == "__main__":
