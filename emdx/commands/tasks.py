@@ -476,6 +476,53 @@ def _display_title(task: TaskDict) -> str:
 
 
 @app.command()
+def priority(
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
+    value: int | None = typer.Argument(None, help="Priority value (1=highest, 5=lowest)"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Get or set task priority.
+
+    Without a value, shows the current priority.
+    With a value (1-5), sets the priority.
+
+    Examples:
+        emdx task priority 42           # Show current priority
+        emdx task priority 42 1         # Set to highest priority
+        emdx task priority FEAT-5 2     # Set priority on epic task
+    """
+    task_id = _resolve_id(task_id_str, json_output=json_output)
+    task = tasks.get_task(task_id)
+    if not task:
+        if json_output:
+            print_json({"error": f"Task #{task_id} not found"})
+        else:
+            console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    if value is None:
+        current = task.get("priority", 3)
+        if json_output:
+            print_json({"id": task_id, "title": task["title"], "priority": current})
+        else:
+            console.print(f"#{task_id} {task['title']}: priority {current}")
+        return
+
+    if value < 1 or value > 5:
+        if json_output:
+            print_json({"error": "Priority must be between 1 and 5"})
+        else:
+            console.print("[red]Priority must be between 1 and 5[/red]")
+        raise typer.Exit(1)
+
+    tasks.update_task(task_id, priority=value)
+    if json_output:
+        print_json({"id": task_id, "title": task["title"], "priority": value})
+    else:
+        console.print(f"[green]✅ #{task_id}[/green] priority set to {value}")
+
+
+@app.command()
 def delete(
     task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
