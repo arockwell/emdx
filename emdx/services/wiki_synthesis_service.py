@@ -436,6 +436,7 @@ def _save_article(
         with db.get_connection() as conn:
             conn.execute(
                 "UPDATE documents SET content = ?, title = ?, "
+                "doc_type = 'wiki', "
                 "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (content, outline.suggested_title, doc_id),
             )
@@ -467,6 +468,7 @@ def _save_article(
         title=outline.suggested_title,
         content=content,
         tags=[WIKI_ARTICLE_TAG],
+        doc_type="wiki",
     )
 
     # Create wiki_articles metadata row
