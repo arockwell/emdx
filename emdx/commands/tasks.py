@@ -53,6 +53,13 @@ def _blocker_summary(task_id: int) -> str:
     return f"{names}{extra}"
 
 
+def _display_id(task: TaskDict) -> str:
+    """Return KEY-N display ID if available, otherwise #id."""
+    if task.get("epic_key") and task.get("epic_seq"):
+        return f"{task['epic_key']}-{task['epic_seq']}"
+    return f"#{task['id']}"
+
+
 def _resolve_id(
     identifier: str,
     json_output: bool = False,
@@ -116,11 +123,13 @@ def add(
         epic_key=epic_key,
         depends_on=depends_on,
     )
-    msg = f"[green]✅ Task #{task_id}:[/green] {title}"
+
+    task_data = tasks.get_task(task_id)
+    display_id = _display_id(task_data) if task_data else f"#{task_id}"
+
+    msg = f"[green]✅ Task {display_id}:[/green] {title}"
     if doc:
         msg += f" [dim](doc #{doc})[/dim]"
-    if epic_key:
-        msg += f" [dim]({epic_key})[/dim]"
     if depends_on:
         dep_ids = " ".join(f"#{d}" for d in depends_on)
         msg += f" [dim](after {dep_ids})[/dim]"
@@ -189,7 +198,7 @@ def done(
     if json_output:
         print_json({"id": task_id, "title": task["title"], "status": "done"})
     else:
-        console.print(f"[green]✓ Done:[/green] #{task_id} {task['title']}")
+        console.print(f"[green]✓ Done:[/green] {_display_id(task)} {task['title']}")
 
 
 @app.command()
@@ -247,10 +256,9 @@ def view(
         raise typer.Exit(1)
 
     icon = ICONS.get(task["status"], "?")
-    # Header
-    label = f"#{task_id}"
-    if task.get("epic_key") and task.get("epic_seq"):
-        label = f"{task['epic_key']}-{task['epic_seq']} (#{task_id})"
+    # Header: show KEY-N with raw ID in parens for cross-reference
+    display = _display_id(task)
+    label = f"{display} (#{task_id})" if display != f"#{task_id}" else display
     console.print(f"\n[bold]{icon} {label}: {task['title']}[/bold]")
 
     # Metadata line
@@ -342,7 +350,7 @@ def active(
     if note:
         tasks.log_progress(task_id, note)
 
-    console.print(f"[blue]● Active:[/blue] #{task_id} {task['title']}")
+    console.print(f"[blue]● Active:[/blue] {_display_id(task)} {task['title']}")
 
 
 @app.command()
@@ -368,15 +376,15 @@ def log(
 
     if message:
         tasks.log_progress(task_id, message)
-        console.print(f"[green]Logged:[/green] #{task_id} — {message}")
+        console.print(f"[green]Logged:[/green] {_display_id(task)} — {message}")
         return
 
     entries = tasks.get_task_log(task_id, limit=20)
     if not entries:
-        console.print(f"[yellow]No log entries for #{task_id}[/yellow]")
+        console.print(f"[yellow]No log entries for {_display_id(task)}[/yellow]")
         return
 
-    console.print(f"\n[bold]Log for #{task_id}: {task['title']}[/bold]")
+    console.print(f"\n[bold]Log for {_display_id(task)}: {task['title']}[/bold]")
     for entry in entries:
         ts = entry.get("created_at", "")
         console.print(f"  [dim]{ts}[/dim] {entry['message']}")
@@ -402,7 +410,7 @@ def note(
         raise typer.Exit(1)
 
     tasks.log_progress(task_id, message)
-    console.print(f"[green]Logged:[/green] #{task_id} — {message}")
+    console.print(f"[green]Logged:[/green] {_display_id(task)} — {message}")
 
 
 @app.command()
@@ -429,7 +437,7 @@ def blocked(
     if reason:
         tasks.log_progress(task_id, f"Blocked: {reason}")
 
-    msg = f"[yellow]⊘ Blocked:[/yellow] #{task_id} {task['title']}"
+    msg = f"[yellow]⊘ Blocked:[/yellow] {_display_id(task)} {task['title']}"
     if reason:
         msg += f"\n  [dim]{reason}[/dim]"
     console.print(msg)
@@ -549,7 +557,7 @@ def priority(
         if json_output:
             print_json({"id": task_id, "title": task["title"], "priority": current})
         else:
-            console.print(f"#{task_id} {task['title']}: priority {current}")
+            console.print(f"{_display_id(task)} {task['title']}: priority {current}")
         return
 
     if value < 1 or value > 5:
@@ -563,7 +571,7 @@ def priority(
     if json_output:
         print_json({"id": task_id, "title": task["title"], "priority": value})
     else:
-        console.print(f"[green]✅ #{task_id}[/green] priority set to {value}")
+        console.print(f"[green]✅ {_display_id(task)}[/green] priority set to {value}")
 
 
 @app.command()
@@ -585,14 +593,14 @@ def delete(
         raise typer.Exit(1)
 
     if not force and not is_non_interactive():
-        console.print(f"Delete task #{task_id}: {task['title']}?")
+        console.print(f"Delete task {_display_id(task)}: {task['title']}?")
         confirm = typer.confirm("Are you sure?")
         if not confirm:
             console.print("[yellow]Cancelled[/yellow]")
             return
 
     tasks.delete_task(task_id)
-    console.print(f"[green]✅ Deleted #{task_id}[/green]")
+    console.print(f"[green]✅ Deleted {_display_id(task)}[/green]")
 
 
 # --- Task dependency subcommands ---
