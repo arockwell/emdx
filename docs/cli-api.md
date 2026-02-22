@@ -40,7 +40,8 @@ emdx save --file notes.md --auto-link
 - `--title, -t TEXT` - Custom title (auto-detected from filename if not provided)
 - `--tags TEXT` - Comma-separated tags
 - `--project, -p TEXT` - Override project detection
-- `--auto-link` - Auto-link to semantically similar documents (requires `emdx maintain index`)
+- `--auto-link/--no-auto-link` - Auto-link to semantically similar documents (default: auto-link)
+- `--cross-project` - Allow auto-links across projects
 - `--auto-tag` - Automatically apply suggested tags
 - `--suggest-tags` - Show tag suggestions after saving
 - `--supersede` - Auto-link to existing doc with same title
@@ -574,18 +575,35 @@ emdx gui
 ## 🔗 **Integration Commands**
 
 ### **emdx gist**
-GitHub Gist integration.
+Create or update a GitHub Gist from a document.
 
 ```bash
-# Create secret gist from document
+# Create secret gist from document (default)
 emdx gist 42
 
 # Create public gist
 emdx gist 42 --public
 
+# Create gist with description
+emdx gist 42 --desc "Auth module analysis"
+
 # Create gist and copy URL to clipboard
 emdx gist 42 --copy
+
+# Create gist and open in browser
+emdx gist 42 --open
+
+# Update an existing gist
+emdx gist 42 --update abc123def456
 ```
+
+**Options:**
+- `--public` - Create public gist
+- `--secret` - Create secret gist (default)
+- `--desc, -d TEXT` - Gist description
+- `--copy, -c` - Copy gist URL to clipboard
+- `--open, -o` - Open gist in browser
+- `--update, -u TEXT` - Update existing gist ID
 
 ## ⚙️ **Configuration**
 
@@ -623,6 +641,7 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 - `gui`, `prime`, `status` - Interface and overview
 - `maintain` (cleanup, compact, index, link, unlink) - Maintenance
 - `gist` - GitHub Gist integration
+- `explore` - Topic map and coverage analysis
 - `exec` - Execution monitoring (read-only)
 - `task` (including `task epic`, `task cat`), `trash` - Organization commands
 - `stale` (list, touch) - Staleness tracking
@@ -1015,6 +1034,55 @@ emdx task cat adopt SEC
 # Delete a category (unlinks tasks)
 emdx task cat delete SEC
 ```
+
+---
+
+## 🔭 Explore (`emdx explore`)
+
+Explore what your knowledge base knows. Clusters documents by content similarity to build a topic map, showing what areas your KB covers and how deep the coverage is.
+
+Topic map generation is free (no API calls). Question generation uses the Claude API.
+
+### Topic Map
+
+```bash
+# Show all topics (free, no API calls)
+emdx explore
+
+# Tighter clusters (higher threshold = fewer, more focused topics)
+emdx explore --threshold 0.5
+
+# Show coverage gaps (thin topics, stale areas, lonely tags)
+emdx explore --gaps
+```
+
+### Question Generation
+
+```bash
+# What questions can my KB answer? (uses Claude API)
+emdx explore --questions
+
+# Limit to top N topics
+emdx explore --limit 5 --questions
+```
+
+### Machine Output
+
+```bash
+# Full JSON output
+emdx explore --json
+
+# JSON with questions
+emdx explore --json --questions
+```
+
+**Options:**
+- `--threshold, -t FLOAT` - Similarity threshold for clustering (0.0-1.0, lower = more grouping, default: 0.5)
+- `--questions, -q` - Generate answerable questions per topic (uses Claude API)
+- `--gaps, -g` - Detect coverage gaps (thin topics, stale areas, lonely tags)
+- `--json` - Output results as JSON
+- `--rich` - Enable colored Rich output
+- `--limit, -n INTEGER` - Max topics to show (0 = all, default: 0)
 
 ---
 
