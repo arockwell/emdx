@@ -801,7 +801,7 @@ class ActivityView(HelpMixin, Widget):
         self._jump_to_section(TIER_RECENT)
 
     def _jump_to_section(self, tier: int) -> None:
-        """Jump cursor to the section header row."""
+        """Jump cursor to first item in section, with header scrolled to top."""
         from .activity_table import HEADER_PREFIX
 
         table = self.query_one("#activity-table", ActivityTable)
@@ -809,7 +809,13 @@ class ActivityView(HelpMixin, Widget):
 
         for i, row in enumerate(table.ordered_rows):
             if str(row.key.value) == header_key:
-                table.move_cursor(row=i)
+                # Scroll so the header is at the top
+                table.scroll_to(0, i, animate=False)
+                # Select the first item after the header
+                if i + 1 < table.row_count:
+                    table.move_cursor(row=i + 1)
+                else:
+                    table.move_cursor(row=i)
                 return
 
     async def on_activity_table_item_highlighted(
