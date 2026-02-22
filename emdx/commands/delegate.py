@@ -545,7 +545,6 @@ def _run_single(
     seq: int | None = None,
     epic_key: str | None = None,
     timeout: int | None = None,
-    limit: float | None = None,
     task_flag: int | None = None,
 ) -> SingleResult:
     """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
@@ -630,10 +629,6 @@ def _run_single(
     # Build claude command: claude --print --model <model>
     resolved_model = resolve_model_alias(model or "opus", CliTool.CLAUDE)
     cmd = ["claude", "--print", "--model", resolved_model]
-
-    # Apply budget limit if specified
-    if limit is not None:
-        cmd += ["--max-budget-usd", str(limit)]
 
     # Grant tool permissions so delegates can operate without interactive approval.
     # --print mode can't prompt for permission, so we must pre-authorize tools.
@@ -860,7 +855,6 @@ def _run_parallel(
     worktree: bool = False,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
-    limit: float | None = None,
     task_flag: int | None = None,
 ) -> ParallelResult:
     """Run multiple tasks in parallel via ThreadPoolExecutor."""
@@ -924,7 +918,6 @@ def _run_parallel(
                     parent_task_id=parent_task_id,
                     seq=idx + 1,
                     epic_key=epic_key,
-                    limit=limit,
                     task_flag=task_flag,
                 ),
             )
@@ -1203,12 +1196,6 @@ def delegate(
         "--cleanup",
         help="Remove stale delegate worktrees (>1 hour old)",
     ),
-    limit: float | None = typer.Option(
-        None,
-        "--limit",
-        "-l",
-        help="Max budget in USD per task (passed as --max-budget-usd to claude)",
-    ),
     json_output: bool = typer.Option(
         False,
         "--json",
@@ -1420,7 +1407,6 @@ def delegate(
                 source_doc_id=doc,
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
-                limit=limit,
                 task_flag=task,
             )
             if json_output:
@@ -1449,7 +1435,6 @@ def delegate(
                 worktree=use_worktree,
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
-                limit=limit,
                 task_flag=task,
             )
             if json_output:
