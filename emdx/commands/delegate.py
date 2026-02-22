@@ -30,17 +30,21 @@ import os
 import re
 import subprocess
 import sys
-import time
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
 import typer
 
-from ..config.cli_config import get_model_display_name, resolve_model_version
+from ..config.cli_config import (
+    CliTool,
+    get_model_display_name,
+    resolve_model_alias,
+    resolve_model_version,
+)
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
-from ..database.documents import get_document, save_document
-from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
+from ..database.documents import get_document
 from ..utils.git import generate_delegate_branch_name, validate_pr_preconditions
 
 app = typer.Typer(
@@ -136,32 +140,66 @@ def _safe_update_task(
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
 
-def _safe_update_execution(
-    exec_id: int | None,
-    *,
-    doc_id: int | None = None,
-) -> None:
-    """Update execution record, never fail delegate.
+def _safe_create_execution(
+    doc_title: str,
+    working_dir: str | None,
+    task_id: int | None,
+) -> int | None:
+    """Create execution record, never fail delegate."""
+    try:
+        from ..models.executions import create_execution
 
-    Args:
-        exec_id: Execution ID to update (no-op if None)
-        doc_id: Output document ID to link
-    """
+        exec_id = create_execution(
+            doc_id=None,
+            doc_title=doc_title,
+            log_file="",
+            working_dir=working_dir,
+        )
+        if task_id is not None:
+            from ..models.executions import update_execution
+
+            update_execution(exec_id, task_id=task_id)
+        return exec_id
+    except Exception as e:
+        sys.stderr.write(f"delegate: execution tracking failed: {e}\n")
+        return None
+
+
+def _safe_update_execution_status(
+    exec_id: int | None,
+    status: str,
+    exit_code: int | None = None,
+) -> None:
+    """Update execution status, never fail delegate."""
     if exec_id is None:
         return
     try:
-        from typing import Any
+        from ..models.executions import update_execution_status
 
-        from ..models.executions import update_execution
-
-        kwargs: dict[str, Any] = {}
-        if doc_id is not None:
-            kwargs["doc_id"] = doc_id
-
-        if kwargs:
-            update_execution(exec_id, **kwargs)
+        update_execution_status(exec_id, status, exit_code)
     except Exception as e:
         sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
+
+
+def _read_batch_doc_id(batch_path: str) -> int | None:
+    """Read the first doc ID from a batch file written by save-output.sh hook."""
+    try:
+        content = Path(batch_path).read_text().strip()
+        if content:
+            first_line = content.split("\n")[0].strip()
+            if first_line:
+                return int(first_line)
+    except (ValueError, FileNotFoundError, OSError):
+        pass
+    return None
+
+
+def _cleanup_batch_file(batch_path: str) -> None:
+    """Remove the batch temp file, never fail."""
+    try:
+        os.unlink(batch_path)
+    except OSError:
+        pass
 
 
 PR_INSTRUCTION_GENERIC = (
@@ -245,61 +283,6 @@ def _extract_pr_url(text: str | None) -> str | None:
         return None
     match = _PR_URL_RE.search(text)
     return match.group(0) if match else None
-
-
-def _make_output_file_id(working_dir: str | None, seq: int | None) -> str:
-    """Generate a traceable ID for the agent's output file.
-
-    Uses the worktree basename when available (so the file can be traced
-    back to its worktree), otherwise falls back to pid-seq-timestamp.
-    """
-    if working_dir:
-        basename = Path(working_dir).name
-        if "emdx-worktree-" in basename:
-            return basename
-    return f"{os.getpid()}-{seq or 0}-{int(time.time())}"
-
-
-def _make_output_file_path(file_id: str) -> Path:
-    """Build the /tmp path for a delegate output file."""
-    return Path(f"/tmp/emdx-delegate-{file_id}.md")
-
-
-def _save_output_fallback(
-    output_file: Path,
-    output_content: str | None,
-    title: str,
-    tags: list[str],
-) -> int | None:
-    """Try to save agent output via fallback methods.
-
-    Priority:
-    1. Read the output file the agent was asked to write
-    2. Save captured stdout/result content
-    Returns doc_id or None.
-    """
-    content = None
-
-    # Fallback 1: agent wrote the file
-    if output_file.exists() and output_file.stat().st_size > 0:
-        try:
-            content = output_file.read_text(encoding="utf-8")
-        except Exception as e:
-            sys.stderr.write(f"delegate: failed to read {output_file}: {e}\n")
-
-    # Fallback 2: captured output from executor
-    if not content and output_content and output_content.strip():
-        content = output_content
-
-    if not content:
-        return None
-
-    try:
-        doc_id: int = save_document(title=title, content=content, tags=tags)
-        return doc_id
-    except Exception as e:
-        sys.stderr.write(f"delegate: fallback save failed: {e}\n")
-        return None
 
 
 def _validate_pr_and_warn(
@@ -468,7 +451,7 @@ def _run_single(
     epic_key: str | None = None,
     timeout: int | None = None,
 ) -> SingleResult:
-    """Run a single task via UnifiedExecutor. Returns SingleResult."""
+    """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
     # Add model tags: model:opus for filtering, model-ver:claude-opus-4-6 for version
@@ -494,74 +477,98 @@ def _run_single(
         epic_key=epic_key,
     )
 
-    # Build save instruction so the sub-agent persists output
     # Always include 'needs-review' tag for triage workflow
     all_tags = list(tags) if tags else []
     if "needs-review" not in all_tags:
         all_tags.append("needs-review")
 
-    # Generate a traceable output file path for the agent
-    file_id = _make_output_file_id(working_dir, seq)
-    output_file = _make_output_file_path(file_id)
-    tags_str = ",".join(all_tags)
+    # Create execution record
+    execution_id = _safe_create_execution(doc_title, working_dir, task_id)
 
-    output_instruction = (
-        "\n\nIMPORTANT — SAVE YOUR OUTPUT:\n"
-        f"1. Write your complete findings/analysis to: {output_file}\n"
-        f'2. Save it: emdx save --file {output_file} --title "{doc_title}" '
-        f'--tags "{tags_str}"\n'
-        "3. Report the document ID shown after saving."
-    )
-
+    # Build the full prompt with PR/branch instructions appended
+    full_prompt = prompt
     if pr:
-        output_instruction += _make_pr_instruction(pr_branch, draft=draft)
+        full_prompt += _make_pr_instruction(pr_branch, draft=draft)
     elif branch:
-        output_instruction += _make_branch_instruction(pr_branch)
+        full_prompt += _make_branch_instruction(pr_branch)
 
-    config = ExecutionConfig(
-        prompt=prompt,
-        title=doc_title,
-        output_instruction=output_instruction,
-        working_dir=working_dir or str(Path.cwd()),
-        timeout_seconds=timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT,
-        model=model,
+    # Set up batch file for doc ID collection (written by save-output.sh hook)
+    batch_fd, batch_path = tempfile.mkstemp(suffix=".ids", prefix="emdx-batch-")
+    os.close(batch_fd)
+
+    # Build environment for hooks (strip CLAUDECODE to allow nested sessions)
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+    env.update(
+        {
+            "EMDX_AUTO_SAVE": "1",
+            "EMDX_TITLE": doc_title,
+            "EMDX_TAGS": ",".join(all_tags),
+            "EMDX_BATCH_FILE": batch_path,
+        }
     )
+    if task_id is not None:
+        env["EMDX_TASK_ID"] = str(task_id)
+    if execution_id is not None:
+        env["EMDX_EXECUTION_ID"] = str(execution_id)
+    if source_doc_id is not None:
+        env["EMDX_DOC_ID"] = str(source_doc_id)
 
-    result = UnifiedExecutor().execute(config)
+    # Build claude command: claude --print --model <model>
+    resolved_model = resolve_model_alias(model or "opus", CliTool.CLAUDE)
+    cmd = ["claude", "--print", "--model", resolved_model]
 
-    # Link execution to task
-    _safe_update_task(task_id, execution_id=result.execution_id)
+    # Run the subprocess — hooks handle priming, saving, and task tracking
+    effective_timeout = timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT
+    try:
+        result = subprocess.run(
+            cmd,
+            input=full_prompt,
+            capture_output=True,
+            text=True,
+            timeout=effective_timeout,
+            cwd=working_dir,
+            env=env,
+        )
+        output = result.stdout
+        success = result.returncode == 0
+    except subprocess.TimeoutExpired:
+        sys.stderr.write("delegate: task timed out\n")
+        _safe_update_task(task_id, status="failed", error="timeout")
+        _safe_update_execution_status(execution_id, "failed", exit_code=-1)
+        _cleanup_batch_file(batch_path)
+        return SingleResult(task_id=task_id, success=False, error_message="timeout")
+    except Exception as e:
+        sys.stderr.write(f"delegate: subprocess failed: {e}\n")
+        _safe_update_task(task_id, status="failed", error=str(e)[:200])
+        _safe_update_execution_status(execution_id, "failed")
+        _cleanup_batch_file(batch_path)
+        return SingleResult(task_id=task_id, success=False, error_message=str(e))
 
-    if not result.success:
-        sys.stderr.write(f"delegate: task failed: {result.error_message}\n")
-        _safe_update_task(task_id, status="failed", error=result.error_message)
-        return SingleResult(task_id=task_id, success=False, error_message=result.error_message)
+    # Update execution with exit code
+    status = "completed" if success else "failed"
+    _safe_update_execution_status(execution_id, status, exit_code=result.returncode)
+
+    if not success:
+        error_msg = (result.stderr or "")[:200] or f"exit code {result.returncode}"
+        sys.stderr.write(f"delegate: task failed: {error_msg}\n")
+        _safe_update_task(task_id, status="failed", error=error_msg)
+        _cleanup_batch_file(batch_path)
+        return SingleResult(task_id=task_id, success=False, error_message=error_msg)
 
     # Validate PR preconditions if --pr was requested
     if pr and working_dir:
         _validate_pr_and_warn(working_dir, quiet=quiet)
 
-    # Extract PR URL from output content
-    pr_url = _extract_pr_url(result.output_content)
-    # Track branch name (known from pr_branch, or extracted from output)
+    # Read doc ID from batch file (written by save-output.sh hook)
+    doc_id = _read_batch_doc_id(batch_path)
+    _cleanup_batch_file(batch_path)
+
+    # Extract PR URL from output
+    pr_url = _extract_pr_url(output)
     pushed_branch = pr_branch
-
-    doc_id = result.output_doc_id
-
-    # Fallback: if agent didn't save, try output file then captured output
-    if not doc_id:
-        doc_id = _save_output_fallback(
-            output_file,
-            result.output_content,
-            doc_title,
-            all_tags,
-        )
-        if doc_id:
-            sys.stderr.write(f"delegate: auto-saved from fallback → #{doc_id}\n")
 
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
-        _safe_update_execution(result.execution_id, doc_id=doc_id)
         # Try to extract PR URL from saved doc content
         if not pr_url:
             doc = get_document(doc_id)
@@ -572,19 +579,20 @@ def _run_single(
             pr_info = f" pr:{pr_url}" if pr_url else ""
             branch_info = f" branch:{pushed_branch}" if pushed_branch and not pr_url else ""
             sys.stderr.write(
-                f"task_id:{task_id} doc_id:{doc_id} "
-                f"tokens:{result.tokens_used} "
-                f"cost:${result.cost_usd:.4f} "
-                f"duration:{result.execution_time_ms / 1000:.1f}s"
-                f"{pr_info}{branch_info}\n"
+                f"task_id:{task_id} doc_id:{doc_id} exec_id:{execution_id}{pr_info}{branch_info}\n"
             )
     else:
         _safe_update_task(task_id, status="done")
-        # Last resort: print whatever we have to stdout
-        if result.output_content:
-            sys.stdout.write(result.output_content)
-            sys.stdout.write("\n")
-        sys.stderr.write("delegate: agent completed with no output\n")
+        # Hook didn't save — print captured output directly
+        if output:
+            sys.stdout.write(output)
+            if not output.endswith("\n"):
+                sys.stdout.write("\n")
+        if not quiet:
+            sys.stderr.write(
+                f"delegate: agent completed (no doc saved) "
+                f"task_id:{task_id} exec_id:{execution_id}\n"
+            )
 
     return SingleResult(
         doc_id=doc_id,

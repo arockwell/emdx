@@ -109,11 +109,38 @@ When writing CLI examples in README.md or docs:
 
 ## Claude Code Integration - MANDATORY
 
+### Hooks (Automatic Session Lifecycle)
+
+Claude Code hooks in `.claude/settings.json` handle session lifecycle automatically:
+
+| Hook | Event | What it does |
+|------|-------|-------------|
+| `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
+| `save-output.sh` | Stop | Auto-saves output to KB (delegate sessions only) |
+| `session-end.sh` | SessionEnd | Updates task status (delegate sessions only) |
+
+**Hooks are ambient** — `prime.sh` runs for all sessions. The save/end hooks only activate
+when the delegate launcher sets env vars (`EMDX_AUTO_SAVE=1`, `EMDX_TASK_ID`).
+
+**Env vars recognized by hooks:**
+
+| Variable | Set by | Used by | Purpose |
+|----------|--------|---------|---------|
+| `EMDX_AUTO_SAVE` | delegate | save-output.sh | Enable auto-save ("1" to activate) |
+| `EMDX_DOC_ID` | delegate | prime.sh | Include document as context |
+| `EMDX_TASK_ID` | delegate | prime.sh, session-end.sh | Track task lifecycle |
+| `EMDX_TITLE` | delegate | save-output.sh | Document title for saved output |
+| `EMDX_TAGS` | delegate | save-output.sh | Tags for saved output |
+| `EMDX_BATCH_FILE` | delegate | save-output.sh | Parallel coordination file |
+| `EMDX_EXECUTION_ID` | delegate | session-end.sh | Execution record to update |
+
 ### Session Start Protocol
 ```bash
 emdx prime    # Get current work context (ready tasks, in-progress, recent docs)
 emdx status   # Quick overview
 ```
+
+**Note:** With hooks active, `emdx prime` runs automatically on session start.
 
 ### Mandatory Behaviors
 
