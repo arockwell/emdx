@@ -32,6 +32,7 @@ def make_task(
     tags: str | None = None,
     execution_id: int | None = None,
     output_doc_id: int | None = None,
+    parent_task_id: int | None = None,
     **kwargs: object,
 ) -> TaskDict:
     base: TaskDict = {
@@ -54,7 +55,7 @@ def make_task(
         "prompt": None,
         "type": "manual",
         "source_doc_id": None,
-        "parent_task_id": None,
+        "parent_task_id": parent_task_id,
         "seq": None,
         "retry_of": None,
         "epic_seq": None,
@@ -63,13 +64,14 @@ def make_task(
 
 
 def make_epic(
+    id: int = 1,
     epic_key: str = "AUTH",
     child_count: int = 10,
     children_done: int = 7,
     children_open: int = 3,
     **kwargs: object,
 ) -> EpicTaskDict:
-    base = make_task(title=f"Epic: {epic_key}", status="open", epic_key=epic_key)
+    base = make_task(id=id, title=f"Epic: {epic_key}", status="open", epic_key=epic_key)
     epic: EpicTaskDict = {
         **base,  # type: ignore[typeddict-item]
         "child_count": child_count,
@@ -422,10 +424,10 @@ class TestDetailPane:
     async def test_shows_epic_info_with_progress(self, mock_task_data: MockDict) -> None:
         """Detail pane shows epic info with done/total progress."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, status="open", epic_key="AUTH"),
+            make_task(id=2, status="open", epic_key="AUTH", parent_task_id=100),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(epic_key="AUTH", child_count=10, children_done=7),
+            make_epic(id=100, epic_key="AUTH", child_count=10, children_done=7),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1317,8 +1319,8 @@ class TestEpicGrouping:
             make_task(id=2, title="TUI task", status="open", epic_key="TUI"),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(epic_key="AUTH"),
-            make_epic(epic_key="TUI"),
+            make_epic(id=100, epic_key="AUTH"),
+            make_epic(id=101, epic_key="TUI"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
