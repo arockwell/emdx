@@ -66,6 +66,7 @@ class QASource:
 
     doc_id: int
     title: str
+    snippet: str = ""
 
 
 @dataclass
@@ -197,8 +198,15 @@ class QAPresenter:
             if self._cancel_event.is_set():
                 return
 
-            # Build sources list
-            entry.sources = [QASource(doc_id=d[0], title=d[1]) for d in docs]
+            # Build sources list with content snippets
+            entry.sources = [
+                QASource(
+                    doc_id=d[0],
+                    title=d[1],
+                    snippet=d[2][:200] if len(d) > 2 else "",
+                )
+                for d in docs
+            ]
 
             # 2. Stream the answer
             self._state.status_text = "Generating answer..."

@@ -25,6 +25,13 @@ class TestQADataclasses:
         source = QASource(doc_id=42, title="Test Document")
         assert source.doc_id == 42
         assert source.title == "Test Document"
+        assert source.snippet == ""
+
+    def test_qa_source_with_snippet(self) -> None:
+        """Verify QASource with explicit snippet value."""
+        source = QASource(doc_id=7, title="Doc", snippet="Some content preview...")
+        assert source.doc_id == 7
+        assert source.snippet == "Some content preview..."
 
     def test_qa_entry_defaults(self) -> None:
         """Verify QAEntry dataclass has correct defaults."""
@@ -40,7 +47,10 @@ class TestQADataclasses:
 
     def test_qa_entry_full_fields(self) -> None:
         """Verify QAEntry with all fields set."""
-        sources = [QASource(doc_id=1, title="Doc 1"), QASource(doc_id=2, title="Doc 2")]
+        sources = [
+            QASource(doc_id=1, title="Doc 1", snippet="Preview of doc 1"),
+            QASource(doc_id=2, title="Doc 2", snippet="Preview of doc 2"),
+        ]
         entry = QAEntry(
             question="How does authentication work?",
             answer="Authentication uses JWT tokens...",
