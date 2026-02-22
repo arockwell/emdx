@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-02-22
+
+**The auto-wiki release.** EMDX can now generate a full wiki from your knowledge base — topic clustering groups documents by theme, an LLM synthesizes each cluster into a polished article, and the whole thing exports to MkDocs for static site hosting. A suite of curation commands (`skip`, `pin`, `rename`, `merge`, `split`) lets you shape topics before generation, and per-topic controls let you override models, inject editorial prompts, and weight source documents. The TUI gained two-pane QA with source references, epic-child tree connectors in the task browser, and streaming answer tokens.
+
+### 🚀 Major Features
+
+#### Auto-wiki system (#773, #774, #775)
+The auto-wiki pipeline turns your knowledge base into a structured wiki in three steps:
+
+1. **Topic clustering** — documents are grouped into coherent topics using embedding similarity, with privacy filtering to exclude sensitive content.
+2. **LLM synthesis** — each topic cluster is fed to an LLM that writes a wiki article, citing source documents.
+3. **Wiki runs** — `emdx wiki runs` tracks generation history with per-article timing, quality ratings, and diffs on regeneration.
+
+A new `doc_type` column (`kb` vs `wiki`) separates wiki articles from source documents in search and browsing (#774). `emdx find --doc-type wiki` filters to wiki content only (#783), and the TUI browser shows doc type badges (#778).
+
+#### Wiki topic curation (#795, #796, #798, #797, #804, #805)
+Six new commands give you full control over topics before generating articles:
+
+- **`wiki topic skip/pin`** (#796) — exclude topics from generation or lock them in.
+- **`wiki topic rename`** (#795) — change a topic's display name.
+- **`wiki topic merge/split`** (#804) — combine related topics or break apart overly broad ones.
+- **`wiki source weight/exclude/include`** (#805) — control which documents contribute to each topic and how much.
+- **Editorial prompts** (#798) — inject per-topic instructions like "focus on architecture decisions" that guide the LLM during generation.
+- **Per-topic model override** (#797) — use a different model for specific topics (e.g., opus for the overview article, haiku for appendices).
+
+#### Wiki observability (#786, #787, #788, #789)
+Instrumentation to understand what the wiki pipeline is doing:
+
+- **Coverage report** (#786) — `emdx wiki coverage` shows which KB documents aren't covered by any topic.
+- **Article diffs** (#787) — regenerating a topic shows what changed from the previous version.
+- **Step-level timing** (#788) — each article records how long clustering, retrieval, and synthesis took.
+- **Quality ratings** (#789) — rate articles 1–5 to track which topics need attention.
+
+#### MkDocs wiki export (#807)
+`emdx wiki export mkdocs` dumps all wiki articles and entity pages into a directory structure ready for MkDocs. Generates `mkdocs.yml` with a nav tree built from topic clusters. `emdx wiki export build` runs `mkdocs build` and `emdx wiki export deploy` pushes to GitHub Pages.
+
+#### TUI epic/task display improvements (#799)
+The task browser now shows the relationship between epics and their child tasks visually:
+
+- **📋 icon and `#id` badge** on epic rows to distinguish them from regular tasks.
+- **Tree connectors** (`├─` / `└─`) on child tasks showing they belong to the epic above.
+- **Epic detail pane** with progress bar, done/open/total counts, and child task listing.
+- **`e` key** to filter the view to a single epic, `*` to clear all filters.
+- Consistent visual treatment across both status grouping (default) and epic grouping (`g` key) modes.
+
+#### Two-pane QA with source panel (#806)
+The QA screen gained a right-side source panel. When an answer references a KB document, clicking or navigating to the reference shows the source content alongside the answer. Answers stream token-by-token for real-time feedback (#785).
+
+### 🔧 Improvements
+
+#### Delegate improvements (#777, #780, #784, #790, #792, #794)
+- **`--task` flag** (#780) — `emdx delegate --task 42 "do the work"` associates a delegate session with a task, auto-updating its status on completion.
+- **Subcommand routing** (#777) — `emdx delegate list` and `emdx delegate show` now work correctly instead of being swallowed as task arguments.
+- **Command aliases** (#790) — common commands have short aliases via Click's `get_command()` pattern.
+- **Epic IDs in PR titles** (#784) — delegate-created PRs include the epic identifier when the task belongs to one.
+- **AllowedTools fix** (#792) — switched to comma-separated `--allowedTools` so patterns with spaces (like `Bash(gh pr:*)`) parse correctly.
+- Removed premature `--limit` flag (#794) that shipped before the backing query was ready.
+
+#### CLI cleanup (#781, #782)
+- **Removed recipe feature** (#782) — the experiment didn't stick; recipes were removed entirely to reduce surface area.
+- **Folded `stale` into `maintain`** (#781) — `emdx maintain stale` replaces the top-level `stale` command, continuing the consolidation from v0.19.
+
+#### Epic sequence numbers (#776)
+Epics now get `KEY-N` sequence numbers just like tasks. The first `FEAT` epic is `FEAT-1`, the second `FEAT-2`, etc.
+
+### 🐛 Bug Fixes
+
+- Fix `_epics` dict keyed by category string instead of epic task ID, causing all epics to appear "done" when multiple shared the same category (#799)
+- Hide done/failed/wontdo tasks from epic grouping in task browser (#793)
+- Fix `--allowedTools` parsing so `Bash(gh:*)` works in delegate subprocess (#792)
+- Fix delegate subcommand routing — `delegate list` no longer treated as a task argument (#777)
+- Pass `--allowedTools` to delegate subprocess so `--pr` flag works
+- Remove premature `--limit` flag that was wired to a non-existent query (#794)
+
+### 📖 Documentation
+
+- Full CLI reference update — added missing commands, removed stale group system docs (#800, #802, #803)
+- Added `explore` command documentation (#802)
+- Updated development-setup.md with current paths and deps (#801)
+- Updated architecture.md for v0.20.0 TUI changes
+- Added task `wontdo`, priority, and KEY-N display ID docs (#DOC-6)
+- Documented `--json` flag for delegate (#DOC-7)
+- Updated TUI keyboard shortcuts (#DOC-8)
+- Documented `maintain.auto_link_on_save` config (#DOC-10)
+
+[0.21.0]: https://github.com/arockwell/emdx/compare/v0.20.0...v0.21.0
+
 ## [0.20.0] - 2026-02-22
 
 **The TUI release.** The activity screen became a unified dashboard — tasks, running delegates, and documents share a single tiered view with section jump navigation. The task browser gained live filtering, epic grouping, and status filter keys. Auto-wikify shipped all three layers, automatically linking documents by title matches, semantic similarity, and named entity extraction. Under the hood, Claude Code hooks replaced the delegate monolith's lifecycle management, and `emdx delegate` got structured JSON output for programmatic consumption.
