@@ -194,9 +194,19 @@ CONCEPT_STOPWORDS = frozenset(
         "impact:",
         "severity:",
         "status:",
+        "scope:",
+        "fix:",
+        "note:",
+        "problem:",
         "total",
         "find",
+        "critical",
+        "necessary",
+        "status",
         "files modified",
+        "high priority",
+        "medium priority",
+        "low priority",
     }
 )
 
@@ -611,3 +621,82 @@ def entity_wikify_all(
         total_links += result.links_created
 
     return total_entities, total_links, len(doc_ids)
+
+
+def cleanup_noisy_entities() -> tuple[int, int]:
+    """Delete noisy entities from the database and re-extract with current filters.
+
+    Removes entities matching stopwords, noise patterns (trailing articles,
+    delegate boilerplate like "Summary Fixed"), type annotations, and other
+    noise that leaked in before filters were added.
+
+    Returns:
+        Tuple of (entities_deleted, docs_re_extracted).
+    """
+    # Build pattern set for SQL cleanup
+    noise_patterns: set[str] = set()
+
+    # Heading stopwords in any entity_type
+    noise_patterns.update(HEADING_STOPWORDS)
+
+    # Concept stopwords
+    noise_patterns.update(CONCEPT_STOPWORDS)
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+
+        # 1. Delete entities that match stopword sets directly
+        placeholders = ",".join("?" * len(noise_patterns))
+        cursor.execute(
+            f"DELETE FROM document_entities WHERE entity IN ({placeholders})",
+            list(noise_patterns),
+        )
+        deleted_exact = cursor.rowcount
+
+        # 2. Delete "Summary X" / "Conclusion X" / "Overview X" patterns
+        #    These are proper nouns starting with heading stopwords
+        deleted_pattern = 0
+        heading_prefixes = [
+            "summary %",
+            "conclusion %",
+            "overview %",
+            "executive summary %",
+            "test results %",
+            "recommendations %",
+            "key findings %",
+        ]
+        for prefix in heading_prefixes:
+            cursor.execute(
+                "DELETE FROM document_entities WHERE entity LIKE ?",
+                (prefix,),
+            )
+            deleted_pattern += cursor.rowcount
+
+        # 3. Delete type annotations (dict[str, any], list[dict[...]])
+        cursor.execute(
+            "DELETE FROM document_entities "
+            "WHERE entity LIKE 'dict[%' OR entity LIKE 'list[%' "
+            "OR entity LIKE 'tuple[%' OR entity LIKE 'set[%'"
+        )
+        deleted_types = cursor.rowcount
+
+        conn.commit()
+        total_deleted = deleted_exact + deleted_pattern + deleted_types
+
+    # 4. Re-extract entities for all docs with current filters
+    with db.get_connection() as conn:
+        cursor = conn.execute("SELECT id FROM documents WHERE is_deleted = 0")
+        doc_ids = [row[0] for row in cursor.fetchall()]
+
+    # Clear and re-extract
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM document_entities")
+        conn.commit()
+
+    re_extracted = 0
+    for did in doc_ids:
+        count = extract_and_save_entities(did)
+        if count > 0:
+            re_extracted += 1
+
+    return total_deleted, re_extracted

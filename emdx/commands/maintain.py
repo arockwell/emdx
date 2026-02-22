@@ -13,7 +13,7 @@ import time
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import typer
 from rich import box
@@ -1401,6 +1401,9 @@ def entities_command(
     rebuild: bool = typer.Option(
         False, "--rebuild", help="Clear entity-match links before regenerating"
     ),
+    cleanup: bool = typer.Option(
+        False, "--cleanup", help="Remove noisy entities and re-extract with current filters"
+    ),
 ) -> None:
     """Extract entities from documents and create entity-match links.
 
@@ -1413,12 +1416,40 @@ def entities_command(
         emdx maintain entities 42              # Extract + link one document
         emdx maintain entities --all           # Backfill all documents
         emdx maintain entities 42 --no-wikify  # Extract only, no linking
+        emdx maintain entities --cleanup       # Clean noise + re-extract
     """
     from ..services.entity_service import (
+        cleanup_noisy_entities,
         entity_match_wikify,
         entity_wikify_all,
         extract_and_save_entities,
     )
+
+    if cleanup:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Cleaning noisy entities & re-extracting...", total=None)
+            deleted, re_extracted = cleanup_noisy_entities()
+            progress.update(task, completed=True)
+        console.print(
+            f"[green]Cleaned up entities, re-extracted for {re_extracted} documents[/green]"
+        )
+        if wikify:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Rebuilding entity-match links...", total=None)
+                total_entities, total_links, docs = entity_wikify_all(rebuild=True)
+                progress.update(task, completed=True)
+            console.print(
+                f"[green]Created {total_links} entity-match links across {docs} documents[/green]"
+            )
+        return
 
     if all_docs:
         if wikify:
@@ -1476,6 +1507,341 @@ def entities_command(
     else:
         count = extract_and_save_entities(doc_id)
         console.print(f"Extracted [cyan]{count}[/cyan] entities from document #{doc_id}")
+
+
+# ── Wiki commands ─────────────────────────────────────────────────────
+
+wiki_app = typer.Typer(help="Auto-wiki generation from knowledge base")
+
+
+@wiki_app.command(name="topics")
+def wiki_topics(
+    resolution: float = typer.Option(0.005, "--resolution", "-r", help="Clustering resolution"),
+    save: bool = typer.Option(False, "--save", help="Save discovered topics to DB"),
+    min_size: int = typer.Option(3, "--min-size", help="Minimum cluster size"),
+) -> None:
+    """Discover topic clusters using Leiden community detection.
+
+    Examples:
+        emdx maintain wiki topics              # Preview topics
+        emdx maintain wiki topics --save       # Save to DB
+        emdx maintain wiki topics -r 0.01      # Finer resolution
+    """
+    from ..services.wiki_clustering_service import discover_topics, save_topics
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Discovering topics...", total=None)
+        result = discover_topics(resolution=resolution, min_cluster_size=min_size)
+        progress.update(task, completed=True)
+
+    console.print(
+        f"\n[bold]Found {len(result.clusters)} topics[/bold] "
+        f"covering {result.docs_clustered}/{result.total_docs} docs "
+        f"({result.docs_unclustered} unclustered)"
+    )
+
+    from rich.table import Table
+
+    table = Table(title="Topic Clusters", box=box.SIMPLE)
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Label", style="cyan")
+    table.add_column("Docs", justify="right")
+    table.add_column("Coherence", justify="right")
+    table.add_column("Top Entities", style="dim")
+
+    for cluster in result.clusters[:30]:
+        entities = ", ".join(e[0] for e in cluster.top_entities[:3])
+        table.add_row(
+            str(cluster.cluster_id),
+            cluster.label[:50],
+            str(len(cluster.doc_ids)),
+            f"{cluster.coherence_score:.3f}",
+            entities[:60],
+        )
+
+    console.print(table)
+
+    if save:
+        count = save_topics(result)
+        console.print(f"\n[green]Saved {count} topics to database[/green]")
+    else:
+        console.print("\n[dim]Use --save to persist topics to the database[/dim]")
+
+
+@wiki_app.command(name="status")
+def wiki_status() -> None:
+    """Show wiki generation status and statistics.
+
+    Examples:
+        emdx maintain wiki status
+    """
+    from ..services.wiki_clustering_service import get_topics
+    from ..services.wiki_entity_service import get_entity_index_stats
+    from ..services.wiki_synthesis_service import get_wiki_status
+
+    status = get_wiki_status()
+    topics = get_topics()
+    entity_stats = get_entity_index_stats()
+
+    console.print(
+        Panel(
+            f"[bold]Wiki Status[/bold]\n\n"
+            f"Topics:         {status['total_topics']}\n"
+            f"Articles:       {status['total_articles']} "
+            f"({status['fresh_articles']} fresh, {status['stale_articles']} stale)\n"
+            f"Entity pages:   {entity_stats.tier_a_count} full + "
+            f"{entity_stats.tier_b_count} stubs + "
+            f"{entity_stats.tier_c_count} index\n"
+            f"Total cost:     ${status['total_cost_usd']:.4f}\n"
+            f"Input tokens:   {status['total_input_tokens']:,}\n"
+            f"Output tokens:  {status['total_output_tokens']:,}",
+            title="Auto-Wiki",
+        )
+    )
+
+    if topics:
+        from rich.table import Table
+
+        table = Table(title="Topics (by size)", box=box.SIMPLE)
+        table.add_column("ID", style="dim", width=4)
+        table.add_column("Label", style="cyan")
+        table.add_column("Docs", justify="right")
+        table.add_column("Status")
+
+        for t in topics[:20]:
+            table.add_row(
+                str(t["id"]),
+                str(t["label"])[:50],
+                str(t["member_count"]),
+                str(t["status"]),
+            )
+        console.print(table)
+
+
+@wiki_app.command(name="generate")
+def wiki_generate(
+    topic_id: int | None = typer.Argument(None, help="Specific topic ID to generate"),
+    audience: str = typer.Option("team", "--audience", "-a", help="Privacy mode: me, team, public"),
+    model: str | None = typer.Option(None, "--model", "-m", help="LLM model override"),
+    limit: int = typer.Option(10, "--limit", "-l", help="Max articles to generate"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Estimate costs without calling LLM"),
+    all_topics: bool = typer.Option(False, "--all", help="Generate for all topics"),
+) -> None:
+    """Generate wiki articles from topic clusters.
+
+    Examples:
+        emdx maintain wiki generate --dry-run        # Estimate costs
+        emdx maintain wiki generate 5                # Generate for topic 5
+        emdx maintain wiki generate --all -l 50      # Generate up to 50
+        emdx maintain wiki generate --audience me    # Personal wiki mode
+    """
+    import time as _time
+
+    from ..services.wiki_clustering_service import get_topics as _get_topics
+    from ..services.wiki_synthesis_service import generate_article
+
+    if not all_topics and topic_id is None:
+        console.print("[red]Provide a topic ID or use --all[/red]")
+        raise typer.Exit(1)
+
+    # Build topic list
+    topic_list: list[int]
+    if topic_id is not None:
+        topic_list = [topic_id]
+    else:
+        topics_data = _get_topics()
+        topic_list = [cast(int, t["id"]) for t in topics_data]
+
+    generated = 0
+    skipped = 0
+    total_input = 0
+    total_output = 0
+    total_cost = 0.0
+    batch_start = _time.time()
+
+    for i, tid in enumerate(topic_list):
+        if generated >= limit:
+            break
+
+        label = f"[{i + 1}/{len(topic_list)}]"
+        console.print(f"  {label} topic {tid}...", end=" ")
+        start = _time.time()
+
+        result = generate_article(
+            topic_id=tid,
+            audience=audience,
+            model=model,
+            dry_run=dry_run,
+        )
+        elapsed = _time.time() - start
+
+        if result.skipped:
+            skipped += 1
+            console.print(f"[dim]{result.skip_reason} ({elapsed:.1f}s)[/dim]")
+        else:
+            generated += 1
+            console.print(
+                f"[green]#{result.document_id}[/green] "
+                f"'{result.topic_label[:40]}' "
+                f"({result.input_tokens:,}+{result.output_tokens:,} tok, "
+                f"${result.cost_usd:.4f}, {elapsed:.1f}s)"
+            )
+            if result.warnings:
+                for w in result.warnings:
+                    console.print(f"    [yellow]⚠ {w}[/yellow]")
+
+        total_input += result.input_tokens
+        total_output += result.output_tokens
+        total_cost += result.cost_usd
+
+    total_elapsed = _time.time() - batch_start
+    action = "Estimated" if dry_run else "Generated"
+    console.print(
+        f"\n[bold]{action} {generated} article(s)[/bold] "
+        f"(skipped {skipped}) in {total_elapsed:.1f}s\n"
+        f"  Total tokens: {total_input:,} in / {total_output:,} out\n"
+        f"  Total cost:   ${total_cost:.4f}"
+    )
+
+    if dry_run:
+        console.print("\n[dim]Remove --dry-run to actually generate articles[/dim]")
+
+
+@wiki_app.command(name="entities")
+def wiki_entities(
+    entity: str | None = typer.Argument(None, help="Entity name to look up"),
+    tier: str | None = typer.Option(None, "--tier", "-t", help="Filter by tier: A, B, C"),
+    limit: int = typer.Option(20, "--limit", "-l", help="Max entities to show"),
+    stats: bool = typer.Option(False, "--stats", help="Show entity index statistics"),
+) -> None:
+    """Browse entity index pages.
+
+    Examples:
+        emdx maintain wiki entities                   # List top entities
+        emdx maintain wiki entities "SQLite"           # Entity detail page
+        emdx maintain wiki entities --tier A           # Full pages only
+        emdx maintain wiki entities --stats            # Index statistics
+    """
+    from ..services.wiki_entity_service import (
+        get_entity_detail,
+        get_entity_index_stats,
+        get_entity_pages,
+        render_entity_page,
+    )
+
+    if stats:
+        idx_stats = get_entity_index_stats()
+        console.print(
+            Panel(
+                f"[bold]Entity Index[/bold]\n\n"
+                f"Tier A (full):  {idx_stats.tier_a_count}\n"
+                f"Tier B (stub):  {idx_stats.tier_b_count}\n"
+                f"Tier C (index): {idx_stats.tier_c_count}\n"
+                f"Total:          {idx_stats.total_entities}\n"
+                f"Filtered:       {idx_stats.filtered_noise}",
+                title="Entity Index Stats",
+            )
+        )
+        return
+
+    if entity:
+        page = get_entity_detail(entity)
+        if page:
+            from rich.markdown import Markdown
+
+            md = render_entity_page(page)
+            console.print(Markdown(md))
+        else:
+            console.print(f"[yellow]Entity '{entity}' not found[/yellow]")
+        return
+
+    pages = get_entity_pages(tier=tier, limit=limit)
+
+    from rich.table import Table
+
+    table = Table(title="Entity Index", box=box.SIMPLE)
+    table.add_column("Entity", style="cyan")
+    table.add_column("Type", style="dim")
+    table.add_column("Docs", justify="right")
+    table.add_column("Score", justify="right")
+    table.add_column("Tier")
+
+    for p in pages:
+        tier_style = {"A": "green", "B": "yellow", "C": "dim"}.get(p.tier, "")
+        table.add_row(
+            p.entity[:40],
+            p.entity_type,
+            str(p.doc_frequency),
+            f"{p.page_score:.1f}",
+            f"[{tier_style}]{p.tier}[/{tier_style}]",
+        )
+
+    console.print(table)
+
+
+@wiki_app.command(name="list")
+def wiki_list(
+    limit: int = typer.Option(20, "--limit", "-l", help="Max articles to show"),
+    stale: bool = typer.Option(False, "--stale", help="Show only stale articles"),
+) -> None:
+    """List generated wiki articles.
+
+    Examples:
+        emdx maintain wiki list                # All articles
+        emdx maintain wiki list --stale        # Stale articles only
+    """
+    from rich.table import Table
+
+    from ..database import db
+
+    with db.get_connection() as conn:
+        query = (
+            "SELECT wa.id, wa.topic_id, d.id as doc_id, d.title, "
+            "wa.model, wa.input_tokens, wa.output_tokens, wa.cost_usd, "
+            "wa.is_stale, wa.version, wa.generated_at "
+            "FROM wiki_articles wa "
+            "JOIN documents d ON wa.document_id = d.id "
+        )
+        if stale:
+            query += "WHERE wa.is_stale = 1 "
+        query += "ORDER BY wa.generated_at DESC LIMIT ?"
+
+        rows = conn.execute(query, (limit,)).fetchall()
+
+    if not rows:
+        msg = "stale " if stale else ""
+        console.print(f"[dim]No {msg}wiki articles found[/dim]")
+        return
+
+    table = Table(title="Wiki Articles", box=box.SIMPLE)
+    table.add_column("Doc", style="cyan", width=6)
+    table.add_column("Title")
+    table.add_column("Ver", justify="right", width=4)
+    table.add_column("Model", style="dim")
+    table.add_column("Cost", justify="right")
+    table.add_column("Status")
+    table.add_column("Generated", style="dim")
+
+    for row in rows:
+        status = "[red]stale[/red]" if row[8] else "[green]fresh[/green]"
+        table.add_row(
+            f"#{row[2]}",
+            str(row[3])[:50],
+            f"v{row[9]}",
+            str(row[4]).split("-")[1] if "-" in str(row[4]) else str(row[4]),
+            f"${row[7]:.4f}",
+            status,
+            str(row[10])[:10] if row[10] else "",
+        )
+
+    console.print(table)
+
+
+app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 
 
 if __name__ == "__main__":

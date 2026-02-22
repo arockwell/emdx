@@ -2463,6 +2463,136 @@ def migration_044_add_document_entities(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_045_add_wiki_tables(conn: sqlite3.Connection) -> None:
+    """Add wiki system tables for auto-wiki generation.
+
+    wiki_topics: Topic cluster definitions with entity fingerprint.
+    wiki_topic_members: M:N between docs and topics with relevance scores.
+    wiki_articles: Generation metadata pointing to documents table.
+    wiki_article_sources: Provenance — which doc versions fed each article.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS wiki_topics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_slug TEXT NOT NULL UNIQUE,
+            topic_label TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            entity_fingerprint TEXT NOT NULL DEFAULT '',
+            coherence_score REAL DEFAULT 0.0,
+            resolution_level TEXT DEFAULT 'medium',
+            status TEXT DEFAULT 'active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_topics_slug ON wiki_topics(topic_slug)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_topics_status ON wiki_topics(status)")
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS wiki_topic_members (
+            topic_id INTEGER NOT NULL,
+            document_id INTEGER NOT NULL,
+            relevance_score REAL DEFAULT 1.0,
+            content_hash TEXT DEFAULT '',
+            is_primary BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (topic_id, document_id),
+            FOREIGN KEY (topic_id)
+                REFERENCES wiki_topics(id) ON DELETE CASCADE,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_wiki_members_doc ON wiki_topic_members(document_id)"
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS wiki_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_id INTEGER NOT NULL,
+            document_id INTEGER NOT NULL UNIQUE,
+            article_type TEXT NOT NULL DEFAULT 'topic_article',
+            source_hash TEXT NOT NULL DEFAULT '',
+            model TEXT DEFAULT '',
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0,
+            cost_usd REAL DEFAULT 0.0,
+            is_stale BOOLEAN DEFAULT FALSE,
+            stale_reason TEXT DEFAULT '',
+            version INTEGER DEFAULT 1,
+            quality_score REAL DEFAULT 0.0,
+            generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (topic_id)
+                REFERENCES wiki_topics(id) ON DELETE CASCADE,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_articles_topic ON wiki_articles(topic_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_articles_doc ON wiki_articles(document_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_wiki_articles_stale ON wiki_articles(is_stale)")
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS wiki_article_sources (
+            article_id INTEGER NOT NULL,
+            document_id INTEGER NOT NULL,
+            content_hash TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (article_id, document_id),
+            FOREIGN KEY (article_id)
+                REFERENCES wiki_articles(id) ON DELETE CASCADE,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_wiki_sources_doc ON wiki_article_sources(document_id)"
+    )
+
+    conn.commit()
+    """Add document_entities table for entity-based wikification (Layer 3).
+
+    Stores key entities/concepts extracted from each document.
+    When a new document is saved, its entities are cross-referenced
+    against existing documents to create links.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_entities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            entity TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            confidence REAL DEFAULT 1.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(document_id, entity)
+        )
+        """
+    )
+
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entities_document ON document_entities(document_id)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_entities_entity ON document_entities(entity)")
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2510,6 +2640,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (42, "Convert emoji tags to text", migration_042_convert_emoji_tags_to_text),
     (43, "Add document links table", migration_043_add_document_links),
     (44, "Add document entities table", migration_044_add_document_entities),
+    (45, "Add wiki system tables", migration_045_add_wiki_tables),
 ]
 
 

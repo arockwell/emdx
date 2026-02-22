@@ -294,7 +294,18 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
         )
 
         conn.commit()
-        return cursor.rowcount > 0
+        updated = cursor.rowcount > 0
+
+    # Mark any wiki articles sourced from this document as stale ($0 cost)
+    if updated:
+        try:
+            from emdx.services.wiki_synthesis_service import mark_stale
+
+            mark_stale(doc_id, reason="source_updated")
+        except Exception:
+            pass  # Wiki tables may not exist yet; non-critical
+
+    return updated
 
 
 def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> bool:
