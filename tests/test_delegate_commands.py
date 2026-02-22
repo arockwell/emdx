@@ -554,6 +554,38 @@ class TestRunParallel:
         assert len(result.doc_ids) == 4
 
     @patch("emdx.commands.delegate._run_single")
+    @patch("emdx.commands.delegate.get_document")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    def test_parallel_synthesize_passes_limit(
+        self, mock_create, mock_update, mock_print, mock_get_doc, mock_run_single
+    ):
+        mock_create.return_value = 1
+        mock_get_doc.return_value = {"id": 10, "title": "Test", "content": "Content"}
+        # 2 tasks + 1 synthesis
+        mock_run_single.side_effect = [
+            SingleResult(doc_id=10, task_id=1),
+            SingleResult(doc_id=20, task_id=2),
+            SingleResult(doc_id=99, task_id=3),  # synthesis
+        ]
+
+        _run_parallel(
+            tasks=["task1", "task2"],
+            tags=[],
+            title=None,
+            jobs=2,
+            synthesize=True,
+            model=None,
+            quiet=True,
+            limit=5.0,
+        )
+
+        # The last _run_single call is the synthesis call — verify limit is passed
+        synthesis_call = mock_run_single.call_args_list[-1]
+        assert synthesis_call.kwargs.get("limit") == 5.0
+
+    @patch("emdx.commands.delegate._run_single")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     def test_parallel_all_failures_exits(self, mock_create, mock_update, mock_run_single):

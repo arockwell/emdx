@@ -1008,6 +1008,7 @@ def _run_parallel(
             model=model,
             quiet=True,
             parent_task_id=parent_task_id,
+            limit=limit,
         )
         if synthesis_result_obj.doc_id:
             doc_ids.append(synthesis_result_obj.doc_id)
