@@ -637,6 +637,8 @@ def _run_single(
 
     # Grant tool permissions so delegates can operate without interactive approval.
     # --print mode can't prompt for permission, so we must pre-authorize tools.
+    # Use comma separator — space separator breaks patterns containing spaces
+    # like "Bash(gh pr:*)" which gets split into "Bash(gh" + "pr:*)".
     allowed = [
         "Bash(git:*)",
         "Bash(poetry:*)",
@@ -646,9 +648,8 @@ def _run_single(
         "Bash(emdx:*)",
     ]
     if pr or branch:
-        allowed.append("Bash(gh pr:*)")
-        allowed.append("Bash(gh issue:*)")
-    cmd += ["--allowedTools", " ".join(allowed)]
+        allowed.append("Bash(gh:*)")
+    cmd += ["--allowedTools", ",".join(allowed)]
 
     # Run the subprocess — hooks handle priming, saving, and task tracking
     effective_timeout = timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT

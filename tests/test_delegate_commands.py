@@ -2061,3 +2061,83 @@ class TestLimitFlag:
 
         cmd = mock_subprocess.run.call_args[0][0]
         assert "--max-budget-usd" not in cmd
+
+
+# =============================================================================
+# Tests for allowedTools separator (FIX-6)
+# =============================================================================
+
+
+class TestAllowedToolsSeparator:
+    """Test that --allowedTools uses comma separators to avoid space ambiguity."""
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_allowed_tools_uses_comma_separator(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """allowedTools should use commas, not spaces, to avoid splitting patterns."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
+
+        _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+        )
+
+        cmd = mock_subprocess.run.call_args[0][0]
+        tools_idx = cmd.index("--allowedTools")
+        tools_value = cmd[tools_idx + 1]
+        # Must use commas, not spaces
+        assert "," in tools_value
+        assert " " not in tools_value
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_pr_flag_adds_gh_permission(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """--pr should add Bash(gh:*) to allowed tools."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
+
+        _run_single(
+            prompt="fix bug",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+            pr=True,
+        )
+
+        cmd = mock_subprocess.run.call_args[0][0]
+        tools_idx = cmd.index("--allowedTools")
+        tools_value = cmd[tools_idx + 1]
+        assert "Bash(gh:*)" in tools_value
