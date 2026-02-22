@@ -1795,3 +1795,165 @@ class TestRunSingleNewFields:
         assert result.duration_seconds is not None
         assert result.error_message == "timeout"
         assert result.execution_id == 100
+
+
+# =============================================================================
+# Tests for subcommand routing fix (FIX-3)
+# =============================================================================
+
+
+class TestSubcommandRouting:
+    """Test that 'delegate list', 'delegate show', etc. route to subcommands."""
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_subcommand_routed_when_task_matches_subcommand_name(self, mock_run_single):
+        """When tasks[0] matches a registered subcommand, route to it."""
+        import click
+
+        # Create a mock MultiCommand that recognizes "list" as a subcommand
+        mock_subcmd = MagicMock()
+        mock_sub_ctx = MagicMock()
+        mock_subcmd.make_context.return_value = mock_sub_ctx
+        mock_sub_ctx.__enter__ = MagicMock(return_value=mock_sub_ctx)
+        mock_sub_ctx.__exit__ = MagicMock(return_value=False)
+
+        ctx = MagicMock(spec=click.Context)
+        ctx.invoked_subcommand = None
+        # Make ctx.command a MultiCommand that returns our mock for "list"
+        ctx.command = MagicMock(spec=click.Group)
+        ctx.command.get_command.return_value = mock_subcmd
+
+        with pytest.raises(typer.Exit) as exc_info:
+            delegate(
+                ctx=ctx,
+                tasks=["list"],
+                tags=None,
+                title=None,
+                synthesize=False,
+                jobs=None,
+                model=None,
+                quiet=False,
+                doc=None,
+                pr=False,
+                branch=False,
+                draft=False,
+                worktree=False,
+                base_branch="main",
+                json_output=False,
+            )
+
+        assert exc_info.value.exit_code == 0
+        # Should route to subcommand, NOT call _run_single
+        mock_run_single.assert_not_called()
+        ctx.command.get_command.assert_called_once_with(ctx, "list")
+        mock_subcmd.invoke.assert_called_once()
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_non_subcommand_task_runs_normally(self, mock_run_single):
+        """When tasks[0] is NOT a subcommand, run it as a normal task."""
+        import click
+
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+
+        ctx = MagicMock(spec=click.Context)
+        ctx.invoked_subcommand = None
+        ctx.command = MagicMock(spec=click.Group)
+        ctx.command.get_command.return_value = None  # "analyze code" is not a subcommand
+
+        delegate(
+            ctx=ctx,
+            tasks=["analyze code"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            json_output=False,
+        )
+
+        # Should run as a normal task
+        mock_run_single.assert_called_once()
+        assert "analyze code" in mock_run_single.call_args[1]["prompt"]
+
+
+# =============================================================================
+# Tests for --limit flag
+# =============================================================================
+
+
+class TestLimitFlag:
+    """Test that --limit passes --max-budget-usd to claude CLI."""
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_limit_adds_max_budget_flag(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """--limit should add --max-budget-usd to the claude command."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
+
+        _run_single(
+            prompt="analyze code",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+            limit=2.5,
+        )
+
+        cmd = mock_subprocess.run.call_args[0][0]
+        assert "--max-budget-usd" in cmd
+        budget_idx = cmd.index("--max-budget-usd")
+        assert cmd[budget_idx + 1] == "2.5"
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_no_limit_omits_max_budget_flag(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """Without --limit, --max-budget-usd should NOT appear."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
+
+        _run_single(
+            prompt="analyze code",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+        )
+
+        cmd = mock_subprocess.run.call_args[0][0]
+        assert "--max-budget-usd" not in cmd
