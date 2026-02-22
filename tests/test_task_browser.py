@@ -665,7 +665,7 @@ class TestScreenSwitching:
             assert "1" in str(bar.content)
             assert "2" in str(bar.content)
             assert "3" in str(bar.content)
-            assert "Activity" in str(bar.content)
+            assert "Docs" in str(bar.content)
             assert "Tasks" in str(bar.content)
             assert "Q&A" in str(bar.content)
 

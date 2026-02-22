@@ -155,7 +155,7 @@ class SearchScreen(HelpMixin, Widget):
         yield Static("Type to search...", id="search-status")
         # Navigation bar (fixed)
         yield Static(
-            "[dim]1[/dim] Activity │ [dim]2[/dim] Tasks │ "
+            "[dim]1[/dim] Docs │ [dim]2[/dim] Tasks │ "
             "[dim]Tab[/dim] mode │ [dim]Enter[/dim] view │ [dim]/[/dim] search",
             id="search-nav",
         )

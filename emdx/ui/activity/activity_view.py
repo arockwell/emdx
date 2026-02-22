@@ -1,6 +1,6 @@
-"""Activity View - Mission Control for EMDX.
+"""Activity View - Document Browser for EMDX.
 
-Flat table of recent documents and agent executions with a preview pane.
+Flat table of recent documents with a preview pane.
 No hierarchy, no groups — just a scannable list sorted by time.
 """
 
@@ -18,7 +18,7 @@ from textual.widgets import Log, RichLog, Static
 from emdx.utils.datetime_utils import parse_datetime
 
 from ..modals import HelpMixin
-from .activity_data import TIER_RECENT, TIER_RUNNING, TIER_TASKS, ActivityDataLoader
+from .activity_data import ActivityDataLoader
 from .activity_items import ActivityItem as ActivityItemBase
 from .activity_table import ActivityTable
 from .sparkline import sparkline
@@ -91,10 +91,10 @@ ActivityItem = ActivityItemBase
 
 
 class ActivityView(HelpMixin, Widget):
-    """Activity View - Mission Control for EMDX."""
+    """Activity View - Document Browser for EMDX."""
 
     HELP_TITLE = "Activity View"
-    """Mission Control — flat table of recent activity."""
+    """Document browser — flat table of recent documents."""
 
     class ViewDocument(Message):
         """Request to view a document fullscreen."""
@@ -110,20 +110,10 @@ class ActivityView(HelpMixin, Widget):
         ("f", "fullscreen", "Fullscreen"),
         ("r", "refresh", "Refresh"),
         ("i", "create_gist", "New Gist"),
-        ("x", "dismiss_execution", "Kill/Dismiss"),
-        ("d", "mark_done", "Mark Done"),
-        ("a", "mark_active", "Mark Active"),
-        ("b", "mark_blocked", "Mark Blocked"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
         ("c", "toggle_copy_mode", "Copy Mode"),
-        ("d", "mark_done", "Mark Done"),
-        ("a", "mark_active", "Mark Active"),
-        ("b", "mark_blocked", "Mark Blocked"),
-        ("R", "jump_running", "Jump Running"),
-        ("T", "jump_tasks", "Jump Tasks"),
-        ("D", "jump_docs", "Jump Docs"),
         ("w", "cycle_doc_type_filter", "Filter Docs"),
     ]
 
@@ -245,7 +235,6 @@ class ActivityView(HelpMixin, Widget):
         self._last_preview_key: tuple[str, int, str] | None = None
         self._preview_raw_content: str = ""
         self._copy_mode = False
-        self._zombies_cleaned = False
         self._refresh_in_progress = False
         self._data_loader = ActivityDataLoader()
 
@@ -270,7 +259,7 @@ class ActivityView(HelpMixin, Widget):
             with Vertical(id="activity-panel"):
                 # Top: Activity table
                 with Vertical(id="activity-list-section"):
-                    yield Static("ACTIVITY", id="activity-header")
+                    yield Static("DOCUMENTS", id="activity-header")
                     yield ActivityTable(id="activity-table")
                 # Bottom: Context panel (document metadata)
                 with Vertical(id="context-section"):
@@ -314,10 +303,8 @@ class ActivityView(HelpMixin, Widget):
     async def load_data(self, update_preview: bool = True) -> None:
         """Load activity data."""
         self.activity_items = await self._data_loader.load_all(
-            zombies_cleaned=self._zombies_cleaned,
             doc_type_filter=self.doc_type_filter,
         )
-        self._zombies_cleaned = True
 
         # Populate table
         table = self.query_one("#activity-table", ActivityTable)
@@ -331,8 +318,6 @@ class ActivityView(HelpMixin, Widget):
     async def _update_status_bar(self) -> None:
         """Update the status bar with current stats."""
         status_bar = self.query_one("#status-bar", Static)
-
-        active = len([item for item in self.activity_items if item.status == "running"])
 
         today = datetime.now().date()
         docs_today = len(
@@ -352,14 +337,6 @@ class ActivityView(HelpMixin, Widget):
             0.0,
         )
 
-        errors = len(
-            [
-                item
-                for item in self.activity_items
-                if item.status == "failed" and item.timestamp and item.timestamp.date() == today
-            ]
-        )
-
         week_data = self._get_week_activity_data()
         spark = sparkline([float(x) for x in week_data], width=7)
 
@@ -367,17 +344,20 @@ class ActivityView(HelpMixin, Widget):
 
         theme_indicator = get_theme_indicator(self.app.theme)
 
+        # Check for running delegates
+        active = 0
+        try:
+            from emdx.services.execution_service import get_running_count
+
+            active = get_running_count()
+        except Exception:
+            pass
+
         parts = []
         if active > 0:
             parts.append(f"[green]🟢 {active} Active[/green]")
-        else:
-            parts.append("[dim]⚪ 0 Active[/dim]")
-
         parts.append(f"📄 {docs_today} today")
         parts.append(format_cost(cost_today))
-
-        if errors > 0:
-            parts.append(f"[red]⚠️ {errors}[/red]")
 
         parts.append(f"[dim]{spark}[/dim]")
 
@@ -488,12 +468,12 @@ class ActivityView(HelpMixin, Widget):
 
         current_key = (item.item_type, item.item_id, item.status)
 
-        if not force and item.status != "running" and self._last_preview_key == current_key:
+        if not force and self._last_preview_key == current_key:
             return
 
         self._last_preview_key = current_key
 
-        # For documents, show content
+        # Show document content
         if item.doc_id and HAS_DOCS:
             try:
                 doc = doc_db.get_document(item.doc_id)
@@ -523,15 +503,6 @@ class ActivityView(HelpMixin, Widget):
             except Exception as e:
                 logger.error(f"Error loading document: {e}")
 
-        # For agent executions without doc_id, or tasks
-        if item.item_type in ("agent_execution", "task"):
-            content, header_text = await item.get_preview_content(doc_db)
-            if content:
-                self._render_markdown_preview(content)
-                show_markdown()
-                header.update(header_text)
-                return
-
         # Default
         preview.clear()
         preview.write(f"[italic]{item.title}[/italic]")
@@ -558,7 +529,7 @@ class ActivityView(HelpMixin, Widget):
             await self._show_document_context(item, context_content, context_header)
         else:
             context_header.update("DETAILS")
-            context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
+            context_content.write(f"[dim]{item.title}[/dim]")
 
     async def _show_document_context(
         self, item: ActivityItem, content: RichLog, header: Static
@@ -639,10 +610,8 @@ class ActivityView(HelpMixin, Widget):
         """Periodic refresh of data."""
         try:
             self.activity_items = await self._data_loader.load_all(
-                zombies_cleaned=self._zombies_cleaned,
                 doc_type_filter=self.doc_type_filter,
             )
-            self._zombies_cleaned = True
 
             table = self.query_one("#activity-table", ActivityTable)
             table.refresh_items(self.activity_items)
@@ -692,36 +661,6 @@ class ActivityView(HelpMixin, Widget):
         label = self.DOC_TYPE_FILTER_LABELS[self.doc_type_filter]
         self._show_notification(f"Filter: {label}")
         await self.load_data()
-
-    def action_jump_running(self) -> None:
-        """Jump cursor to the RUNNING section."""
-        self._jump_to_section(TIER_RUNNING)
-
-    def action_jump_tasks(self) -> None:
-        """Jump cursor to the TASKS section."""
-        self._jump_to_section(TIER_TASKS)
-
-    def action_jump_docs(self) -> None:
-        """Jump cursor to the DOCS section."""
-        self._jump_to_section(TIER_RECENT)
-
-    def _jump_to_section(self, tier: int) -> None:
-        """Jump cursor to first item in section, with header scrolled to top."""
-        from .activity_table import HEADER_PREFIX
-
-        table = self.query_one("#activity-table", ActivityTable)
-        header_key = f"{HEADER_PREFIX}{tier}"
-
-        for i, row in enumerate(table.ordered_rows):
-            if str(row.key.value) == header_key:
-                # Scroll so the header is at the top
-                table.scroll_to(0, i, animate=False)
-                # Select the first item after the header
-                if i + 1 < table.row_count:
-                    table.move_cursor(row=i + 1)
-                else:
-                    table.move_cursor(row=i)
-                return
 
     async def on_activity_table_item_highlighted(
         self, event: ActivityTable.ItemHighlighted
@@ -775,88 +714,6 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error creating gist: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
-
-    # Execution management
-
-    async def action_dismiss_execution(self) -> None:
-        """Kill or dismiss a stale/running execution."""
-        item = self._get_selected_item()
-        if item is None:
-            self._show_notification("No item selected", is_error=True)
-            return
-
-        if item.item_type != "agent_execution":
-            # x is a no-op for tasks and documents
-            return
-
-        if item.status != "running":
-            self._show_notification("Execution is not running", is_error=True)
-            return
-
-        try:
-            from emdx.models.executions import (
-                get_execution,
-                update_execution_status,
-            )
-
-            execution = get_execution(item.item_id)
-            if not execution:
-                self._show_notification(f"Execution #{item.item_id} not found", is_error=True)
-                return
-
-            if execution.pid:
-                try:
-                    import psutil
-
-                    proc = psutil.Process(execution.pid)
-                    proc.terminate()
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-
-            update_execution_status(item.item_id, "failed", exit_code=-6)
-            self._show_notification(f"Dismissed execution #{item.item_id}")
-            await self._refresh_data()
-
-        except Exception as e:
-            logger.error(f"Error dismissing execution: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-    # Task status actions
-
-    async def _set_task_status(self, new_status: str) -> None:
-        """Change status of the selected task and refresh."""
-        item = self._get_selected_item()
-        if item is None:
-            self._show_notification("No item selected", is_error=True)
-            return
-
-        if item.item_type != "task":
-            return
-
-        if item.status == new_status:
-            return
-
-        try:
-            from emdx.models.tasks import update_task
-
-            update_task(item.item_id, status=new_status)
-            self._show_notification(f"Task #{item.item_id} → {new_status}")
-            await self._refresh_data()
-        except Exception as e:
-            logger.error(f"Failed to update task: {e}")
-            self._show_notification(f"Error: {e}", is_error=True)
-
-    async def action_mark_done(self) -> None:
-        """Mark selected task as done."""
-        await self._set_task_status("done")
-
-    async def action_mark_active(self) -> None:
-        """Mark selected task as active."""
-        await self._set_task_status("active")
-
-    async def action_mark_blocked(self) -> None:
-        """Mark selected task as blocked."""
-        await self._set_task_status("blocked")
 
     def _show_notification(self, message: str, is_error: bool = False) -> None:
         """Show a notification message."""

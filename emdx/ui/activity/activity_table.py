@@ -1,7 +1,6 @@
 """ActivityTable — flat DataTable widget for the activity view.
 
-Replaces the hierarchical Tree widget with a simple table showing
-documents, agent executions, and tasks in a flat list with section headers.
+Simple table showing documents in a flat list.
 
 Columns: Icon | Title | Time | ID
 """
@@ -14,23 +13,12 @@ from textual.events import Click
 from textual.message import Message
 from textual.widgets import DataTable
 
-from .activity_data import TIER_RECENT, TIER_RUNNING, TIER_TASKS
-from .activity_items import ActivityItem, DocumentItem, TaskItem
+from .activity_items import ActivityItem, DocumentItem
 
 logger = logging.getLogger(__name__)
 
 # Type alias for the key that uniquely identifies an item
 ItemKey = tuple[str, int]  # (item_type, item_id)
-
-# Row key prefixes for section headers
-HEADER_PREFIX = "header:"
-
-# Section header labels
-SECTION_LABELS = {
-    TIER_RUNNING: "RUNNING",
-    TIER_TASKS: "TASKS",
-    TIER_RECENT: "DOCS",
-}
 
 
 def _item_key(item: ActivityItem) -> ItemKey:
@@ -38,21 +26,11 @@ def _item_key(item: ActivityItem) -> ItemKey:
     return (item.item_type, item.item_id)
 
 
-def _get_tier(item: ActivityItem) -> int:
-    """Determine which tier an item belongs to."""
-    if item.item_type == "agent_execution" and item.status == "running":
-        return TIER_RUNNING
-    if item.item_type == "task" and item.status in ("open", "active"):
-        return TIER_TASKS
-    return TIER_RECENT
-
-
 class ActivityTable(DataTable[str | Text]):
-    """Flat table widget for the activity stream.
+    """Flat table widget for the document browser.
 
     Each row maps to an ActivityItem. The table preserves cursor
     position across periodic refreshes by tracking item keys.
-    Section headers separate tiers (RUNNING, TASKS, RECENT).
     """
 
     DOUBLE_CLICK_THRESHOLD = 0.4
@@ -75,7 +53,6 @@ class ActivityTable(DataTable[str | Text]):
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]
         self._items: list[ActivityItem] = []
         self._key_to_item: dict[ItemKey, ActivityItem] = {}
-        self._header_keys: set[str] = set()
         self._last_click_time: float = 0.0
         self._last_click_row: str | None = None
         self.cursor_type = "row"
@@ -89,27 +66,11 @@ class ActivityTable(DataTable[str | Text]):
         self.add_column("time", key="time", width=4)
         self.add_column("id", key="id", width=7)
 
-    def _get_icon(self, item: ActivityItem) -> str:
-        """Get the display icon for an item."""
-        if item.item_type == "task":
-            return item.type_icon
-        if item.status in ("running", "failed", "pending", "queued"):
-            return item.status_icon
-        return item.type_icon
-
     def _format_time(self, item: ActivityItem) -> str:
         """Format timestamp as compact relative time."""
         from .activity_view import format_time_ago
 
         return format_time_ago(item.timestamp)
-
-    def _get_id_str(self, item: ActivityItem) -> str:
-        """Get the ID string for an item."""
-        if item.item_type == "document":
-            return f"#{item.doc_id}" if item.doc_id else ""
-        if item.item_type == "task":
-            return f"T{item.item_id}"
-        return f"#{item.item_id}" if item.item_id else ""
 
     def _row_key(self, item: ActivityItem) -> str:
         """Generate a string row key from an item key."""
@@ -117,53 +78,24 @@ class ActivityTable(DataTable[str | Text]):
         return f"{key[0]}:{key[1]}"
 
     def populate(self, items: list[ActivityItem]) -> None:
-        """Full load: clear table and add all items with section headers."""
+        """Full load: clear table and add all items."""
         self._items = items
         self._key_to_item = {_item_key(item): item for item in items}
-        self._header_keys = set()
         self.clear()
 
-        current_tier: int | None = None
-
         for item in items:
-            tier = _get_tier(item)
-
-            # Insert section header when tier changes
-            if tier != current_tier:
-                current_tier = tier
-                label = SECTION_LABELS.get(tier, "OTHER")
-                header_key = f"{HEADER_PREFIX}{tier}"
-                self._header_keys.add(header_key)
-                self.add_row(
-                    "",
-                    Text(label, style="bold"),
-                    Text(""),
-                    Text(""),
-                    key=header_key,
-                )
-
             self._add_item_row(item)
 
     def _add_item_row(self, item: ActivityItem) -> None:
         """Add a single item row to the table."""
-        icon = self._get_icon(item)
+        icon = item.type_icon
         title = item.title.replace("\n", " ").strip()
         if len(title) > 80:
             title = title[:77] + "..."
         time_str = self._format_time(item)
-        id_str = self._get_id_str(item)
+        id_str = f"#{item.doc_id}" if item.doc_id else ""
 
-        # Style based on status
-        if item.status == "running":
-            title_text = Text(title, style="bold")
-        elif item.item_type == "task" and item.status == "active":
-            title_text = Text(title, style="green")
-        elif item.item_type == "task" and item.status == "open":
-            title_text = Text(title)
-        elif isinstance(item, TaskItem) and item.status in ("done", "failed"):
-            title_text = Text(title, style="dim")
-        else:
-            title_text = Text(title)
+        title_text = Text(title)
 
         # Add doc_type badge for wiki documents
         if isinstance(item, DocumentItem) and item.doc_type == "wiki":
@@ -210,17 +142,14 @@ class ActivityTable(DataTable[str | Text]):
         for item in items:
             row_key = self._row_key(item)
             try:
-                icon = self._get_icon(item)
+                icon = item.type_icon
                 title = item.title.replace("\n", " ").strip()
                 if len(title) > 80:
                     title = title[:77] + "..."
                 time_str = self._format_time(item)
-                id_str = self._get_id_str(item)
+                id_str = f"#{item.doc_id}" if item.doc_id else ""
 
-                if item.status == "running":
-                    title_text = Text(title, style="bold")
-                else:
-                    title_text = Text(title)
+                title_text = Text(title)
 
                 self.update_cell(row_key, "icon", icon)
                 self.update_cell(row_key, "title", title_text)
@@ -243,9 +172,6 @@ class ActivityTable(DataTable[str | Text]):
             if self.cursor_row is None or self.row_count == 0:
                 return None
             row_key = str(self.ordered_rows[self.cursor_row].key.value)
-            # Skip section headers
-            if row_key.startswith(HEADER_PREFIX):
-                return None
             # Parse key back to item_type:item_id
             parts = row_key.split(":", 1)
             if len(parts) == 2:
@@ -260,17 +186,8 @@ class ActivityTable(DataTable[str | Text]):
         """Find row index for a document ID."""
         for i, row in enumerate(self.ordered_rows):
             key_str = str(row.key.value)
-            if key_str.startswith(HEADER_PREFIX):
-                continue
             if key_str == f"document:{doc_id}":
                 return i
-            # Also check agent executions that produced this doc
-            parts = key_str.split(":", 1)
-            if len(parts) == 2:
-                item_key = (parts[0], int(parts[1]))
-                item = self._key_to_item.get(item_key)
-                if item and item.doc_id == doc_id:
-                    return i
         return None
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
@@ -298,10 +215,6 @@ class ActivityTable(DataTable[str | Text]):
             row_key = str(self.ordered_rows[row_index].key.value)
         except (IndexError, AttributeError):
             await super()._on_click(event)
-            return
-
-        # Ignore clicks on section headers
-        if row_key.startswith(HEADER_PREFIX):
             return
 
         time_since_last = current_time - self._last_click_time

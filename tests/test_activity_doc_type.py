@@ -281,16 +281,6 @@ def mock_activity_data() -> Generator[dict[str, MagicMock], None, None]:
         patch(f"{_DATA_LOADER_BASE}.HAS_DOCS", True),
         patch(f"{_VIEW_BASE}.HAS_DOCS", True),
         patch(f"{_VIEW_BASE}.doc_db") as mock_doc_db,
-        patch(
-            "emdx.ui.activity.activity_data.ActivityDataLoader._load_agent_executions",
-            return_value=[],
-        ),
-        patch(
-            "emdx.ui.activity.activity_data.ActivityDataLoader._load_tasks",
-            return_value=[],
-        ),
-        patch("emdx.ui.activity.activity_view.LogStream", create=True),
-        patch("emdx.ui.activity.activity_view.LogStreamSubscriber", create=True),
         patch("emdx.ui.themes.get_theme_indicator", return_value=""),
     ):
         mock_svc.list_recent_documents.return_value = [
