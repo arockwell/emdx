@@ -13,7 +13,7 @@ import time
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import typer
 from rich import box
@@ -1637,78 +1637,76 @@ def wiki_generate(
         emdx maintain wiki generate --all -l 50      # Generate up to 50
         emdx maintain wiki generate --audience me    # Personal wiki mode
     """
-    from ..services.wiki_synthesis_service import generate_article, generate_wiki
+    import time as _time
 
-    if topic_id is not None:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Generating article...", total=None)
-            result = generate_article(
-                topic_id=topic_id,
-                audience=audience,
-                model=model,
-                dry_run=dry_run,
-            )
-            progress.update(task, completed=True)
-
-        if result.skipped:
-            console.print(f"[yellow]Skipped: {result.skip_reason}[/yellow]")
-        else:
-            console.print(
-                f"[green]Generated article for '{result.topic_label}'[/green]\n"
-                f"  Document: #{result.document_id}\n"
-                f"  Tokens: {result.input_tokens:,} in / {result.output_tokens:,} out\n"
-                f"  Cost: ${result.cost_usd:.4f}"
-            )
-            if result.warnings:
-                for w in result.warnings:
-                    console.print(f"  [yellow]⚠ {w}[/yellow]")
-        return
+    from ..services.wiki_clustering_service import get_topics as _get_topics
+    from ..services.wiki_synthesis_service import generate_article
 
     if not all_topics and topic_id is None:
         console.print("[red]Provide a topic ID or use --all[/red]")
         raise typer.Exit(1)
 
-    topic_ids = None  # all topics
+    # Build topic list
+    topic_list: list[int]
+    if topic_id is not None:
+        topic_list = [topic_id]
+    else:
+        topics_data = _get_topics()
+        topic_list = [cast(int, t["id"]) for t in topics_data]
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Generating wiki...", total=None)
-        batch_result = generate_wiki(
+    generated = 0
+    skipped = 0
+    total_input = 0
+    total_output = 0
+    total_cost = 0.0
+    batch_start = _time.time()
+
+    for i, tid in enumerate(topic_list):
+        if generated >= limit:
+            break
+
+        label = f"[{i + 1}/{len(topic_list)}]"
+        console.print(f"  {label} topic {tid}...", end=" ")
+        start = _time.time()
+
+        result = generate_article(
+            topic_id=tid,
             audience=audience,
             model=model,
-            limit=limit,
             dry_run=dry_run,
-            topic_ids=topic_ids,
         )
-        progress.update(task, completed=True)
+        elapsed = _time.time() - start
+
+        if result.skipped:
+            skipped += 1
+            console.print(f"[dim]{result.skip_reason} ({elapsed:.1f}s)[/dim]")
+        else:
+            generated += 1
+            console.print(
+                f"[green]#{result.document_id}[/green] "
+                f"'{result.topic_label[:40]}' "
+                f"({result.input_tokens:,}+{result.output_tokens:,} tok, "
+                f"${result.cost_usd:.4f}, {elapsed:.1f}s)"
+            )
+            if result.warnings:
+                for w in result.warnings:
+                    console.print(f"    [yellow]⚠ {w}[/yellow]")
+
+        total_input += result.input_tokens
+        total_output += result.output_tokens
+        total_cost += result.cost_usd
+
+    total_elapsed = _time.time() - batch_start
+    action = "Estimated" if dry_run else "Generated"
+    console.print(
+        f"\n[bold]{action} {generated} article(s)[/bold] "
+        f"(skipped {skipped}) in {total_elapsed:.1f}s\n"
+        f"  Total tokens: {total_input:,} in / {total_output:,} out\n"
+        f"  Total cost:   ${total_cost:.4f}"
+    )
 
     if dry_run:
-        # In dry-run, count "dry run" skips as estimated articles
-        estimated = sum(1 for r in batch_result.results if r.skip_reason == "dry run")
-        truly_skipped = batch_result.articles_skipped - estimated
-        console.print(
-            f"\n[bold]Estimated {estimated} article(s)[/bold]"
-            + (f" (skipped {truly_skipped})" if truly_skipped else "")
-            + f"\n  Total tokens: {batch_result.total_input_tokens:,} in / "
-            f"{batch_result.total_output_tokens:,} out\n"
-            f"  Total cost:   ${batch_result.total_cost_usd:.4f}"
-        )
         console.print("\n[dim]Remove --dry-run to actually generate articles[/dim]")
-    else:
-        console.print(
-            f"\n[bold]Generated {batch_result.articles_generated} article(s)[/bold] "
-            f"(skipped {batch_result.articles_skipped})\n"
-            f"  Total tokens: {batch_result.total_input_tokens:,} in / "
-            f"{batch_result.total_output_tokens:,} out\n"
-            f"  Total cost:   ${batch_result.total_cost_usd:.4f}"
-        )
 
 
 @wiki_app.command(name="entities")

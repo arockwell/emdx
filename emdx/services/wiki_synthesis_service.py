@@ -550,6 +550,7 @@ def generate_article(
         top_entities = []
 
     # Step 1: PREPARE
+    logger.info("[topic %d] PREPARE — fetching %s", topic_id, topic_label)
     doc_ids = get_topic_docs(topic_id)
     if not doc_ids:
         return WikiArticleResult(
@@ -580,6 +581,14 @@ def generate_article(
             skip_reason="All source documents empty after filtering",
         )
 
+    total_chars = sum(s.char_count for s in sources)
+    logger.info(
+        "[topic %d] PREPARE — %d sources, %d chars total",
+        topic_id,
+        len(sources),
+        total_chars,
+    )
+
     # Check staleness — skip if source hash unchanged
     source_hash = _compute_source_hash(sources)
     with db.get_connection() as conn:
@@ -603,6 +612,7 @@ def generate_article(
 
     # Step 2: ROUTE
     strategy = _route_strategy(sources)
+    logger.info("[topic %d] ROUTE — strategy=%s", topic_id, strategy)
 
     # Step 3: OUTLINE
     outline = _build_outline(
@@ -612,10 +622,15 @@ def generate_article(
         source_count=len(sources),
         strategy=strategy,
     )
+    logger.info(
+        "[topic %d] OUTLINE — title='%s', %d sections",
+        topic_id,
+        outline.suggested_title,
+        len(outline.section_hints),
+    )
 
     if dry_run:
         # Estimate cost without calling LLM
-        total_chars = sum(s.char_count for s in sources)
         est_input_tokens = total_chars // 4 + 500
         est_output_tokens = min(est_input_tokens // 2, 4000)
 
@@ -644,6 +659,12 @@ def generate_article(
 
     # Step 4: WRITE
     used_model = model or DEFAULT_MODEL
+    logger.info(
+        "[topic %d] WRITE — synthesizing with %s (%s)...",
+        topic_id,
+        used_model.split("-")[1] if "-" in used_model else used_model,
+        strategy,
+    )
     if strategy == "hierarchical":
         content, input_tokens, output_tokens, cost_usd = _synthesize_hierarchical(
             outline, sources, audience, model
@@ -652,9 +673,20 @@ def generate_article(
         content, input_tokens, output_tokens, cost_usd = _synthesize_article(
             outline, sources, audience, model
         )
+    logger.info(
+        "[topic %d] WRITE — done, %d chars output, %d+%d tokens",
+        topic_id,
+        len(content),
+        input_tokens,
+        output_tokens,
+    )
 
     # Step 5: VALIDATE
     content, post_warnings = _validate_article(content)
+    if post_warnings:
+        logger.warning("[topic %d] VALIDATE — %s", topic_id, ", ".join(post_warnings))
+    else:
+        logger.info("[topic %d] VALIDATE — clean", topic_id)
 
     # Step 6: SAVE
     doc_id, article_id = _save_article(
@@ -669,8 +701,8 @@ def generate_article(
     )
 
     logger.info(
-        "Generated wiki article for '%s': doc #%d, %d input / %d output tokens, $%.4f",
-        topic_label,
+        "[topic %d] SAVE — doc #%d, %d+%d tokens, $%.4f",
+        topic_id,
         doc_id,
         input_tokens,
         output_tokens,
