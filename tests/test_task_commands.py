@@ -22,6 +22,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_simple_task(self, mock_tasks):
         mock_tasks.create_task.return_value = 1
+        mock_tasks.get_task.return_value = {
+            "id": 1,
+            "title": "Fix the auth bug",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Fix the auth bug"])
         assert result.exit_code == 0
         out = _out(result)
@@ -37,8 +43,29 @@ class TestTaskAdd:
         )
 
     @patch("emdx.commands.tasks.tasks")
+    def test_add_task_shows_epic_key(self, mock_tasks):
+        mock_tasks.create_task.return_value = 10
+        mock_tasks.get_task.return_value = {
+            "id": 10,
+            "title": "FEAT-3: Add auth",
+            "epic_key": "FEAT",
+            "epic_seq": 3,
+        }
+        result = runner.invoke(app, ["add", "Add auth", "--cat", "FEAT"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Task FEAT-3" in out
+        assert "Add auth" in out
+
+    @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_doc_id(self, mock_tasks):
         mock_tasks.create_task.return_value = 2
+        mock_tasks.get_task.return_value = {
+            "id": 2,
+            "title": "Implement this",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Implement this", "--doc", "42"])
         assert result.exit_code == 0
         out = _out(result)
@@ -57,6 +84,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_doc_id_short_flag(self, mock_tasks):
         mock_tasks.create_task.return_value = 3
+        mock_tasks.get_task.return_value = {
+            "id": 3,
+            "title": "Another task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Another task", "-d", "99"])
         assert result.exit_code == 0
         out = _out(result)
@@ -74,6 +107,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_description(self, mock_tasks):
         mock_tasks.create_task.return_value = 4
+        mock_tasks.get_task.return_value = {
+            "id": 4,
+            "title": "Refactor tests",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(
             app, ["add", "Refactor tests", "--description", "Split into unit and integration"]
         )
@@ -93,6 +132,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_description_short_flag(self, mock_tasks):
         mock_tasks.create_task.return_value = 5
+        mock_tasks.get_task.return_value = {
+            "id": 5,
+            "title": "Task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Task", "-D", "Details here"])
         assert result.exit_code == 0
         mock_tasks.create_task.assert_called_once_with(
@@ -107,6 +152,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_all_options(self, mock_tasks):
         mock_tasks.create_task.return_value = 6
+        mock_tasks.get_task.return_value = {
+            "id": 6,
+            "title": "Full task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Full task", "-d", "10", "-D", "Full description"])
         assert result.exit_code == 0
         out = _out(result)
@@ -906,6 +957,12 @@ class TestTaskAddWithAfter:
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_single_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 10
+        mock_tasks.get_task.return_value = {
+            "id": 10,
+            "title": "Deploy",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Deploy", "--after", "5"])
         assert result.exit_code == 0
         out = _out(result)
@@ -923,6 +980,12 @@ class TestTaskAddWithAfter:
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_multiple_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 20
+        mock_tasks.get_task.return_value = {
+            "id": 20,
+            "title": "Release",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Release", "--after", "10", "--after", "11"])
         assert result.exit_code == 0
         out = _out(result)
