@@ -29,6 +29,7 @@ class DocumentRow(TypedDict):
     relationship: str | None
     archived_at: datetime | None
     stage: str | None
+    doc_type: str
 
 
 class DocumentListItem(TypedDict):

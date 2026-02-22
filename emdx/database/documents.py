@@ -45,16 +45,26 @@ def save_document(
     project: str | None = None,
     tags: list[str] | None = None,
     parent_id: int | None = None,
+    doc_type: str | None = None,
 ) -> int:
     """Save a document to the knowledge base"""
     with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            INSERT INTO documents (title, content, project, parent_id)
-            VALUES (?, ?, ?, ?)
-        """,
-            (title, content, project, parent_id),
-        )
+        if doc_type is not None:
+            cursor = conn.execute(
+                """
+                INSERT INTO documents (title, content, project, parent_id, doc_type)
+                VALUES (?, ?, ?, ?, ?)
+            """,
+                (title, content, project, parent_id, doc_type),
+            )
+        else:
+            cursor = conn.execute(
+                """
+                INSERT INTO documents (title, content, project, parent_id)
+                VALUES (?, ?, ?, ?)
+            """,
+                (title, content, project, parent_id),
+            )
 
         # Get lastrowid before commit (required by SQLite)
         doc_id = cursor.lastrowid

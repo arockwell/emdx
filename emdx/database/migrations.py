@@ -2593,7 +2593,35 @@ def migration_045_add_wiki_tables(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def migration_046_add_wiki_runs(conn: sqlite3.Connection) -> None:
+def migration_046_add_doc_type(conn: sqlite3.Connection) -> None:
+    """Add doc_type column to documents table.
+
+    Classifies documents as 'user' (default), 'wiki', 'entity-page',
+    or 'synthesis'. Backfills existing wiki-article tagged docs to
+    doc_type='wiki'. Default views can filter on doc_type='user'.
+    """
+    cursor = conn.cursor()
+
+    # Add the column with default 'user'
+    cursor.execute("ALTER TABLE documents ADD COLUMN doc_type TEXT NOT NULL DEFAULT 'user'")
+
+    # Index for filtering by doc_type
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_documents_doc_type ON documents(doc_type)")
+
+    # Backfill: set doc_type='wiki' for docs tagged 'wiki-article'
+    cursor.execute(
+        "UPDATE documents SET doc_type = 'wiki' "
+        "WHERE id IN ("
+        "  SELECT dt.document_id FROM document_tags dt"
+        "  JOIN tags t ON dt.tag_id = t.id"
+        "  WHERE t.name = 'wiki-article'"
+        ")"
+    )
+
+    conn.commit()
+
+
+def migration_047_add_wiki_runs(conn: sqlite3.Connection) -> None:
     """Add wiki_runs table for tracking wiki generation runs."""
     cursor = conn.cursor()
 
@@ -2666,7 +2694,8 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (43, "Add document links table", migration_043_add_document_links),
     (44, "Add document entities table", migration_044_add_document_entities),
     (45, "Add wiki system tables", migration_045_add_wiki_tables),
-    (46, "Add wiki runs tracking", migration_046_add_wiki_runs),
+    (46, "Add doc_type column to documents", migration_046_add_doc_type),
+    (47, "Add wiki runs tracking", migration_047_add_wiki_runs),
 ]
 
 
