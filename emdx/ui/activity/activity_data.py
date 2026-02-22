@@ -35,8 +35,16 @@ TIER_RECENT = 2
 class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
-    async def load_all(self, zombies_cleaned: bool = True) -> list[ActivityItem]:
+    async def load_all(
+        self,
+        zombies_cleaned: bool = True,
+        doc_type_filter: str = "all",
+    ) -> list[ActivityItem]:
         """Load all activity items, deduplicate, and sort into three tiers.
+
+        Args:
+            zombies_cleaned: Whether zombie processes have been cleaned.
+            doc_type_filter: Filter documents by type: "user", "wiki", or "all".
 
         Tier 1 (top): Running executions — sorted by start time desc
         Tier 2: Ready/active tasks — sorted by priority then created_at
@@ -48,7 +56,7 @@ class ActivityDataLoader:
         """
         docs: list[ActivityItem] = []
         if HAS_DOCS:
-            docs = await self._load_documents()
+            docs = await self._load_documents(doc_type_filter=doc_type_filter)
 
         executions = await self._load_agent_executions()
         tasks = await self._load_tasks()
@@ -105,8 +113,12 @@ class ActivityDataLoader:
         all_items.sort(key=sort_key)
         return all_items
 
-    async def _load_documents(self) -> list[ActivityItem]:
-        """Load recent documents (top-level only, superseded are hidden)."""
+    async def _load_documents(self, doc_type_filter: str = "all") -> list[ActivityItem]:
+        """Load recent documents (top-level only, superseded are hidden).
+
+        Args:
+            doc_type_filter: Filter by doc_type: "user", "wiki", or "all".
+        """
         items: list[ActivityItem] = []
 
         try:
@@ -121,6 +133,11 @@ class ActivityDataLoader:
                 doc_id = doc["id"]
                 created = doc.get("created_at")
                 title = doc.get("title", "")
+                doc_type = doc.get("doc_type", "user") or "user"
+
+                # Apply doc_type filter
+                if doc_type_filter != "all" and doc_type != doc_type_filter:
+                    continue
 
                 item = DocumentItem(
                     item_id=doc_id,
@@ -128,6 +145,7 @@ class ActivityDataLoader:
                     status="completed",
                     timestamp=parse_datetime(created) or datetime.now(),
                     doc_id=doc_id,
+                    doc_type=doc_type,
                 )
 
                 items.append(item)

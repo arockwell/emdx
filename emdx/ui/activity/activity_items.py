@@ -54,6 +54,7 @@ class DocumentItem(ActivityItem):
     """A document in the activity stream."""
 
     doc_id: int = 0
+    doc_type: str = "user"
 
     @property
     def item_type(self) -> str:
@@ -61,6 +62,8 @@ class DocumentItem(ActivityItem):
 
     @property
     def type_icon(self) -> str:
+        if self.doc_type == "wiki":
+            return "📚"
         return "📄"
 
     @property

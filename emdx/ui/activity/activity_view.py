@@ -118,9 +118,13 @@ class ActivityView(HelpMixin, Widget):
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
         ("c", "toggle_copy_mode", "Copy Mode"),
+        ("d", "mark_done", "Mark Done"),
+        ("a", "mark_active", "Mark Active"),
+        ("b", "mark_blocked", "Mark Blocked"),
         ("R", "jump_running", "Jump Running"),
         ("T", "jump_tasks", "Jump Tasks"),
         ("D", "jump_docs", "Jump Docs"),
+        ("w", "cycle_doc_type_filter", "Filter Docs"),
     ]
 
     DEFAULT_CSS = """
@@ -220,10 +224,19 @@ class ActivityView(HelpMixin, Widget):
     }
     """
 
+    # Doc type filter cycle order
+    DOC_TYPE_FILTERS = ("user", "wiki", "all")
+    DOC_TYPE_FILTER_LABELS = {
+        "user": "📄 User Docs",
+        "wiki": "📚 Wiki Only",
+        "all": "🔀 All Docs",
+    }
+
     # Reactive for notification
     notification_text = reactive("")
     notification_visible = reactive(False)
     notification_is_error = reactive(False)
+    doc_type_filter: reactive[str] = reactive("user")
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -302,6 +315,7 @@ class ActivityView(HelpMixin, Widget):
         """Load activity data."""
         self.activity_items = await self._data_loader.load_all(
             zombies_cleaned=self._zombies_cleaned,
+            doc_type_filter=self.doc_type_filter,
         )
         self._zombies_cleaned = True
 
@@ -366,6 +380,9 @@ class ActivityView(HelpMixin, Widget):
             parts.append(f"[red]⚠️ {errors}[/red]")
 
         parts.append(f"[dim]{spark}[/dim]")
+
+        filter_label = self.DOC_TYPE_FILTER_LABELS.get(self.doc_type_filter, "All")
+        parts.append(f"[dim]{filter_label}[/dim]")
 
         parts.append(datetime.now().strftime("%H:%M"))
         parts.append(f"[dim]{theme_indicator}[/dim]")
@@ -567,6 +584,9 @@ class ActivityView(HelpMixin, Widget):
                 tags = []
 
             meta_line1 = []
+            doc_type = doc.get("doc_type", "user") or "user"
+            if doc_type == "wiki":
+                meta_line1.append("[bold magenta]wiki[/bold magenta]")
             if doc.get("project"):
                 meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
             if doc.get("created_at"):
@@ -620,6 +640,7 @@ class ActivityView(HelpMixin, Widget):
         try:
             self.activity_items = await self._data_loader.load_all(
                 zombies_cleaned=self._zombies_cleaned,
+                doc_type_filter=self.doc_type_filter,
             )
             self._zombies_cleaned = True
 
@@ -662,6 +683,15 @@ class ActivityView(HelpMixin, Widget):
     def action_focus_prev(self) -> None:
         """Focus previous pane."""
         pass
+
+    async def action_cycle_doc_type_filter(self) -> None:
+        """Cycle document type filter: user -> wiki -> all -> user."""
+        current_idx = self.DOC_TYPE_FILTERS.index(self.doc_type_filter)
+        next_idx = (current_idx + 1) % len(self.DOC_TYPE_FILTERS)
+        self.doc_type_filter = self.DOC_TYPE_FILTERS[next_idx]
+        label = self.DOC_TYPE_FILTER_LABELS[self.doc_type_filter]
+        self._show_notification(f"Filter: {label}")
+        await self.load_data()
 
     def action_jump_running(self) -> None:
         """Jump cursor to the RUNNING section."""
