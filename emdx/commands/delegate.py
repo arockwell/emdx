@@ -219,7 +219,11 @@ _PR_URL_RE = re.compile(r"https://github\.com/[^/]+/[^/]+/pull/\d+")
 _BRANCH_PUSH_RE = re.compile(r'(?:origin/|pushed to |branch [\'"`])([a-zA-Z0-9_./-]+)')
 
 
-def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) -> str:
+def _make_pr_instruction(
+    branch_name: str | None = None,
+    draft: bool = False,
+    epic_id: str | None = None,
+) -> str:
     """Build a structured PR instruction for the agent.
 
     When branch_name is provided, the instruction tells the agent exactly
@@ -228,26 +232,39 @@ def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) ->
     Args:
         branch_name: The branch name to use (if pre-created).
         draft: Whether to create the PR as a draft (default True).
+        epic_id: Epic identifier like "ARCH-11" to include in PR title.
     """
     draft_flag = " --draft" if draft else ""
+    title_hint = " (<epic_id> suffix)" if not epic_id else f" ({epic_id})"
+    title_example = (
+        f'"<short title>{title_hint}"'
+        if not epic_id
+        else (f'"feat: <short description> ({epic_id})"')
+    )
     if not branch_name:
         # Return modified generic instruction based on draft flag
         return (
-            "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
+            "\n\nAfter saving your output, if you made any code changes,"
+            " create a pull request:\n"
             "1. Create a new branch with a descriptive name\n"
             "2. Commit your changes with a clear message\n"
-            f'3. Push and create a PR using: gh pr create{draft_flag} --title "..." '
-            '--body "..."\n'
+            f"3. Push and create a PR using:"
+            f" gh pr create{draft_flag} --title {title_example}"
+            ' --body "..."\n'
             "4. Report the PR URL that was created."
         )
     return (
-        "\n\nAfter saving your output, if you made any code changes, create a pull request:\n"
-        f"1. You are already on branch `{branch_name}` — commit your changes there\n"
+        "\n\nAfter saving your output, if you made any code changes,"
+        " create a pull request:\n"
+        f"1. You are already on branch `{branch_name}`"
+        " — commit your changes there\n"
         "2. Write a clear commit message summarizing the changes\n"
         f"3. Push: git push -u origin {branch_name}\n"
-        f'4. Create the PR: gh pr create{draft_flag} --title "<short title>" '
-        '--body "<description of changes>"\n'
-        "5. Report the PR URL in your output (e.g. https://github.com/.../pull/123)"
+        f"4. Create the PR:"
+        f" gh pr create{draft_flag} --title {title_example}"
+        ' --body "<description of changes>"\n'
+        "5. Report the PR URL in your output"
+        " (e.g. https://github.com/.../pull/123)"
     )
 
 
@@ -564,10 +581,25 @@ def _run_single(
     # Create execution record
     execution_id = _safe_create_execution(doc_title, working_dir, task_id)
 
+    # Look up the task's epic identifier (e.g. "ARCH-11") for PR titles
+    epic_id: str | None = None
+    if pr and task_id is not None:
+        try:
+            from ..models.tasks import get_task as _get_task
+
+            task_row = _get_task(task_id)
+            if task_row:
+                ek = task_row.get("epic_key")
+                es = task_row.get("epic_seq")
+                if ek and es is not None:
+                    epic_id = f"{ek}-{es}"
+        except Exception:
+            pass  # Never fail delegate for metadata lookup
+
     # Build the full prompt with PR/branch instructions appended
     full_prompt = prompt
     if pr:
-        full_prompt += _make_pr_instruction(pr_branch, draft=draft)
+        full_prompt += _make_pr_instruction(pr_branch, draft=draft, epic_id=epic_id)
     elif branch:
         full_prompt += _make_branch_instruction(pr_branch)
 
