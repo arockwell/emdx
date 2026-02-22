@@ -276,6 +276,8 @@ emdx status --stats --detailed         # Detailed stats with project breakdown
 emdx maintain compact --dry-run        # Find similar docs to merge
 emdx maintain index                    # Build/update embedding index
 emdx maintain link --all               # Auto-link related documents
+# Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
+# Configure via `maintain.auto_link_on_save` setting.
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
