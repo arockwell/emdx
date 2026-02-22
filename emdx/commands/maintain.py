@@ -2759,6 +2759,173 @@ def wiki_split(
     print(f"  Remaining in original: {len(remaining_doc_ids)} doc(s)")
 
 
+@wiki_app.command(name="sources")
+def wiki_sources(
+    topic_id: int = typer.Argument(..., help="Topic ID to list sources for"),
+) -> None:
+    """List source documents for a wiki topic with weights and status.
+
+    Shows each source document's relevance_score and whether it is
+    included (is_primary=1) or excluded (is_primary=0).
+
+    Examples:
+        emdx maintain wiki sources 5
+    """
+    from ..database import db as _db
+
+    with _db.get_connection() as conn:
+        topic_row = conn.execute(
+            "SELECT topic_label FROM wiki_topics WHERE id = ?",
+            (topic_id,),
+        ).fetchone()
+        if not topic_row:
+            print(f"Topic {topic_id} not found")
+            raise typer.Exit(1)
+
+        rows = conn.execute(
+            "SELECT m.document_id, d.title, m.relevance_score, m.is_primary "
+            "FROM wiki_topic_members m "
+            "JOIN documents d ON m.document_id = d.id "
+            "WHERE m.topic_id = ? "
+            "ORDER BY m.relevance_score DESC, m.document_id",
+            (topic_id,),
+        ).fetchall()
+
+    label = topic_row[0]
+    print(f"Sources for topic {topic_id} ({label}):")
+    print()
+    if not rows:
+        print("  No source documents")
+        return
+
+    for row in rows:
+        doc_id, title, weight, is_primary = row[0], row[1], row[2], row[3]
+        status = "included" if is_primary else "EXCLUDED"
+        print(f"  #{doc_id:<6} w={weight:.2f}  [{status}]  {title}")
+
+
+@wiki_app.command(name="weight")
+def wiki_weight(
+    topic_id: int = typer.Argument(..., help="Topic ID"),
+    doc_id: int = typer.Argument(..., help="Document ID"),
+    weight: float = typer.Argument(..., help="Relevance weight (0.0-1.0)"),
+) -> None:
+    """Set relevance weight for a source document within a topic.
+
+    The weight (0.0-1.0) scales how much a source document contributes
+    to the synthesized wiki article. Higher weight = more content included.
+
+    Examples:
+        emdx maintain wiki weight 5 42 0.5     # Half weight
+        emdx maintain wiki weight 5 42 1.0     # Full weight (default)
+    """
+    from ..database import db as _db
+
+    if not 0.0 <= weight <= 1.0:
+        print("Weight must be between 0.0 and 1.0")
+        raise typer.Exit(1)
+
+    with _db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT m.relevance_score, d.title "
+            "FROM wiki_topic_members m "
+            "JOIN documents d ON m.document_id = d.id "
+            "WHERE m.topic_id = ? AND m.document_id = ?",
+            (topic_id, doc_id),
+        ).fetchone()
+
+        if not row:
+            print(f"Document #{doc_id} is not a member of topic {topic_id}")
+            raise typer.Exit(1)
+
+        old_weight = row[0]
+        title = row[1]
+        conn.execute(
+            "UPDATE wiki_topic_members SET relevance_score = ? "
+            "WHERE topic_id = ? AND document_id = ?",
+            (weight, topic_id, doc_id),
+        )
+        conn.commit()
+
+    print(f"Updated weight for #{doc_id} ({title}) in topic {topic_id}:")
+    print(f"  {old_weight:.2f} -> {weight:.2f}")
+
+
+@wiki_app.command(name="exclude")
+def wiki_exclude(
+    topic_id: int = typer.Argument(..., help="Topic ID"),
+    doc_id: int = typer.Argument(..., help="Document ID to exclude"),
+) -> None:
+    """Exclude a source document from a wiki topic's synthesis.
+
+    Sets is_primary=0 so the document is skipped during article generation.
+    The membership record is preserved so it can be re-included later.
+
+    Examples:
+        emdx maintain wiki exclude 5 42
+    """
+    from ..database import db as _db
+
+    with _db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT m.is_primary, d.title "
+            "FROM wiki_topic_members m "
+            "JOIN documents d ON m.document_id = d.id "
+            "WHERE m.topic_id = ? AND m.document_id = ?",
+            (topic_id, doc_id),
+        ).fetchone()
+
+        if not row:
+            print(f"Document #{doc_id} is not a member of topic {topic_id}")
+            raise typer.Exit(1)
+
+        title = row[1]
+        conn.execute(
+            "UPDATE wiki_topic_members SET is_primary = 0 WHERE topic_id = ? AND document_id = ?",
+            (topic_id, doc_id),
+        )
+        conn.commit()
+
+    print(f"Excluded #{doc_id} ({title}) from topic {topic_id}")
+
+
+@wiki_app.command(name="include")
+def wiki_include(
+    topic_id: int = typer.Argument(..., help="Topic ID"),
+    doc_id: int = typer.Argument(..., help="Document ID to include"),
+) -> None:
+    """Re-include a previously excluded source document in a topic.
+
+    Sets is_primary=1 so the document is used during article generation.
+
+    Examples:
+        emdx maintain wiki include 5 42
+    """
+    from ..database import db as _db
+
+    with _db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT m.is_primary, d.title "
+            "FROM wiki_topic_members m "
+            "JOIN documents d ON m.document_id = d.id "
+            "WHERE m.topic_id = ? AND m.document_id = ?",
+            (topic_id, doc_id),
+        ).fetchone()
+
+        if not row:
+            print(f"Document #{doc_id} is not a member of topic {topic_id}")
+            raise typer.Exit(1)
+
+        title = row[1]
+        conn.execute(
+            "UPDATE wiki_topic_members SET is_primary = 1 WHERE topic_id = ? AND document_id = ?",
+            (topic_id, doc_id),
+        )
+        conn.commit()
+
+    print(f"Included #{doc_id} ({title}) in topic {topic_id}")
+
+
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 
 # Register stale as a subcommand group of maintain
