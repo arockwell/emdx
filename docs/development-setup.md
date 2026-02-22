@@ -127,7 +127,7 @@ run_migrations()
 
 #### **Database Location**
 - **Default**: `~/.emdx/emdx.db`
-- **Custom**: Set `EMDX_DB_PATH` environment variable
+- **Custom**: Set `EMDX_DATABASE_URL` environment variable
 - **Testing**: Temporary databases created automatically
 
 ### **TUI Development**
@@ -154,13 +154,12 @@ tests/
 ├── conftest.py              # Pytest configuration and fixtures
 ├── test_commands_core.py    # Core command tests (save, find, view)
 ├── test_commands_tags.py    # Tag command tests
-├── test_commands_groups.py  # Group command tests
 ├── test_task_commands.py    # Task command tests
 ├── test_database.py         # Database operations
 ├── test_documents.py        # Document CRUD
 ├── test_core.py             # Core CLI commands
 ├── test_log_browser.py      # TUI component tests
-└── ...                      # 52 test files total (see testing.md)
+└── ...                      # 65 test files total
 ```
 
 ### **Common Test Patterns**
@@ -385,7 +384,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 ```
-This allows callers to configure logging as needed. The `emdx/utils/logging.py` module provides `get_logger()` for cases requiring automatic file handler setup, but standard library usage is preferred for most modules.
+This allows callers to configure logging as needed. The `emdx/utils/logging_utils.py` module provides `get_logger()` for cases requiring automatic file handler setup, but standard library usage is preferred for most modules.
 
 #### **Console Output Standards**
 Use the shared console instance for CLI output:
@@ -394,7 +393,7 @@ from emdx.utils.output import console
 
 console.print("[green]Success![/green]")
 ```
-This ensures consistent formatting across the CLI. Use `emdx/utils/cli.py` decorators for standardized error handling.
+This ensures consistent formatting across the CLI.
 
 ### **Commit Message Format**
 ```
