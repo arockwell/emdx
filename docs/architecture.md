@@ -122,10 +122,12 @@ emdx/
 EMDX has a multi-modal TUI accessible via `emdx gui`:
 
 ### **Browser Container** (`browser_container.py`)
-- **Document Mode** (default) - `d` or start here
-- **Log Mode** - `l` to switch from document mode
-- **Activity Mode** - `a` to view execution activity
-- **Back to Document** - `q` from any other mode
+- **Activity Mode** (default) - `1`
+- **Task Mode** - `2`
+- **Q&A Mode** - `3`
+- **Quit** - `q` (exits from activity/task/qa; returns to activity from log mode)
+- **Theme** - `\` cycle theme, `ctrl+t` toggle dark/light
+- **Command Palette** - `ctrl+k` or `ctrl+p`
 
 ### **Actual Key Bindings** (from real code):
 
@@ -148,11 +150,37 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 - `l` - toggle live mode
 
 **Activity View** (`activity/activity_view.py`):
+- Three-tier dashboard: RUNNING (active executions), TASKS (ready/active), DOCS (recent history)
+- `ActivityDataLoader` loads documents, executions, and tasks, then deduplicates
+  (tasks with `execution_id` skip if execution already loaded; task `output_doc_id` removes the duplicate document)
+- Items sorted into tiers: running by start time, tasks by priority, recent by timestamp
 - `j/k` - move up/down
-- `g/G` - go to top/bottom
-- `enter` - expand/view details
+- `R/T/D` - jump to RUNNING/TASKS/DOCS section (scrolls header to top, selects first item)
+- `enter/f` - fullscreen document preview
+- `x` - kill/dismiss running execution
+- `c` - toggle copy mode (raw markdown vs rendered preview)
 - `r` - refresh
-- Filter by executions, documents, groups
+- Section headers inserted by `ActivityTable` when tier changes
+- Live log streaming for running agent executions via `LogStream`
+- Status bar: active count, docs today, cost, errors, 7-day sparkline
+
+**Task Browser** (`task_browser.py` + `task_view.py`):
+- Two-pane layout: DataTable (left 40%) + detail RichLog (right 60%)
+- `j/k` - move up/down
+- `/` - show live filter bar (debounced text search over title, epic, description, tags)
+- `escape` - clear filter and refocus table
+- `g` - toggle grouping: by status (default) or by epic
+- `o` - filter to ready (open) tasks only
+- `i` - filter to active tasks only
+- `x` - filter to blocked tasks only
+- `f` - filter to done/failed/wontdo tasks only
+- `*` - clear status filter (show all)
+- `d` - mark task done
+- `a` - mark task active
+- `b` - mark task blocked
+- `w` - mark task won't do
+- `r` - refresh
+- Epic grouping shows progress (done/total) and hides fully-completed epics
 
 ## 🗃️ **Database Architecture**
 
@@ -179,20 +207,21 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 ```
 App (emdx gui)
 └── BrowserContainer
-    ├── DocumentBrowser (default)
-    │   ├── DocumentTable
-    │   ├── PreviewPanel
-    │   └── DetailsPanel
-    ├── LogBrowser (press 'l')
-    │   ├── ExecutionTable
-    │   ├── LogViewer (with streaming)
-    │   └── MetadataPanel
-    ├── ActivityView (press 'a')
-    │   ├── ActivityTree (executions, documents, groups)
-    │   └── ContextPanel (details for selected item)
-    └── TaskBrowser (press 't')
-        ├── Task list with status indicators
-        └── Task detail view
+    ├── ActivityView (default, key '1')
+    │   ├── StatusBar (active count, cost, sparkline)
+    │   ├── ActivityTable (flat DataTable with section headers: RUNNING/TASKS/DOCS)
+    │   ├── ContextPanel (document metadata, tags, word count)
+    │   └── PreviewPanel (rendered markdown, live log stream, or copy mode)
+    ├── TaskBrowser (key '2')
+    │   ├── StatusBar (counts by status, filter/group indicators)
+    │   ├── FilterInput (hidden until `/`, debounced text search over title/epic/description)
+    │   ├── DataTable (grouped by status or epic, with section headers)
+    │   └── DetailPanel (description, deps, work log, execution info)
+    ├── QAScreen (key '3')
+    └── LogBrowser
+        ├── ExecutionTable
+        ├── LogViewer (with streaming)
+        └── MetadataPanel
 ```
 
 ### **Key Patterns**
