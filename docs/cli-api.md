@@ -716,16 +716,52 @@ emdx gui
 ```
 
 **TUI Key Bindings:**
+
+*Global:*
+- `1` - Switch to activity view
+- `2` - Switch to task browser
+- `3` - Switch to Q&A
+- `\` - Cycle theme
+- `Ctrl+t` - Toggle dark/light mode
+- `Ctrl+k` / `Ctrl+p` - Command palette
+
+*Activity View:*
 - `j/k` - Navigate up/down
-- `g/G` - Go to top/bottom
-- `/` - Search
-- `l` - Switch to log browser
-- `a` - Switch to activity view
-- `t` - Switch to task browser
-- `q` - Return to document browser / quit
-- `e` - Edit mode (full vim-like editing)
-- `s` - Selection mode
+- `Tab` / `Shift+Tab` - Next/prev pane
+- `Enter` / `f` - Open fullscreen
 - `r` - Refresh
+- `R` - Jump to RUNNING section
+- `T` - Jump to TASKS section
+- `D` - Jump to DOCS section
+- `x` - Kill/dismiss execution
+- `c` - Copy mode
+- `i` - Create gist
+- `?` - Help
+
+*Task Browser:*
+- `j/k` - Navigate up/down
+- `Tab` / `Shift+Tab` - Next/prev pane
+- `/` - Live filter bar
+- `Escape` - Clear filter
+- `g` - Toggle epic grouping
+- `o` - Filter: open tasks
+- `i` - Filter: active tasks
+- `x` - Filter: blocked tasks
+- `f` - Filter: done/failed/wontdo
+- `*` - Show all (clear status filter)
+- `d` - Mark done
+- `a` - Mark active
+- `b` - Mark blocked
+- `w` - Mark won't do
+- `r` - Refresh
+
+*Q&A Screen:*
+- `Enter` - Submit question
+- `/` - Focus input
+- `s` - Save exchange
+- `c` - Clear history
+- `Escape` - Exit
+- `?` - Help
 
 ## 🔗 **Integration Commands**
 
