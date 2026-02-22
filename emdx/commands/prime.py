@@ -80,15 +80,14 @@ def _output_text(
     """Output priming context as text."""
     lines = []
 
-    # Header + usage instructions
+    # One-line header with project + branch
     if not quiet:
-        lines.append("=" * 60)
-        lines.append("EMDX WORK CONTEXT")
-        lines.append("=" * 60)
-        if project:
-            lines.append(f"Project: {project}")
+        header = f"● emdx — {project}" if project else "● emdx"
+        branch = _get_current_branch()
+        if branch:
+            header += f" ({branch})"
+        lines.append(header)
         lines.append("")
-        lines.extend(_get_usage_instructions())
 
     # Active epics with progress bars
     if not quiet:
@@ -175,10 +174,6 @@ def _output_text(
             for kdoc in key_docs:
                 lines.append(f'  #{kdoc["id"]} "{kdoc["title"]}" — {kdoc["access_count"]} views')
             lines.append("")
-
-    # Footer
-    if not quiet:
-        lines.append("=" * 60)
 
     print("\n".join(lines))
 
@@ -443,24 +438,20 @@ def _get_key_docs(limit: int = 5) -> list[KeyDoc]:
 # ---------------------------------------------------------------------------
 
 
-def _get_usage_instructions() -> list[str]:
-    """Return concise emdx usage instructions for Claude sessions."""
-    return [
-        "RULES: Save significant outputs. Check ready tasks. Mark tasks done.",
-        "",
-        "EMDX COMMANDS:",
-        '  Save:     echo "output" | emdx save --title "Title" --tags "tag1,tag2"',
-        '  Search:   emdx find "query"',
-        "  View:     emdx view <id>",
-        "  Tasks:    emdx task ready | emdx task view <id> | emdx task active <id>",
-        '            emdx task add "title" | emdx task done <id> | emdx task log <id>',
-        "  Epics:    emdx epic list | emdx epic view <id>",
-        '  Delegate: emdx delegate "task"             Single AI execution',
-        '            emdx delegate "t1" "t2" "t3"     Parallel execution',
-        '            emdx delegate --pr "task"         Execute + create PR',
-        '            emdx delegate --doc 42 "task"     With doc context',
-        "",
-    ]
+def _get_current_branch() -> str | None:
+    """Get the current git branch name, or None if not in a repo."""
+    try:
+        proc = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if proc.returncode == 0:
+            return proc.stdout.strip() or None
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
