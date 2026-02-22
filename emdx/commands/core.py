@@ -278,7 +278,6 @@ def save(
             )
     except Exception as e:
         console.print(f"   [yellow]Entity wikify skipped: {e}[/yellow]")
-
     # Step 6.6: Auto-link to similar documents (default on, use --no-auto-link to skip)
     if auto_link:
         try:

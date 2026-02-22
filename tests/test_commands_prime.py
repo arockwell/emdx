@@ -58,8 +58,6 @@ def _make_epic(
     }
 
 
-
-
 # ---------------------------------------------------------------------------
 # Unit tests for formatting helpers
 # ---------------------------------------------------------------------------
@@ -115,40 +113,46 @@ class TestFormatEpicLine:
 class TestPrimeDefault:
     """Test default output (no flags)."""
 
+    @patch("emdx.commands.prime._get_current_branch")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_header_and_project(self, mock_project, mock_ip, mock_ready, mock_epics):
+    def test_shows_header_with_project_and_branch(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_branch
+    ):
         mock_project.return_value = "myproject"
         mock_epics.return_value = []
         mock_ready.return_value = []
         mock_ip.return_value = []
+        mock_branch.return_value = "main"
 
         result = runner.invoke(app, [])
         assert result.exit_code == 0
-        assert "EMDX WORK CONTEXT" in result.stdout
-        assert "Project: myproject" in result.stdout
+        assert "● emdx — myproject (main)" in result.stdout
+        # Old chrome should be gone
+        assert "EMDX WORK CONTEXT" not in result.stdout
+        assert "======" not in result.stdout
+        assert "EMDX COMMANDS:" not in result.stdout
 
+    @patch("emdx.commands.prime._get_current_branch")
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_shows_usage_instructions(self, mock_project, mock_ip, mock_ready, mock_epics):
-        mock_project.return_value = None
+    def test_header_without_branch(
+        self, mock_project, mock_ip, mock_ready, mock_epics, mock_branch
+    ):
+        mock_project.return_value = "myproject"
         mock_epics.return_value = []
         mock_ready.return_value = []
         mock_ip.return_value = []
+        mock_branch.return_value = None
 
         result = runner.invoke(app, [])
-        assert "EMDX COMMANDS:" in result.stdout
-        assert "emdx save" in result.stdout
-        assert "emdx find" in result.stdout
-        assert "emdx delegate" in result.stdout
-        assert "emdx task ready" in result.stdout
-        assert "emdx task view" in result.stdout
-        assert "emdx task active" in result.stdout
-        assert "emdx task log" in result.stdout
+        assert result.exit_code == 0
+        assert "● emdx — myproject" in result.stdout
+        assert "(" not in result.stdout.split("\n")[0]
 
     @patch("emdx.commands.prime._get_active_epics")
     @patch("emdx.commands.prime._get_ready_tasks")
@@ -235,16 +239,14 @@ class TestPrimeQuiet:
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_quiet_omits_header_and_instructions(self, mock_project, mock_ip, mock_ready):
+    def test_quiet_omits_header(self, mock_project, mock_ip, mock_ready):
         mock_project.return_value = "proj"
         mock_ready.return_value = [_make_task(id=1, title="A task")]
         mock_ip.return_value = []
 
         result = runner.invoke(app, ["--quiet"])
         assert result.exit_code == 0
-        assert "EMDX WORK CONTEXT" not in result.stdout
-        assert "Project:" not in result.stdout
-        assert "EMDX COMMANDS:" not in result.stdout
+        assert "● emdx" not in result.stdout
 
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
@@ -348,9 +350,7 @@ class TestPrimeJson:
     @patch("emdx.commands.prime._get_ready_tasks")
     @patch("emdx.commands.prime._get_in_progress_tasks")
     @patch("emdx.commands.prime.get_git_project")
-    def test_json_non_verbose_excludes_extras(
-        self, mock_project, mock_ip, mock_ready, mock_epics
-    ):
+    def test_json_non_verbose_excludes_extras(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
         mock_epics.return_value = []
         mock_ready.return_value = []
