@@ -944,6 +944,16 @@ emdx delegate --worktree --pr "fix X"
 
 Agent work queue for tracking tasks with status, epics, and categories.
 
+### Display IDs
+
+Tasks assigned to a category show a `KEY-N` display ID (e.g. `FEAT-12`, `SEC-3`) instead of the raw `#id`. This ID is auto-assigned when a task is added with `--cat` and appears throughout command output. You can use either format to reference tasks:
+
+```bash
+emdx task view FEAT-12      # By display ID
+emdx task view 42           # By raw ID
+emdx task done SEC-3        # Display IDs work with all commands
+```
+
 ### Adding Tasks
 
 ```bash
@@ -1001,7 +1011,32 @@ emdx task done 1
 
 # Mark task as blocked
 emdx task blocked 1
+
+# Mark task as won't do (closed without completing)
+emdx task wontdo 42
+emdx task wontdo TOOL-12
+emdx task wontdo 42 --note "Superseded by #55"
 ```
+
+**`wontdo` Options:**
+- `--note, -n TEXT` - Reason for closing (logged to task work log)
+- `--json` - Output as JSON
+
+### Setting Priority
+
+```bash
+# Show current priority
+emdx task priority 42
+
+# Set to highest priority (1=highest, 5=lowest)
+emdx task priority 42 1
+
+# Set priority using KEY-N display ID
+emdx task priority FEAT-5 2
+```
+
+**Options:**
+- `--json` - Output as JSON
 
 ### Work Log
 
@@ -1044,6 +1079,7 @@ emdx task epic delete 510 --force
 | `active` | ● | Currently being worked on |
 | `blocked` | ⚠ | Waiting on dependencies or external factors |
 | `done` | ✓ | Completed successfully |
+| `wontdo` | ⊘ | Closed without completing (terminal, unblocks dependents) |
 
 ---
 
