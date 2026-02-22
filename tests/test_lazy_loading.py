@@ -18,11 +18,12 @@ runner = CliRunner()
 class TestLazyTyperGroup:
     """Test the LazyTyperGroup class."""
 
-    def test_list_commands_includes_lazy(self):
+    def test_list_commands_includes_lazy(self) -> None:
         """Test that list_commands returns both eager and lazy commands."""
+
         # Create a group with one eager command
         @click.command()
-        def eager():
+        def eager() -> None:
             pass
 
         group = LazyTyperGroup(
@@ -39,7 +40,7 @@ class TestLazyTyperGroup:
         assert "lazy2" in commands
         assert len(commands) == 3
 
-    def test_get_command_returns_placeholder_for_lazy(self):
+    def test_get_command_returns_placeholder_for_lazy(self) -> None:
         """Test that get_command returns a LazyCommand placeholder for lazy commands."""
         group = LazyTyperGroup(
             lazy_subcommands={"lazy": "some.module:cmd"},
@@ -53,10 +54,11 @@ class TestLazyTyperGroup:
         assert cmd.name == "lazy"
         assert cmd.help == "Help for lazy"
 
-    def test_get_command_returns_eager_command(self):
+    def test_get_command_returns_eager_command(self) -> None:
         """Test that get_command returns eager commands directly."""
+
         @click.command()
-        def eager():
+        def eager() -> None:
             """Help for eager."""
             pass
 
@@ -72,10 +74,10 @@ class TestLazyTyperGroup:
         assert cmd is eager
         assert not isinstance(cmd, LazyCommand)
 
-    def test_lazy_command_not_loaded_until_invoked(self):
+    def test_lazy_command_not_loaded_until_invoked(self) -> None:
         """Test that lazy commands don't import their modules until invoked."""
         group = LazyTyperGroup(
-            lazy_subcommands={"test_cmd": "emdx.commands.recipe:app"},
+            lazy_subcommands={"test_cmd": "emdx.commands.delegate:app"},
             lazy_help={"test_cmd": "Test help"},
         )
 
@@ -86,7 +88,7 @@ class TestLazyTyperGroup:
         assert isinstance(cmd, LazyCommand)
         assert cmd._real_command is None
 
-    def test_uses_global_registry_by_default(self):
+    def test_uses_global_registry_by_default(self) -> None:
         """Test that LazyTyperGroup uses the global registry by default."""
         # Register some commands
         register_lazy_commands(
@@ -99,7 +101,7 @@ class TestLazyTyperGroup:
         assert "registered" in group.lazy_subcommands
         assert group.lazy_help.get("registered") == "Registered help"
 
-    def test_explicit_config_overrides_registry(self):
+    def test_explicit_config_overrides_registry(self) -> None:
         """Test that explicit config overrides the global registry."""
         register_lazy_commands(
             {"registered": "some.module:cmd"},
@@ -118,7 +120,7 @@ class TestLazyTyperGroup:
 class TestLazyCommand:
     """Test the LazyCommand class."""
 
-    def test_help_text_without_loading(self):
+    def test_help_text_without_loading(self) -> None:
         """Test that LazyCommand has help text without loading the real command."""
         group = LazyTyperGroup()
         cmd = LazyCommand(
@@ -131,7 +133,7 @@ class TestLazyCommand:
         assert cmd.help == "Test help text"
         assert cmd._real_command is None
 
-    def test_short_help_matches_help(self):
+    def test_short_help_matches_help(self) -> None:
         """Test that short_help matches the provided help text."""
         group = LazyTyperGroup()
         cmd = LazyCommand(
@@ -144,12 +146,12 @@ class TestLazyCommand:
         # short_help should use the help text
         assert cmd.short_help == "Test help text"
 
-    def test_load_real_command_on_invoke(self):
+    def test_load_real_command_on_invoke(self) -> None:
         """Test that invoke loads the real command."""
         group = LazyTyperGroup()
         cmd = LazyCommand(
-            name="recipe",
-            import_path="emdx.commands.recipe:app",
+            name="delegate",
+            import_path="emdx.commands.delegate:app",
             help_text="Test help",
             parent_group=group,
         )
@@ -164,7 +166,7 @@ class TestLazyCommand:
         assert cmd._real_command is not None
         assert real is not None
 
-    def test_graceful_degradation_on_import_error(self):
+    def test_graceful_degradation_on_import_error(self) -> None:
         """Test that import errors create an error command."""
         group = LazyTyperGroup()
         cmd = LazyCommand(
@@ -184,14 +186,13 @@ class TestLazyCommand:
 class TestCLIIntegration:
     """Test lazy loading in the actual CLI."""
 
-    def test_help_does_not_load_lazy_modules(self):
+    def test_help_does_not_load_lazy_modules(self) -> None:
         """Test that --help doesn't load lazy modules."""
         # Track which modules are loaded
         lazy_modules = [
-            'emdx.commands.recipe',
-            'emdx.commands.delegate',
-            'emdx.commands.claude_execute',
-            'emdx.commands.ask',
+            "emdx.commands.delegate",
+            "emdx.commands.claude_execute",
+            "emdx.commands.ask",
         ]
 
         # Clear any cached imports
@@ -205,8 +206,10 @@ class TestCLIIntegration:
         import importlib
 
         import emdx.main
+
         importlib.reload(emdx.main)
         from emdx.main import app
+
         result = runner.invoke(app, ["--help"])
 
         after = set(sys.modules.keys())
@@ -217,23 +220,23 @@ class TestCLIIntegration:
         assert loaded_lazy == [], f"Lazy modules were loaded: {loaded_lazy}"
         assert result.exit_code == 0
 
-    def test_lazy_commands_appear_in_help(self):
+    def test_lazy_commands_appear_in_help(self) -> None:
         """Test that lazy commands appear in --help output."""
         # Reimport to ensure fresh registry
         import importlib
 
         import emdx.main
+
         importlib.reload(emdx.main)
         from emdx.main import app
 
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
-        assert "recipe" in result.output
-        assert "ai" in result.output
+        assert "delegate" in result.output
         assert "gui" in result.output
 
-    def test_lazy_help_text_in_output(self):
+    def test_lazy_help_text_in_output(self) -> None:
         """Test that lazy commands show their pre-defined help text."""
         from emdx.main import app
 
@@ -241,20 +244,18 @@ class TestCLIIntegration:
 
         assert result.exit_code == 0
         # Check that our lazy help text appears (not the actual module help)
-        assert "Manage and run EMDX recipes" in result.output
+        assert "One-shot AI execution" in result.output
 
-    def test_lazy_command_works_when_invoked(self):
+    def test_lazy_command_works_when_invoked(self) -> None:
         """Test that lazy commands work when actually invoked."""
         from emdx.main import app
 
-        result = runner.invoke(app, ["recipe", "--help"])
+        result = runner.invoke(app, ["delegate", "--help"])
 
         assert result.exit_code == 0
-        # Should show the actual recipe subcommands
-        assert "run" in result.output.lower()
-        assert "list" in result.output.lower()
+        assert "delegate" in result.output.lower() or "execution" in result.output.lower()
 
-    def test_core_commands_still_work(self):
+    def test_core_commands_still_work(self) -> None:
         """Test that core (eager) commands still work."""
         from emdx.main import app
 
@@ -263,7 +264,7 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         assert "Save content" in result.output
 
-    def test_find_command_still_works(self):
+    def test_find_command_still_works(self) -> None:
         """Test that find command works."""
         from emdx.main import app
 
@@ -276,7 +277,7 @@ class TestCLIIntegration:
 class TestLazyRegistry:
     """Test the lazy command registry."""
 
-    def test_register_and_get(self):
+    def test_register_and_get(self) -> None:
         """Test registering and getting lazy commands."""
         register_lazy_commands(
             {"cmd1": "mod1:app", "cmd2": "mod2:app"},
@@ -291,7 +292,7 @@ class TestLazyRegistry:
         assert help_strings["cmd1"] == "Help 1"
         assert help_strings["cmd2"] == "Help 2"
 
-    def test_registry_is_global(self):
+    def test_registry_is_global(self) -> None:
         """Test that the registry is global."""
         register_lazy_commands(
             {"global_cmd": "mod:app"},

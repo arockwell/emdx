@@ -26,7 +26,6 @@ tests/
 ├── test_commands_core.py             # Core command tests (save, find, view)
 ├── test_commands_groups.py           # Group command tests
 ├── test_commands_prime.py            # Prime command tests
-├── test_commands_recipe.py           # Recipe command tests
 ├── test_commands_stale.py            # Staleness tracking tests
 ├── test_commands_status.py           # Status command tests
 ├── test_commands_tags.py             # Tag command tests
@@ -93,7 +92,7 @@ tests/
 - **Utilities** (`test_utils.py`, `test_file_size.py`, `test_text_formatting.py`, `test_title_normalization.py`, `test_output_parser.py`) - Helper functions
 - **Search** (`test_search.py`, `test_hybrid_search.py`) - FTS5 and hybrid search
 - **Input/Output** (`test_input_content.py`, `test_stream_json_parser.py`, `test_chunk_splitter.py`) - content handling and parsing
-- **Other** (`test_commands_prime.py`, `test_commands_recipe.py`, `test_commands_stale.py`, `test_commands_status.py`, `test_commands_trash.py`, `test_fixtures.py`) - additional command tests
+- **Other** (`test_commands_prime.py`, `test_commands_stale.py`, `test_commands_status.py`, `test_commands_trash.py`, `test_fixtures.py`) - additional command tests
 
 ## 🔧 **Common Test Patterns**
 

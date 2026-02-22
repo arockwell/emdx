@@ -208,7 +208,6 @@ emdx delegate --doc 42 --pr "fix the bug"
 | Code changes with PR | `emdx delegate --pr "fix the bug"` |
 | Push branch, no PR | `emdx delegate --branch "add feature"` |
 | Clean up worktrees | `emdx delegate --cleanup` |
-| Run saved recipe | `emdx recipe run 42` |
 
 ### Document Tags vs Task Organization
 
@@ -282,12 +281,6 @@ emdx maintain link --all               # Auto-link related documents
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
 For AI system docs, see [CLI Reference — Find](docs/cli-api.md#find).
-
-## Experimental Commands
-
-These commands work but are not yet stable:
-
-- **`emdx recipe`** — Run saved recipes (document-as-prompt) via delegate.
 
 ## TUI Debugging & Logging
 
