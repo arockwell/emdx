@@ -1161,6 +1161,7 @@ def index_embeddings(
     idx_stats = service.stats()
 
     if stats_only:
+
         def format_bytes(b: int) -> str:
             if b < 1024:
                 return f"{b} B"
@@ -1169,18 +1170,20 @@ def index_embeddings(
             return f"{b / (1024 * 1024):.1f} MB"
 
         total_size = idx_stats.index_size_bytes + idx_stats.chunk_index_size_bytes
-        console.print(Panel(
-            f"[bold]Embedding Index Statistics[/bold]\n\n"
-            f"Documents:    {idx_stats.indexed_documents} / "
-            f"{idx_stats.total_documents} indexed\n"
-            f"Coverage:     {idx_stats.coverage_percent}%\n"
-            f"Chunks:       {idx_stats.indexed_chunks} indexed\n"
-            f"Model:        {idx_stats.model_name}\n"
-            f"Doc index:    {format_bytes(idx_stats.index_size_bytes)}\n"
-            f"Chunk index:  {format_bytes(idx_stats.chunk_index_size_bytes)}\n"
-            f"Total size:   {format_bytes(total_size)}",
-            title="AI Index",
-        ))
+        console.print(
+            Panel(
+                f"[bold]Embedding Index Statistics[/bold]\n\n"
+                f"Documents:    {idx_stats.indexed_documents} / "
+                f"{idx_stats.total_documents} indexed\n"
+                f"Coverage:     {idx_stats.coverage_percent}%\n"
+                f"Chunks:       {idx_stats.indexed_chunks} indexed\n"
+                f"Model:        {idx_stats.model_name}\n"
+                f"Doc index:    {format_bytes(idx_stats.index_size_bytes)}\n"
+                f"Chunk index:  {format_bytes(idx_stats.chunk_index_size_bytes)}\n"
+                f"Total size:   {format_bytes(total_size)}",
+                title="AI Index",
+            )
+        )
         return
 
     console.print(
@@ -1255,15 +1258,13 @@ def create_links(
         result = auto_link_document(doc_id, threshold=threshold, max_links=max_links)
         if result.links_created > 0:
             console.print(
-                f"[green]Created {result.links_created} link(s) "
-                f"for document #{doc_id}[/green]"
+                f"[green]Created {result.links_created} link(s) for document #{doc_id}[/green]"
             )
             for lid, score in zip(result.linked_doc_ids, result.scores, strict=False):
                 console.print(f"  [cyan]#{lid}[/cyan] ({score:.0%})")
         else:
             console.print(
-                f"[yellow]No similar documents found above "
-                f"{threshold:.0%} threshold[/yellow]"
+                f"[yellow]No similar documents found above {threshold:.0%} threshold[/yellow]"
             )
 
 
@@ -1284,6 +1285,83 @@ def remove_link(
         console.print(f"[green]Removed link between #{source_id} and #{target_id}[/green]")
     else:
         console.print(f"[yellow]No link found between #{source_id} and #{target_id}[/yellow]")
+
+
+@app.command(name="wikify")
+def wikify_command(
+    doc_id: int | None = typer.Argument(None, help="Document ID to wikify"),
+    all_docs: bool = typer.Option(False, "--all", help="Wikify all documents"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show matches without creating links"),
+) -> None:
+    """Create title-match links between documents (auto-wikification).
+
+    Scans document content for mentions of other documents' titles
+    and creates links. No AI or embeddings required.
+
+    Examples:
+        emdx maintain wikify 42                # Wikify a single document
+        emdx maintain wikify --all             # Backfill all documents
+        emdx maintain wikify 42 --dry-run      # Preview matches
+        emdx maintain wikify --all --dry-run   # Preview all matches
+    """
+    from ..services.wikify_service import title_match_wikify, wikify_all
+
+    if all_docs:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Wikifying all documents...", total=None)
+            total_created, docs_processed = wikify_all(dry_run=dry_run)
+            progress.update(task, completed=True)
+
+        if dry_run:
+            console.print(
+                f"[yellow]Dry run: scanned {docs_processed} documents, "
+                f"would create {total_created} links[/yellow]"
+            )
+        else:
+            console.print(
+                f"[green]Created {total_created} title-match links "
+                f"across {docs_processed} documents[/green]"
+            )
+        return
+
+    if doc_id is None:
+        console.print("[red]Error: provide a document ID or use --all[/red]")
+        raise typer.Exit(1)
+
+    result = title_match_wikify(doc_id, dry_run=dry_run)
+
+    if dry_run:
+        if result.dry_run_matches:
+            console.print(
+                f"[bold]Dry run: {len(result.dry_run_matches)} title match(es) "
+                f"found in document #{doc_id}:[/bold]"
+            )
+            for target_id, target_title in result.dry_run_matches:
+                console.print(f"  [cyan]#{target_id}[/cyan] {target_title}")
+            if result.skipped_existing > 0:
+                console.print(f"  [dim]({result.skipped_existing} already linked)[/dim]")
+        else:
+            console.print(f"[yellow]No title matches found in document #{doc_id}[/yellow]")
+        return
+
+    if result.links_created > 0:
+        console.print(
+            f"[green]Created {result.links_created} title-match link(s) "
+            f"for document #{doc_id}[/green]"
+        )
+        for lid in result.linked_doc_ids:
+            console.print(f"  [cyan]#{lid}[/cyan]")
+        if result.skipped_existing > 0:
+            console.print(f"  [dim]({result.skipped_existing} already linked)[/dim]")
+    else:
+        msg = f"[yellow]No new title matches found for document #{doc_id}[/yellow]"
+        if result.skipped_existing > 0:
+            msg += f" [dim]({result.skipped_existing} already linked)[/dim]"
+        console.print(msg)
 
 
 if __name__ == "__main__":

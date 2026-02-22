@@ -251,6 +251,18 @@ def save(
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
 
+    # Step 6.5: Title-match wikification (always runs — zero cost)
+    try:
+        from emdx.services.wikify_service import title_match_wikify
+
+        wikify_result = title_match_wikify(doc_id)
+        if wikify_result.links_created > 0:
+            console.print(
+                f"   [dim]Wiki-linked to {wikify_result.links_created} doc(s) by title match[/dim]"
+            )
+    except Exception as e:
+        console.print(f"   [yellow]Wikify skipped: {e}[/yellow]")
+
     # Step 6.6: Auto-link to similar documents if requested
     if auto_link:
         try:
