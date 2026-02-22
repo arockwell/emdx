@@ -1464,3 +1464,22 @@ class TestEpicGrouping:
             await pilot.pause()
             bar = app.query_one("#task-help-bar", Static)
             assert "group" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_epic_grouping_hides_all_done_epics(self, mock_task_data: MockDict) -> None:
+        """Epics where all tasks are done/failed are hidden in epic grouping."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Active work", status="open", epic_key="LIVE"),
+            make_task(id=2, title="Old stuff", status="done", epic_key="DEAD"),
+            make_task(id=3, title="Also old", status="failed", epic_key="DEAD"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("LIVE" in t for t in titles)
+            assert not any("DEAD" in t for t in titles)

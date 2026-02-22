@@ -98,6 +98,24 @@ def _format_time_short(dt_str: str | None) -> str:
     return result.replace(" ago", "") if result else ""
 
 
+def _priority_str(priority: int) -> str:
+    """Return a short priority indicator."""
+    if priority <= 1:
+        return "!!!"
+    if priority <= 2:
+        return "!! "
+    return "   "
+
+
+def _priority_style(priority: int) -> str:
+    """Return a Rich style for a priority level."""
+    if priority <= 1:
+        return "bold red"
+    if priority <= 2:
+        return "yellow"
+    return "dim"
+
+
 def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -> str:
     """Strip the 'KEY-N: ' prefix from a title if it matches the epic."""
     if epic_key and epic_seq:
@@ -312,7 +330,6 @@ class TaskView(Widget):
         self._row_key_to_task[row_key] = task
         color = STATUS_COLORS.get(task["status"], "")
         icon = STATUS_ICONS.get(task["status"], "?")
-        priority = task.get("priority", 3) or 3
         title = _strip_epic_prefix(
             task["title"],
             task.get("epic_key"),
@@ -334,7 +351,6 @@ class TaskView(Widget):
         title_style = f"{color}" if color else ""
 
         table.add_row(
-            Text(_priority_str(priority), style=_priority_style(priority)),
             Text(icon, style=color),
             epic_text,
             Text(title, style=title_style),
@@ -389,15 +405,19 @@ class TaskView(Widget):
             key=lambda k: (k == "", k),
         )
 
+        finished = {"done", "failed"}
         first_group = True
         for epic_key in epic_keys:
             tasks = tasks_by_epic[epic_key]
             if not tasks:
                 continue
 
+            # Hide epic groups where all tasks are done/failed
+            if all(t["status"] in finished for t in tasks):
+                continue
+
             if not first_group:
                 table.add_row(
-                    "",
                     "",
                     "",
                     Text(""),
@@ -419,7 +439,6 @@ class TaskView(Widget):
                 header_text = f"UNGROUPED ({len(tasks)})"
 
             table.add_row(
-                "",
                 "",
                 "",
                 Text(header_text, style="bold cyan"),
