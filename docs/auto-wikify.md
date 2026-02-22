@@ -175,10 +175,12 @@ emdx prime --json          # already includes links in doc metadata
 - ~~Add project scoping~~ (`--cross-project` flag, default: same project only)
 - Surface links in `emdx show` output (already exists via `--links`)
 
-### Phase 3: Entity Extraction (future)
-- Add `document_entities` table via migration
-- Implement extraction service
-- Cross-reference on save
+### Phase 3: Entity Extraction ✅
+- ~~Add `document_entities` table via migration~~ (migration 044)
+- ~~Implement extraction service~~ (`services/entity_service.py`, heuristic extraction)
+- ~~Cross-reference on save~~ (entity-match wikify runs on every save)
+- ~~`emdx maintain entities` command~~ (single doc + `--all` backfill)
+- ~~Tests~~ (28 tests: extraction, normalization, cross-referencing, idempotency)
 
 ## Integration Points
 
