@@ -259,7 +259,7 @@ class TaskView(Widget):
     async def on_mount(self) -> None:
         """Load tasks on mount."""
         table = self.query_one("#task-table", DataTable)
-        table.add_column("icon", key="icon", width=2)
+        table.add_column("icon", key="icon", width=3)
         table.add_column("epic", key="epic", width=7)
         table.add_column("title", key="title")
         table.add_column("age", key="age", width=4)
@@ -335,12 +335,21 @@ class TaskView(Widget):
         table: "DataTable[str | Text]",
         task: TaskDict,
         indent: bool = False,
+        tree_prefix: str = "",
     ) -> None:
-        """Add a single task row to the table."""
+        """Add a single task row to the table.
+
+        Args:
+            table: The DataTable to add the row to.
+            task: The task data to render.
+            indent: Whether to indent with spaces (epic grouping mode).
+            tree_prefix: Tree connector string like "├─" or "└─" (status grouping mode).
+        """
         row_key = self._row_key_for_task(task)
         self._row_key_to_task[row_key] = task
+        is_epic = task.get("type") == "epic"
         color = STATUS_COLORS.get(task["status"], "")
-        icon = STATUS_ICONS.get(task["status"], "?")
+        icon = "📋" if is_epic else STATUS_ICONS.get(task["status"], "?")
         title = _strip_epic_prefix(
             task["title"],
             task.get("epic_key"),
@@ -349,30 +358,38 @@ class TaskView(Widget):
         if len(title) > 45:
             title = title[:42] + "..."
 
-        # Epic badge
+        # Epic badge: epics show "#id", children show "KEY-N"
         epic_key = task.get("epic_key")
         epic_seq = task.get("epic_seq")
-        if epic_key and epic_seq:
+        if is_epic:
+            epic_text = Text(f"#{task['id']}", style="bold cyan")
+        elif epic_key and epic_seq:
             epic_text = Text(f"{epic_key}-{epic_seq}", style="cyan")
         elif epic_key:
             epic_text = Text(epic_key, style="cyan")
         else:
             epic_text = Text("")
 
-        title_style = f"{color}" if color else ""
+        title_style = "bold cyan" if is_epic else (f"{color}" if color else "")
         prefix = "  " if indent else ""
 
         # Show inline progress for epic tasks
         age_text = _format_time_short(task.get("created_at"))
-        if task.get("type") == "epic":
+        if is_epic:
             epic_data = self._epics.get(task["id"])
             if epic_data:
                 done = epic_data.get("children_done", 0)
                 total = epic_data.get("child_count", 0)
                 age_text = f"{done}/{total}"
 
+        # Build icon cell with tree connector or indent
+        if tree_prefix:
+            icon_cell = Text(f"{tree_prefix}{icon}", style=color)
+        else:
+            icon_cell = Text(f"{prefix}{icon}", style=color)
+
         table.add_row(
-            Text(f"{prefix}{icon}", style=color),
+            icon_cell,
             epic_text,
             Text(title, style=title_style),
             Text(age_text, style="dim"),
@@ -380,7 +397,7 @@ class TaskView(Widget):
         )
 
     def _render_groups_by_status(self, table: "DataTable[str | Text]") -> None:
-        """Render tasks grouped by status."""
+        """Render tasks grouped by status, clustering children under epics."""
         first_group = True
         for status in STATUS_ORDER:
             tasks = self._tasks_by_status.get(status, [])
@@ -408,7 +425,34 @@ class TaskView(Widget):
                 key=f"{HEADER_PREFIX}{status}",
             )
 
+            # Cluster children under their epic parent.
+            # Epic tasks render first, then their children with tree connectors,
+            # then orphan tasks (no parent) render normally.
+            epic_ids_in_group = {t["id"] for t in tasks if t.get("type") == "epic"}
+            children_by_parent: dict[int, list[TaskDict]] = defaultdict(list)
+            orphans: list[TaskDict] = []
+            epics_in_order: list[TaskDict] = []
+
             for task in tasks:
+                parent_id = task.get("parent_task_id")
+                if task.get("type") == "epic":
+                    epics_in_order.append(task)
+                elif parent_id and parent_id in epic_ids_in_group:
+                    children_by_parent[parent_id].append(task)
+                else:
+                    orphans.append(task)
+
+            # Render epics with their children
+            for epic_task in epics_in_order:
+                self._render_task_row(table, epic_task)
+                children = children_by_parent.get(epic_task["id"], [])
+                for i, child in enumerate(children):
+                    is_last = i == len(children) - 1
+                    connector = "└─" if is_last else "├─"
+                    self._render_task_row(table, child, tree_prefix=connector)
+
+            # Render orphan tasks (no epic parent in this group)
+            for task in orphans:
                 self._render_task_row(table, task)
 
     def _render_groups_by_epic(self, table: "DataTable[str | Text]") -> None:
