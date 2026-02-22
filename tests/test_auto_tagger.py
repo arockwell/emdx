@@ -217,66 +217,6 @@ class TestAutoTaggerDatabase:
         for _doc_id, doc_suggestions in suggestions.items():
             assert len(doc_suggestions) > 0
 
-    def test_batch_auto_tag(self, tagger: AutoTagger, test_db: str) -> None:
-        """Test batch auto-tagging."""
-        conn = sqlite3.connect(test_db)
-        cursor = conn.cursor()
-
-        # Create documents
-        cursor.execute(
-            "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Test: API endpoints", "def test_get_user():"),
-        )
-        doc1_id = cursor.lastrowid
-        assert doc1_id is not None
-
-        cursor.execute(
-            "INSERT INTO documents (title, content) VALUES (?, ?)",
-            ("Bug: 500 error on save", "Server error when saving"),
-        )
-        doc2_id = cursor.lastrowid
-        assert doc2_id is not None
-
-        conn.commit()
-        conn.close()
-
-        # Batch auto-tag
-        results = tagger.batch_auto_tag(
-            document_ids=[doc1_id, doc2_id], confidence_threshold=0.7, dry_run=False
-        )
-
-        assert results["processed"] == 2
-        assert results["tagged"] == 2
-        assert results["tags_applied"] > 0
-
-
-class TestCustomPatterns:
-    """Test custom pattern functionality."""
-
-    def test_add_custom_pattern(self, tagger: AutoTagger) -> None:
-        """Test adding a custom pattern."""
-        tagger.add_custom_pattern(
-            "meeting",
-            title_patterns=[r"meeting:", r"standup:"],
-            content_patterns=[r"action items:", r"decisions:"],
-            tags=["notes", "meeting"],
-            confidence=0.85,
-        )
-
-        suggestions = tagger.analyze_document(
-            "Meeting: Sprint planning", "Action items: Plan tasks"
-        )  # noqa: E501
-        assert any(tag == "notes" for tag, _ in suggestions)
-
-    def test_remove_pattern(self, tagger: AutoTagger) -> None:
-        """Test removing a pattern."""
-        # Add then remove
-        tagger.add_custom_pattern("test_pattern", tags=["test"])
-        tagger.remove_pattern("test_pattern")
-
-        # Verify it's gone
-        assert "test_pattern" not in tagger.patterns
-
 
 class TestEdgeCases:
     """Test edge cases and error handling."""

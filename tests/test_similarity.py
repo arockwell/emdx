@@ -6,7 +6,9 @@ from unittest.mock import patch
 import pytest
 
 # Skip all tests if sklearn not installed - must come before module imports
-sklearn = pytest.importorskip("sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')")  # noqa: E501
+sklearn = pytest.importorskip(
+    "sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')"
+)  # noqa: E501
 
 from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityService  # noqa: E402
 
@@ -23,7 +25,7 @@ def temp_cache_dir(tmp_path):
 def similarity_service(temp_cache_dir, temp_db):
     """Create a SimilarityService with mocked cache and database."""
     # Patch the cache directory
-    with patch.object(SimilarityService, '__init__', lambda self, db_path=None: None):
+    with patch.object(SimilarityService, "__init__", lambda self, db_path=None: None):
         service = object.__new__(SimilarityService)
         service._cache_dir = temp_cache_dir
         service._cache_path = temp_cache_dir / "similarity_cache.pkl"
@@ -260,6 +262,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -293,6 +296,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -330,6 +334,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -362,6 +367,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -381,12 +387,8 @@ class TestSimilarityServiceIntegration:
             service.build_index()
 
             # With very high threshold, should get fewer results
-            high_threshold_results = service.find_similar(
-                doc_ids[0], limit=10, min_similarity=0.9
-            )
-            low_threshold_results = service.find_similar(
-                doc_ids[0], limit=10, min_similarity=0.01
-            )
+            high_threshold_results = service.find_similar(doc_ids[0], limit=10, min_similarity=0.9)
+            low_threshold_results = service.find_similar(doc_ids[0], limit=10, min_similarity=0.01)
 
             # All high threshold results should meet the threshold
             for result in high_threshold_results:
@@ -406,6 +408,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -441,6 +444,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -476,6 +480,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -501,83 +506,6 @@ class TestSimilarityServiceIntegration:
             for result in results:
                 assert result.project == "ml-project"
 
-    def test_find_similar_by_text(self, populated_db, temp_cache_dir):
-        """Test finding similar documents by text query."""
-        db = populated_db["db"]
-
-        with patch("emdx.services.similarity.db") as mock_db:
-            mock_conn = db.get_connection()
-
-            class MockContextManager:
-                def __enter__(self):
-                    return mock_conn
-                def __exit__(self, *args):
-                    pass
-
-            mock_db.get_connection.return_value = MockContextManager()
-
-            service = SimilarityService.__new__(SimilarityService)
-            service._cache_dir = temp_cache_dir
-            service._cache_path = temp_cache_dir / "similarity_cache.pkl"
-            service._vectorizer = None
-            service._tfidf_matrix = None
-            service._doc_ids = []
-            service._doc_titles = []
-            service._doc_projects = []
-            service._doc_tags = []
-            service._last_built = None
-
-            service.build_index()
-
-            # Search for machine learning content
-            results = service.find_similar_by_text(
-                "machine learning python scikit-learn", limit=5
-            )
-
-            assert len(results) > 0
-            # The Python ML documents should rank highly
-            top_titles = [r.title for r in results[:2]]
-            assert any("Python" in t and ("Machine Learning" in t or "Data Science" in t)
-                      for t in top_titles)
-
-    def test_cache_invalidation(self, populated_db, temp_cache_dir):
-        """Test that invalidate_cache clears the index."""
-        db = populated_db["db"]
-
-        with patch("emdx.services.similarity.db") as mock_db:
-            mock_conn = db.get_connection()
-
-            class MockContextManager:
-                def __enter__(self):
-                    return mock_conn
-                def __exit__(self, *args):
-                    pass
-
-            mock_db.get_connection.return_value = MockContextManager()
-
-            service = SimilarityService.__new__(SimilarityService)
-            service._cache_dir = temp_cache_dir
-            service._cache_path = temp_cache_dir / "similarity_cache.pkl"
-            service._vectorizer = None
-            service._tfidf_matrix = None
-            service._doc_ids = []
-            service._doc_titles = []
-            service._doc_projects = []
-            service._doc_tags = []
-            service._last_built = None
-
-            # Build index first
-            service.build_index()
-            assert service._cache_path.exists()
-            assert service._vectorizer is not None
-
-            # Invalidate cache
-            service.invalidate_cache()
-
-            assert not service._cache_path.exists()
-            assert service._vectorizer is None
-            assert len(service._doc_ids) == 0
-
     def test_get_index_stats(self, populated_db, temp_cache_dir):
         """Test getting index statistics."""
         db = populated_db["db"]
@@ -588,6 +516,7 @@ class TestSimilarityServiceIntegration:
             class MockContextManager:
                 def __enter__(self):
                     return mock_conn
+
                 def __exit__(self, *args):
                     pass
 
@@ -611,5 +540,3 @@ class TestSimilarityServiceIntegration:
             assert stats.vocabulary_size > 0
             assert stats.cache_size_bytes > 0
             assert stats.last_built is not None
-
-

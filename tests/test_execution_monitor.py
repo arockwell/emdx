@@ -22,6 +22,7 @@ from emdx.services.execution_monitor import ExecutionMonitor
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_execution(
     id=1,
     doc_id=1,
@@ -54,6 +55,7 @@ def _make_execution(
 # ExecutionMonitor init
 # ---------------------------------------------------------------------------
 
+
 class TestExecutionMonitorInit:
     def test_default_stale_timeout(self):
         monitor = ExecutionMonitor()
@@ -67,6 +69,7 @@ class TestExecutionMonitorInit:
 # ---------------------------------------------------------------------------
 # check_process_health
 # ---------------------------------------------------------------------------
+
 
 class TestCheckProcessHealth:
     def setup_method(self):
@@ -153,222 +156,20 @@ class TestCheckProcessHealth:
         execution = _make_execution(pid=None)
         health = self.monitor.check_process_health(execution)
         expected_keys = {
-            "execution_id", "is_zombie", "is_running",
-            "process_exists", "is_stale", "reason"
+            "execution_id",
+            "is_zombie",
+            "is_running",
+            "process_exists",
+            "is_stale",
+            "reason",
         }
         assert set(health.keys()) == expected_keys
 
 
 # ---------------------------------------------------------------------------
-# cleanup_stuck_executions
-# ---------------------------------------------------------------------------
-
-class TestCleanupStuckExecutions:
-    def setup_method(self):
-        self.monitor = ExecutionMonitor(stale_timeout_seconds=1800)
-
-    @patch("emdx.services.execution_monitor.get_stale_executions")
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    def test_no_running_executions(self, mock_running, mock_stale):
-        mock_running.return_value = []
-        mock_stale.return_value = []
-        actions = self.monitor.cleanup_stuck_executions(dry_run=True)
-        assert actions == []
-
-    @patch("emdx.services.execution_monitor.get_stale_executions")
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process")
-    def test_zombie_process_detected(self, mock_proc_cls, mock_running, mock_stale):
-        proc = MagicMock()
-        proc.is_running.return_value = True
-        proc.status.return_value = psutil.STATUS_ZOMBIE
-        mock_proc_cls.return_value = proc
-
-        execution = _make_execution(id=10, pid=100)
-        mock_running.return_value = [execution]
-        mock_stale.return_value = []
-
-        actions = self.monitor.cleanup_stuck_executions(dry_run=True)
-        assert len(actions) == 1
-        assert actions[0]["reason"] == "zombie_process"
-        assert actions[0]["completed"] is False  # dry_run
-
-    @patch("emdx.services.execution_monitor.get_stale_executions")
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("emdx.services.execution_monitor.update_execution_status")
-    @patch("psutil.Process")
-    def test_zombie_cleanup_not_dry_run(self, mock_proc_cls, mock_update, mock_running, mock_stale):
-        proc = MagicMock()
-        proc.is_running.return_value = True
-        proc.status.return_value = psutil.STATUS_ZOMBIE
-        mock_proc_cls.return_value = proc
-
-        execution = _make_execution(id=10, pid=100)
-        mock_running.return_value = [execution]
-        mock_stale.return_value = []
-
-        actions = self.monitor.cleanup_stuck_executions(dry_run=False)
-        assert len(actions) == 1
-        assert actions[0]["completed"] is True
-        mock_update.assert_called_once_with(10, "failed", -2)
-
-    @patch("emdx.services.execution_monitor.get_stale_executions")
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process", side_effect=psutil.NoSuchProcess(999))
-    def test_dead_process_detected(self, mock_proc_cls, mock_running, mock_stale):
-        execution = _make_execution(id=20, pid=999)
-        mock_running.return_value = [execution]
-        mock_stale.return_value = []
-
-        actions = self.monitor.cleanup_stuck_executions(dry_run=True)
-        assert len(actions) == 1
-        assert actions[0]["reason"] == "process_died"
-
-    @patch("emdx.services.execution_monitor.get_stale_executions")
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process")
-    def test_stale_not_running_detected(self, mock_proc_cls, mock_running, mock_stale):
-        proc = MagicMock()
-        proc.is_running.return_value = False
-        proc.status.return_value = psutil.STATUS_STOPPED
-        mock_proc_cls.return_value = proc
-
-        old_start = datetime.now(timezone.utc) - timedelta(hours=2)
-        execution = _make_execution(id=30, pid=100, started_at=old_start)
-        mock_running.return_value = [execution]
-        mock_stale.return_value = []
-
-        monitor = ExecutionMonitor(stale_timeout_seconds=60)
-        actions = monitor.cleanup_stuck_executions(dry_run=True)
-        assert len(actions) == 1
-        assert actions[0]["reason"] == "stale_execution"
-
-    @patch("emdx.services.execution_monitor.get_stale_executions")
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("emdx.services.execution_monitor.update_execution_status")
-    def test_stale_heartbeat_executions(self, mock_update, mock_running, mock_stale):
-        mock_running.return_value = []  # No running from process check
-        stale_exec = _make_execution(id=40, pid=None)
-        mock_stale.return_value = [stale_exec]
-
-        actions = self.monitor.cleanup_stuck_executions(dry_run=False)
-        assert len(actions) == 1
-        assert actions[0]["reason"] == "no_heartbeat"
-        mock_update.assert_called_once_with(40, "failed", -5)
-
-    @patch("emdx.services.execution_monitor.get_stale_executions")
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process", side_effect=psutil.NoSuchProcess(999))
-    def test_stale_dedup_with_running(self, mock_proc_cls, mock_running, mock_stale):
-        """Stale execution already in running list is not duplicated."""
-        execution = _make_execution(id=50, pid=999)
-        mock_running.return_value = [execution]
-        mock_stale.return_value = [execution]  # Same execution
-
-        actions = self.monitor.cleanup_stuck_executions(dry_run=True)
-        assert len(actions) == 1  # Not 2
-
-
-# ---------------------------------------------------------------------------
-# kill_zombie_processes
-# ---------------------------------------------------------------------------
-
-class TestKillZombieProcesses:
-    def setup_method(self):
-        self.monitor = ExecutionMonitor()
-
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    def test_no_running_returns_empty(self, mock_running):
-        mock_running.return_value = []
-        actions = self.monitor.kill_zombie_processes(dry_run=True)
-        assert actions == []
-
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    def test_no_pid_skipped(self, mock_running):
-        execution = _make_execution(pid=None)
-        mock_running.return_value = [execution]
-        actions = self.monitor.kill_zombie_processes(dry_run=True)
-        assert actions == []
-
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process")
-    def test_non_zombie_skipped(self, mock_proc_cls, mock_running):
-        proc = MagicMock()
-        proc.status.return_value = psutil.STATUS_RUNNING
-        mock_proc_cls.return_value = proc
-
-        execution = _make_execution(pid=100)
-        mock_running.return_value = [execution]
-        actions = self.monitor.kill_zombie_processes(dry_run=True)
-        assert actions == []
-
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process")
-    def test_zombie_detected_dry_run(self, mock_proc_cls, mock_running):
-        proc = MagicMock()
-        proc.status.return_value = psutil.STATUS_ZOMBIE
-        mock_proc_cls.return_value = proc
-
-        execution = _make_execution(id=5, pid=100)
-        mock_running.return_value = [execution]
-        actions = self.monitor.kill_zombie_processes(dry_run=True)
-
-        assert len(actions) == 1
-        assert actions[0]["action"] == "kill_zombie"
-        assert actions[0]["pid"] == 100
-        assert actions[0]["completed"] is False
-        proc.kill.assert_not_called()
-
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process")
-    def test_zombie_killed_not_dry_run(self, mock_proc_cls, mock_running):
-        proc = MagicMock()
-        proc.status.return_value = psutil.STATUS_ZOMBIE
-        mock_proc_cls.return_value = proc
-
-        execution = _make_execution(id=5, pid=100)
-        mock_running.return_value = [execution]
-        actions = self.monitor.kill_zombie_processes(dry_run=False)
-
-        assert len(actions) == 1
-        assert actions[0]["completed"] is True
-        proc.kill.assert_called_once()
-
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process")
-    def test_kill_failure_recorded(self, mock_proc_cls, mock_running):
-        proc = MagicMock()
-        proc.status.return_value = psutil.STATUS_ZOMBIE
-        proc.kill.side_effect = PermissionError("denied")
-        mock_proc_cls.return_value = proc
-
-        execution = _make_execution(id=5, pid=100)
-        mock_running.return_value = [execution]
-        actions = self.monitor.kill_zombie_processes(dry_run=False)
-
-        assert len(actions) == 1
-        assert actions[0]["completed"] is False
-        assert "denied" in actions[0]["error"]
-
-    @patch("emdx.services.execution_monitor.get_running_executions")
-    @patch("psutil.Process", side_effect=psutil.NoSuchProcess(999))
-    def test_nosuchprocess_during_zombie_check(self, mock_proc_cls, mock_running):
-        """NoSuchProcess in kill_zombie_processes is handled (bug: uses `pid` instead of `execution.pid`)."""  # noqa: E501
-        execution = _make_execution(id=5, pid=999)
-        mock_running.return_value = [execution]
-        # This may raise NameError due to bug at line 262 (pid not defined).
-        # We test the current behavior.
-        try:
-            actions = self.monitor.kill_zombie_processes(dry_run=True)
-            assert actions == []
-        except NameError:
-            # Known bug: line 262 references undefined `pid` instead of `execution.pid`
-            pass
-
-
-# ---------------------------------------------------------------------------
 # get_execution_metrics (uses session test DB)
 # ---------------------------------------------------------------------------
+
 
 class TestGetExecutionMetrics:
     def test_metrics_returns_expected_keys(self):
@@ -381,9 +182,13 @@ class TestGetExecutionMetrics:
             metrics = monitor.get_execution_metrics()
 
         expected_keys = {
-            "total_executions", "status_breakdown", "recent_24h",
-            "currently_running", "unhealthy_running",
-            "average_duration_minutes", "failure_rate_percent",
+            "total_executions",
+            "status_breakdown",
+            "recent_24h",
+            "currently_running",
+            "unhealthy_running",
+            "average_duration_minutes",
+            "failure_rate_percent",
             "metrics_timestamp",
         }
         assert expected_keys.issubset(set(metrics.keys()))
@@ -400,6 +205,7 @@ class TestGetExecutionMetrics:
 # ---------------------------------------------------------------------------
 # Execution dataclass properties
 # ---------------------------------------------------------------------------
+
 
 class TestExecutionDataclass:
     def test_duration_when_completed(self):

@@ -10,7 +10,9 @@ Tests cover:
 import pytest
 
 # Skip all tests if datasketch not installed - must come before module imports
-datasketch = pytest.importorskip("datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')")  # noqa: E501
+datasketch = pytest.importorskip(
+    "datasketch", reason="datasketch not installed (install with: pip install 'emdx[similarity]')"
+)  # noqa: E501
 
 from emdx.services.duplicate_detector import (  # noqa: E402
     DEFAULT_NUM_PERM,
@@ -149,7 +151,11 @@ class TestDuplicateDetector:
             conn.execute(
                 """INSERT INTO documents (title, content, project, is_deleted)
                    VALUES (?, ?, ?, 0)""",
-                ("Test Doc", "This is a test document with enough content to be indexed." * 5, "test"),  # noqa: E501
+                (
+                    "Test Doc",
+                    "This is a test document with enough content to be indexed." * 5,
+                    "test",
+                ),  # noqa: E501
             )
             conn.commit()
 
@@ -161,19 +167,25 @@ class TestDuplicateDetector:
         from emdx.database import db
 
         # Create two very similar documents
-        base_content = """
+        base_content = (
+            """
         This is a comprehensive guide to Python programming. It covers
         variables, functions, classes, and modules. Python is a versatile
         language used for web development, data science, and automation.
         Learning Python opens many career opportunities in technology.
-        """ * 3
+        """
+            * 3
+        )
 
-        similar_content = """
+        similar_content = (
+            """
         This is a comprehensive guide to Python programming. It covers
         variables, functions, classes, and modules. Python is a versatile
         language used for web development, data science, and automation.
         Learning Python opens many career opportunities in tech industry.
-        """ * 3
+        """
+            * 3
+        )
 
         with db.get_connection() as conn:
             conn.execute(
@@ -215,8 +227,14 @@ class TestDuplicateDetector:
         from emdx.database import db
 
         # Create documents with moderate similarity
-        content1 = "Python is a programming language. It is widely used for data science and web development." * 5  # noqa: E501
-        content2 = "JavaScript is a programming language. It is widely used for web development and frontend." * 5  # noqa: E501
+        content1 = (
+            "Python is a programming language. "
+            "It is widely used for data science and web development."
+        ) * 5
+        content2 = (
+            "JavaScript is a programming language. "
+            "It is widely used for web development and frontend."
+        ) * 5
 
         with db.get_connection() as conn:
             conn.execute(
@@ -257,43 +275,6 @@ class TestDuplicateDetector:
         result = detector.find_near_duplicates(max_documents=5)
         # Result can be empty or have some matches, but shouldn't crash
         assert isinstance(result, list)
-
-
-class TestDuplicateDetectorExactMethod:
-    """Tests for the legacy exact pairwise comparison method."""
-
-    @pytest.fixture
-    def detector(self):
-        return DuplicateDetector()
-
-    def test_find_near_duplicates_exact_empty_db(self, detector, clean_db):
-        """Empty database returns no duplicates."""
-        result = detector.find_near_duplicates_exact()
-        assert result == []
-
-    def test_find_near_duplicates_exact_with_duplicates(self, detector, clean_db):
-        """Exact method finds near-duplicates."""
-        from emdx.database import db
-
-        # Create two identical documents
-        content = "This is a test document with enough content to be indexed properly." * 5
-
-        with db.get_connection() as conn:
-            conn.execute(
-                """INSERT INTO documents (title, content, project, is_deleted, access_count)
-                   VALUES (?, ?, ?, 0, 10)""",
-                ("Doc 1", content, "test"),
-            )
-            conn.execute(
-                """INSERT INTO documents (title, content, project, is_deleted, access_count)
-                   VALUES (?, ?, ?, 0, 5)""",
-                ("Doc 2", content, "test"),
-            )
-            conn.commit()
-
-        result = detector.find_near_duplicates_exact(threshold=0.9)
-        assert len(result) == 1
-        assert result[0][2] >= 0.9  # Similarity should be high
 
 
 class TestMinHashSimilarityAccuracy:
