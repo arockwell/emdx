@@ -1391,5 +1391,92 @@ def wikify_command(
         console.print(msg)
 
 
+@app.command(name="entities")
+def entities_command(
+    doc_id: int | None = typer.Argument(None, help="Document ID to extract entities from"),
+    all_docs: bool = typer.Option(False, "--all", help="Extract entities for all documents"),
+    wikify: bool = typer.Option(
+        True, "--wikify/--no-wikify", help="Also create entity-match links"
+    ),
+    rebuild: bool = typer.Option(
+        False, "--rebuild", help="Clear entity-match links before regenerating"
+    ),
+) -> None:
+    """Extract entities from documents and create entity-match links.
+
+    Extracts key concepts, technical terms, and proper nouns from
+    markdown structure (headings, backtick terms, bold text, capitalized
+    phrases). Then cross-references entities across documents to
+    create links. No AI required.
+
+    Examples:
+        emdx maintain entities 42              # Extract + link one document
+        emdx maintain entities --all           # Backfill all documents
+        emdx maintain entities 42 --no-wikify  # Extract only, no linking
+    """
+    from ..services.entity_service import (
+        entity_match_wikify,
+        entity_wikify_all,
+        extract_and_save_entities,
+    )
+
+    if all_docs:
+        if wikify:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Extracting entities & linking...", total=None)
+                total_entities, total_links, docs = entity_wikify_all(
+                    rebuild=rebuild,
+                )
+                progress.update(task, completed=True)
+            console.print(
+                f"[green]Extracted {total_entities} entities, "
+                f"created {total_links} links across {docs} documents[/green]"
+            )
+        else:
+            from ..database import db
+
+            with db.get_connection() as conn:
+                cursor = conn.execute("SELECT id FROM documents WHERE is_deleted = 0")
+                doc_ids_list = [row[0] for row in cursor.fetchall()]
+
+            total = 0
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Extracting entities...", total=None)
+                for did in doc_ids_list:
+                    total += extract_and_save_entities(did)
+                progress.update(task, completed=True)
+            console.print(
+                f"[green]Extracted {total} entities from {len(doc_ids_list)} documents[/green]"
+            )
+        return
+
+    if doc_id is None:
+        console.print("[red]Error: provide a document ID or use --all[/red]")
+        raise typer.Exit(1)
+
+    if wikify:
+        result = entity_match_wikify(doc_id)
+        console.print(
+            f"Extracted [cyan]{result.entities_extracted}[/cyan] entities from document #{doc_id}"
+        )
+        if result.links_created > 0:
+            console.print(f"[green]Created {result.links_created} entity-match link(s)[/green]")
+            for lid in result.linked_doc_ids:
+                console.print(f"  [cyan]#{lid}[/cyan]")
+        else:
+            console.print("[dim]No new entity-match links created[/dim]")
+    else:
+        count = extract_and_save_entities(doc_id)
+        console.print(f"Extracted [cyan]{count}[/cyan] entities from document #{doc_id}")
+
+
 if __name__ == "__main__":
     app()

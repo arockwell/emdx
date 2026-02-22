@@ -266,6 +266,18 @@ def save(
     except Exception as e:
         console.print(f"   [yellow]Wikify skipped: {e}[/yellow]")
 
+    # Step 6.55: Entity extraction + entity-match wikification (zero cost)
+    try:
+        from emdx.services.entity_service import entity_match_wikify
+
+        entity_result = entity_match_wikify(doc_id)
+        if entity_result.links_created > 0:
+            console.print(
+                f"   [dim]Entity-linked to {entity_result.links_created}"
+                " doc(s) by shared concepts[/dim]"
+            )
+    except Exception as e:
+        console.print(f"   [yellow]Entity wikify skipped: {e}[/yellow]")
     # Step 6.6: Auto-link to similar documents (default on, use --no-auto-link to skip)
     if auto_link:
         try:
