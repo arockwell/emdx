@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 from dataclasses import dataclass, field
 
 from ..database import db
 from ..database.documents import save_document
+from ..database.types import WikiArticleTimingDict
 from .wiki_clustering_service import get_topic_docs, get_topics
 from .wiki_privacy_service import (
     build_privacy_prompt_section,
@@ -87,6 +89,7 @@ class WikiArticleResult:
     warnings: list[str] = field(default_factory=list)
     skipped: bool = False
     skip_reason: str = ""
+    timing: WikiArticleTimingDict | None = None
 
 
 @dataclass
@@ -416,12 +419,29 @@ def _save_article(
     input_tokens: int,
     output_tokens: int,
     cost_usd: float,
+    timing: WikiArticleTimingDict | None = None,
 ) -> tuple[int, int]:
     """Save generated article as an emdx document and create metadata.
 
     Returns (document_id, article_id).
     """
     source_hash = _compute_source_hash(sources)
+
+    timing_cols = ""
+    timing_vals: list[int] = []
+    if timing:
+        timing_cols = (
+            ", prepare_ms = ?, route_ms = ?, outline_ms = ?"
+            ", write_ms = ?, validate_ms = ?, save_ms = ?"
+        )
+        timing_vals = [
+            timing["prepare_ms"],
+            timing["route_ms"],
+            timing["outline_ms"],
+            timing["write_ms"],
+            timing["validate_ms"],
+            timing["save_ms"],
+        ]
 
     # Check if an article already exists for this topic
     with db.get_connection() as conn:
@@ -453,17 +473,11 @@ def _save_article(
                 "input_tokens = ?, output_tokens = ?, cost_usd = ?, "
                 "is_stale = 0, stale_reason = '', "
                 "previous_content = ?, "
-                "version = version + 1, generated_at = CURRENT_TIMESTAMP "
+                f"version = version + 1, generated_at = CURRENT_TIMESTAMP{timing_cols} "
                 "WHERE id = ?",
-                (
-                    source_hash,
-                    model,
-                    input_tokens,
-                    output_tokens,
-                    cost_usd,
-                    old_content,
-                    article_id,
-                ),
+                [source_hash, model, input_tokens, output_tokens, cost_usd, old_content]
+                + timing_vals
+                + [article_id],
             )
             # Replace source provenance
             conn.execute(
@@ -487,14 +501,31 @@ def _save_article(
         doc_type="wiki",
     )
 
+    # Build INSERT with optional timing columns
+    insert_cols = (
+        "topic_id, document_id, article_type, source_hash, model, "
+        "input_tokens, output_tokens, cost_usd"
+    )
+    insert_placeholders = "?, ?, 'topic_article', ?, ?, ?, ?, ?"
+    insert_vals: list[str | int | float] = [
+        topic_id,
+        doc_id,
+        source_hash,
+        model,
+        input_tokens,
+        output_tokens,
+        cost_usd,
+    ]
+    if timing:
+        insert_cols += ", prepare_ms, route_ms, outline_ms, write_ms, validate_ms, save_ms"
+        insert_placeholders += ", ?, ?, ?, ?, ?, ?"
+        insert_vals.extend(timing_vals)
+
     # Create wiki_articles metadata row
     with db.get_connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO wiki_articles "
-            "(topic_id, document_id, article_type, source_hash, model, "
-            "input_tokens, output_tokens, cost_usd) "
-            "VALUES (?, ?, 'topic_article', ?, ?, ?, ?, ?)",
-            (topic_id, doc_id, source_hash, model, input_tokens, output_tokens, cost_usd),
+            f"INSERT INTO wiki_articles ({insert_cols}) VALUES ({insert_placeholders})",
+            insert_vals,
         )
         article_id = cursor.lastrowid
         assert article_id is not None
@@ -567,7 +598,12 @@ def generate_article(
     except (json.JSONDecodeError, TypeError):
         top_entities = []
 
+    def _ms_since(start: float) -> int:
+        """Return elapsed milliseconds since *start* (monotonic)."""
+        return int((time.monotonic() - start) * 1000)
+
     # Step 1: PREPARE
+    t0 = time.monotonic()
     logger.info("[topic %d] PREPARE — fetching %s", topic_id, topic_label)
     doc_ids = get_topic_docs(topic_id)
     if not doc_ids:
@@ -627,12 +663,16 @@ def generate_article(
             skipped=True,
             skip_reason="Article up to date (source hash unchanged)",
         )
+    prepare_ms = _ms_since(t0)
 
     # Step 2: ROUTE
+    t0 = time.monotonic()
     strategy = _route_strategy(sources)
     logger.info("[topic %d] ROUTE — strategy=%s", topic_id, strategy)
+    route_ms = _ms_since(t0)
 
     # Step 3: OUTLINE
+    t0 = time.monotonic()
     outline = _build_outline(
         topic_label=topic_label,
         topic_slug=topic_slug,
@@ -646,6 +686,7 @@ def generate_article(
         outline.suggested_title,
         len(outline.section_hints),
     )
+    outline_ms = _ms_since(t0)
 
     if dry_run:
         # Estimate cost without calling LLM
@@ -673,9 +714,18 @@ def generate_article(
             model=used_model,
             skipped=True,
             skip_reason="dry run",
+            timing=WikiArticleTimingDict(
+                prepare_ms=prepare_ms,
+                route_ms=route_ms,
+                outline_ms=outline_ms,
+                write_ms=0,
+                validate_ms=0,
+                save_ms=0,
+            ),
         )
 
     # Step 4: WRITE
+    t0 = time.monotonic()
     used_model = model or DEFAULT_MODEL
     logger.info(
         "[topic %d] WRITE — synthesizing with %s (%s)...",
@@ -698,15 +748,27 @@ def generate_article(
         input_tokens,
         output_tokens,
     )
+    write_ms = _ms_since(t0)
 
     # Step 5: VALIDATE
+    t0 = time.monotonic()
     content, post_warnings = _validate_article(content)
     if post_warnings:
         logger.warning("[topic %d] VALIDATE — %s", topic_id, ", ".join(post_warnings))
     else:
         logger.info("[topic %d] VALIDATE — clean", topic_id)
+    validate_ms = _ms_since(t0)
 
     # Step 6: SAVE
+    t0 = time.monotonic()
+    timing: WikiArticleTimingDict = WikiArticleTimingDict(
+        prepare_ms=prepare_ms,
+        route_ms=route_ms,
+        outline_ms=outline_ms,
+        write_ms=write_ms,
+        validate_ms=validate_ms,
+        save_ms=0,  # updated after save completes
+    )
     doc_id, article_id = _save_article(
         topic_id=topic_id,
         content=content,
@@ -716,7 +778,18 @@ def generate_article(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost_usd=cost_usd,
+        timing=timing,
     )
+    save_ms = _ms_since(t0)
+    timing["save_ms"] = save_ms
+
+    # Update save_ms in the DB now that we know it
+    with db.get_connection() as conn:
+        conn.execute(
+            "UPDATE wiki_articles SET save_ms = ? WHERE id = ?",
+            (save_ms, article_id),
+        )
+        conn.commit()
 
     logger.info(
         "[topic %d] SAVE — doc #%d, %d+%d tokens, $%.4f",
@@ -737,6 +810,7 @@ def generate_article(
         cost_usd=cost_usd,
         model=used_model,
         warnings=post_warnings,
+        timing=timing,
     )
 
 

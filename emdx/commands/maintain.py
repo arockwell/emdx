@@ -1807,15 +1807,26 @@ def wiki_entities(
 
 
 @wiki_app.command(name="list")
+def _format_ms(ms: int) -> str:
+    """Format milliseconds into a human-readable string."""
+    if ms >= 60_000:
+        return f"{ms / 60_000:.1f}m"
+    if ms >= 1_000:
+        return f"{ms / 1_000:.1f}s"
+    return f"{ms}ms"
+
+
 def wiki_list(
     limit: int = typer.Option(20, "--limit", "-l", help="Max articles to show"),
     stale: bool = typer.Option(False, "--stale", help="Show only stale articles"),
+    timing: bool = typer.Option(False, "--timing", "-T", help="Show step-level timing"),
 ) -> None:
     """List generated wiki articles.
 
     Examples:
         emdx maintain wiki list                # All articles
         emdx maintain wiki list --stale        # Stale articles only
+        emdx maintain wiki list --timing       # Show step-level timing
     """
     from rich.table import Table
 
@@ -1825,7 +1836,9 @@ def wiki_list(
         query = (
             "SELECT wa.id, wa.topic_id, d.id as doc_id, d.title, "
             "wa.model, wa.input_tokens, wa.output_tokens, wa.cost_usd, "
-            "wa.is_stale, wa.version, wa.generated_at "
+            "wa.is_stale, wa.version, wa.generated_at, "
+            "wa.prepare_ms, wa.route_ms, wa.outline_ms, "
+            "wa.write_ms, wa.validate_ms, wa.save_ms "
             "FROM wiki_articles wa "
             "JOIN documents d ON wa.document_id = d.id "
         )
@@ -1848,10 +1861,17 @@ def wiki_list(
     table.add_column("Cost", justify="right")
     table.add_column("Status")
     table.add_column("Generated", style="dim")
+    if timing:
+        table.add_column("Prepare", justify="right", style="dim")
+        table.add_column("Route", justify="right", style="dim")
+        table.add_column("Outline", justify="right", style="dim")
+        table.add_column("Write", justify="right", style="dim")
+        table.add_column("Validate", justify="right", style="dim")
+        table.add_column("Save", justify="right", style="dim")
 
     for row in rows:
         status = "[red]stale[/red]" if row[8] else "[green]fresh[/green]"
-        table.add_row(
+        base_cols = [
             f"#{row[2]}",
             str(row[3])[:50],
             f"v{row[9]}",
@@ -1859,7 +1879,19 @@ def wiki_list(
             f"${row[7]:.4f}",
             status,
             str(row[10])[:10] if row[10] else "",
-        )
+        ]
+        if timing:
+            base_cols.extend(
+                [
+                    _format_ms(row[11] or 0),
+                    _format_ms(row[12] or 0),
+                    _format_ms(row[13] or 0),
+                    _format_ms(row[14] or 0),
+                    _format_ms(row[15] or 0),
+                    _format_ms(row[16] or 0),
+                ]
+            )
+        table.add_row(*base_cols)
 
     console.print(table)
 

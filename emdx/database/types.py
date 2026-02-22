@@ -149,6 +149,17 @@ class WikiRunRow(TypedDict):
     dry_run: int
 
 
+class WikiArticleTimingDict(TypedDict):
+    """Step-level timing (milliseconds) for wiki article generation."""
+
+    prepare_ms: int
+    route_ms: int
+    outline_ms: int
+    write_ms: int
+    validate_ms: int
+    save_ms: int
+
+
 class DatabaseStats(TypedDict, total=False):
     """Statistics returned by get_stats."""
 
