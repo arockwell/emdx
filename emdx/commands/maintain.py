@@ -2297,6 +2297,92 @@ def wiki_rename(
         print(f"  Document #{doc_id} title updated")
 
 
+@wiki_app.command(name="retitle")
+def wiki_retitle(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show changes without updating"),
+) -> None:
+    """Batch-update topic labels from article H1 headings.
+
+    Scans all active topics that have a generated article, extracts the
+    H1 heading from each article, and updates the topic label and slug
+    if the H1 differs from the current label.
+
+    Examples:
+        emdx maintain wiki retitle --dry-run   # Preview changes
+        emdx maintain wiki retitle             # Apply changes
+    """
+    import re
+
+    from ..database import db
+
+    def _slugify_label(label: str) -> str:
+        slug = label.lower().strip()
+        slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+        slug = re.sub(r"[\s-]+", "-", slug)
+        return slug[:80].strip("-")
+
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT t.id, t.topic_label, t.topic_slug, d.content, wa.document_id "
+            "FROM wiki_topics t "
+            "JOIN wiki_articles wa ON t.id = wa.topic_id "
+            "JOIN documents d ON wa.document_id = d.id "
+            "WHERE t.status != 'skipped' AND d.is_deleted = 0"
+        ).fetchall()
+
+    if not rows:
+        print("No topics with articles found")
+        return
+
+    retitled = 0
+    skipped = 0
+    for row in rows:
+        topic_id, old_label, old_slug, content, doc_id = row
+        # Extract H1 heading
+        match = re.search(r"^#\s+(.+)$", content or "", re.MULTILINE)
+        if not match:
+            continue
+        h1 = match.group(1).strip()
+        if h1 == old_label:
+            skipped += 1
+            continue
+
+        new_slug = _slugify_label(h1)
+
+        if dry_run:
+            print(f"  Topic {topic_id}: '{old_label}' -> '{h1}'")
+            retitled += 1
+            continue
+
+        with db.get_connection() as conn:
+            # Check slug uniqueness
+            conflict = conn.execute(
+                "SELECT id FROM wiki_topics WHERE topic_slug = ? AND id != ?",
+                (new_slug, topic_id),
+            ).fetchone()
+            if conflict:
+                print(
+                    f"  Topic {topic_id}: skipped — slug '{new_slug}' "
+                    f"conflicts with topic {conflict[0]}"
+                )
+                continue
+
+            conn.execute(
+                "UPDATE wiki_topics SET topic_label = ?, topic_slug = ? WHERE id = ?",
+                (h1, new_slug, topic_id),
+            )
+            conn.execute(
+                "UPDATE documents SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (h1, doc_id),
+            )
+            conn.commit()
+            print(f"  Topic {topic_id}: '{old_label}' -> '{h1}'")
+            retitled += 1
+
+    action = "Would retitle" if dry_run else "Retitled"
+    print(f"{action} {retitled}/{len(rows)} topics ({skipped} already matching)")
+
+
 def _set_topic_status(topic_id: int, new_status: str) -> tuple[str, str]:
     """Set a wiki topic's status. Returns (topic_label, old_status).
 

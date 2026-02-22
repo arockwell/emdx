@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -568,6 +569,20 @@ def _save_article(
     return doc_id, article_id
 
 
+def _extract_h1(content: str) -> str | None:
+    """Extract the first H1 heading from markdown content."""
+    match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+def _slugify_label(label: str) -> str:
+    """Convert a label to a URL-friendly slug."""
+    slug = label.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s-]+", "-", slug)
+    return slug[:80].strip("-")
+
+
 # ── Public API ────────────────────────────────────────────────────────
 
 
@@ -860,6 +875,40 @@ def generate_article(
         output_tokens,
         cost_usd,
     )
+
+    # Step 7: RETITLE — update topic label from article H1 heading
+    h1 = _extract_h1(content)
+    if h1 and h1 != topic_label:
+        new_slug = _slugify_label(h1)
+        with db.get_connection() as conn:
+            conflict = conn.execute(
+                "SELECT id FROM wiki_topics WHERE topic_slug = ? AND id != ?",
+                (new_slug, topic_id),
+            ).fetchone()
+            if not conflict:
+                conn.execute(
+                    "UPDATE wiki_topics SET topic_label = ?, topic_slug = ? WHERE id = ?",
+                    (h1, new_slug, topic_id),
+                )
+                conn.execute(
+                    "UPDATE documents SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (h1, doc_id),
+                )
+                conn.commit()
+                logger.info(
+                    "[topic %d] RETITLE — '%s' -> '%s'",
+                    topic_id,
+                    topic_label,
+                    h1,
+                )
+                topic_label = h1
+            else:
+                logger.info(
+                    "[topic %d] RETITLE skipped — slug '%s' conflicts with topic %d",
+                    topic_id,
+                    new_slug,
+                    conflict[0],
+                )
 
     return WikiArticleResult(
         topic_id=topic_id,
