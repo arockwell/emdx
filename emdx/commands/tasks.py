@@ -20,7 +20,15 @@ app.add_typer(categories_app, name="cat", help="Manage task categories")
 
 TASK_ID_HELP = "Task ID (e.g. 42 or TOOL-12)"
 
-ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocked": "⊘", "closed": "✓"}
+ICONS = {
+    "open": "○",
+    "active": "●",
+    "done": "✓",
+    "failed": "✗",
+    "blocked": "⊘",
+    "closed": "✓",
+    "wontdo": "⊘",
+}
 STATUS_STYLE = {
     "open": "default",
     "active": "blue",
@@ -28,6 +36,7 @@ STATUS_STYLE = {
     "done": "green",
     "failed": "red",
     "closed": "green",
+    "wontdo": "dim",
 }
 
 
@@ -36,7 +45,7 @@ def _blocker_summary(task_id: int) -> str:
     deps = tasks.get_dependencies(task_id)
     if not deps:
         return ""
-    open_deps = [d for d in deps if d["status"] not in ("done", "closed")]
+    open_deps = [d for d in deps if d["status"] not in ("done", "closed", "wontdo")]
     if not open_deps:
         return ""
     names = ", ".join(f"#{d['id']}" for d in open_deps[:3])
@@ -181,6 +190,41 @@ def done(
         print_json({"id": task_id, "title": task["title"], "status": "done"})
     else:
         console.print(f"[green]✓ Done:[/green] #{task_id} {task['title']}")
+
+
+@app.command()
+def wontdo(
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
+    note: str | None = typer.Option(None, "-n", "--note", help="Reason for closing"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Mark a task as won't do (closed without completing).
+
+    The task is treated as terminal (unblocks dependents) but
+    semantically distinct from done.
+
+    Examples:
+        emdx task wontdo 42
+        emdx task wontdo TOOL-12
+        emdx task wontdo 42 --note "Superseded by #55"
+    """
+    task_id = _resolve_id(task_id_str, json_output=json_output)
+    task = tasks.get_task(task_id)
+    if not task:
+        if json_output:
+            print_json({"error": f"Task #{task_id} not found"})
+        else:
+            console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    tasks.update_task(task_id, status="wontdo")
+    if note:
+        tasks.log_progress(task_id, f"Won't do: {note}")
+
+    if json_output:
+        print_json({"id": task_id, "title": task["title"], "status": "wontdo"})
+    else:
+        console.print(f"[dim]⊘ Won't do:[/dim] #{task_id} {task['title']}")
 
 
 @app.command()
