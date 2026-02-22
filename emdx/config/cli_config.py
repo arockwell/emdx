@@ -113,20 +113,6 @@ def get_default_cli_tool() -> CliTool:
         return CliTool.CLAUDE
 
 
-def get_cli_config(cli_tool: CliTool | None = None) -> CliConfig:
-    """Get configuration for a CLI tool.
-
-    Args:
-        cli_tool: The CLI tool to get config for. If None, uses default.
-
-    Returns:
-        CliConfig for the specified tool.
-    """
-    if cli_tool is None:
-        cli_tool = get_default_cli_tool()
-    return CLI_CONFIGS[cli_tool]
-
-
 def resolve_model_alias(alias: str, cli_tool: CliTool) -> str:
     """Resolve a model alias to the actual model name for a CLI.
 
@@ -192,19 +178,3 @@ def resolve_model_version(model: str | None, cli_tool: CliTool | None = None) ->
         model = config.default_model
 
     return resolve_model_alias(model, cli_tool) if model in MODEL_ALIASES else model
-
-
-def get_available_models(cli_tool: CliTool) -> list[str]:
-    """Get list of known models for a CLI tool.
-
-    Returns:
-        List of model names/aliases available for the CLI.
-    """
-    if cli_tool == CliTool.CLAUDE:
-        return [
-            "claude-opus-4-6",
-            "claude-sonnet-4-5-20250929",
-            "opus",
-            "sonnet",
-        ]
-    return []
