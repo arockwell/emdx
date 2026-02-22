@@ -45,11 +45,10 @@ def create_task(
 ) -> int:
     """Create task and return its ID.
 
-    When epic_key is set and task_type is not 'epic':
+    When epic_key is set:
       - Auto-creates category if needed
-      - Assigns next epic_seq and prepends "KEY-N: " to title
-    When epic_key is set and task_type is 'epic':
-      - Sets epic_key but leaves epic_seq NULL (epics don't get numbers)
+      - Assigns next epic_seq (epics and tasks share one sequence)
+      - Prepends "KEY-N: " to title for non-epic tasks only
     """
     epic_seq_val = None
 
@@ -61,17 +60,19 @@ def create_task(
     with db.get_connection() as conn:
         cursor = conn.cursor()
 
-        # Auto-number non-epic tasks within a category
-        if epic_key and task_type != "epic":
+        # Auto-number tasks within a category (epics and regular tasks share one sequence)
+        if epic_key:
             cursor.execute(
                 "SELECT COALESCE(MAX(epic_seq), 0) + 1 FROM tasks WHERE epic_key = ?",
                 (epic_key,),
             )
             seq_result = cursor.fetchone()
             epic_seq_val = seq_result[0] if seq_result else 1
-            prefix = f"{epic_key}-{epic_seq_val}: "
-            if not title.startswith(prefix):
-                title = f"{prefix}{title}"
+            # Prepend KEY-N: prefix to non-epic tasks only (epics use their title as-is)
+            if task_type != "epic":
+                prefix = f"{epic_key}-{epic_seq_val}: "
+                if not title.startswith(prefix):
+                    title = f"{prefix}{title}"
 
         cursor.execute(
             """
