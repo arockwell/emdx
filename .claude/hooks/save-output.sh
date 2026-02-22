@@ -61,8 +61,8 @@ if [[ -n "${EMDX_TAGS:-}" ]]; then
     TAGS="${EMDX_TAGS},${TAGS}"
 fi
 
-# Save to KB and extract doc ID
-SAVE_OUTPUT=$(echo "$MSG" | emdx save --title "$TITLE" --tags "$TAGS" 2>&1 || true)
+# Save to KB and extract doc ID (strip ANSI codes before parsing)
+SAVE_OUTPUT=$(echo "$MSG" | emdx save --title "$TITLE" --tags "$TAGS" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true)
 DOC_ID=$(echo "$SAVE_OUTPUT" | python3 -c "
 import sys, re
 m = re.search(r'#(\d+)', sys.stdin.read())
