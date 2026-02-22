@@ -395,6 +395,10 @@ def find(
     context: bool = typer.Option(
         False, "--context", help="Output retrieved context as plain text (for piping to claude)"
     ),
+    wiki: bool = typer.Option(False, "--wiki", help="Show only wiki articles (doc_type='wiki')"),
+    all_types: bool = typer.Option(
+        False, "--all-types", help="Show all document types (user, wiki, etc.)"
+    ),
 ) -> None:
     """Search the knowledge base with full-text search.
 
@@ -421,15 +425,26 @@ def find(
     """
     search_query = " ".join(query) if query else ""
 
+    # Determine doc_type filter: --wiki -> 'wiki', --all-types -> None, default -> 'user'
+    if wiki and all_types:
+        console.print("[red]Error: --wiki and --all-types are mutually exclusive[/red]")
+        raise typer.Exit(1)
+    if wiki:
+        doc_type: str | None = "wiki"
+    elif all_types:
+        doc_type = None
+    else:
+        doc_type = "user"
+
     try:
         # Handle --all: list all documents
         if all_docs:
-            _find_list_all(project, limit, json_output)
+            _find_list_all(project, limit, json_output, doc_type=doc_type)
             return
 
         # Handle --recent: show recently accessed documents
         if recent is not None:
-            _find_recent(recent, project, json_output)
+            _find_recent(recent, project, json_output, doc_type=doc_type)
             return
 
         # Handle --similar: find documents similar to a given one
@@ -485,6 +500,7 @@ def find(
                 created_before,
                 modified_after,
                 modified_before,
+                doc_type=doc_type,
             )
             return
 
@@ -498,6 +514,7 @@ def find(
             mode=mode,
             extract=extract,
             project=project,
+            doc_type=doc_type,
         )
 
         # Apply tag filters if specified
@@ -613,12 +630,13 @@ def _find_list_all(
     project: str | None,
     limit: int,
     json_output: bool,
+    doc_type: str | None = "user",
 ) -> None:
     """List all documents (replaces old `list` command)."""
     from emdx.models.documents import list_documents
     from emdx.utils.text_formatting import truncate_title
 
-    docs = list_documents(project=project, limit=limit)
+    docs = list_documents(project=project, limit=limit, doc_type=doc_type)
 
     if not docs:
         console.print("[yellow]No documents found[/yellow]")
@@ -668,12 +686,13 @@ def _find_recent(
     limit: int,
     project: str | None,
     json_output: bool,
+    doc_type: str | None = "user",
 ) -> None:
     """Show recently accessed documents (replaces old `recent` command)."""
     from emdx.models.documents import get_recent_documents
     from emdx.utils.text_formatting import truncate_title
 
-    docs = get_recent_documents(limit=limit)
+    docs = get_recent_documents(limit=limit, doc_type=doc_type)
     if project:
         docs = [d for d in docs if d.get("project") == project]
 
@@ -859,6 +878,7 @@ def _find_keyword_search(
     created_before: str | None,
     modified_after: str | None,
     modified_before: str | None,
+    doc_type: str | None = "user",
 ) -> None:
     """Original keyword-based search for tag/date filtered queries."""
     # Handle tag-based search
@@ -882,6 +902,7 @@ def _find_keyword_search(
                 created_before=created_before,
                 modified_after=modified_after,
                 modified_before=modified_before,
+                doc_type=doc_type,
             )
 
             # Combine: only show documents that match both criteria
@@ -930,6 +951,7 @@ def _find_keyword_search(
                 created_before=created_before,
                 modified_after=modified_after,
                 modified_before=modified_before,
+                doc_type=doc_type,
             )
         ]
 

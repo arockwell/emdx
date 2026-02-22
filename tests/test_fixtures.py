@@ -42,7 +42,8 @@ class DatabaseForTesting:
                 accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 access_count INTEGER DEFAULT 0,
                 deleted_at TIMESTAMP,
-                is_deleted BOOLEAN DEFAULT FALSE
+                is_deleted BOOLEAN DEFAULT FALSE,
+                doc_type TEXT NOT NULL DEFAULT 'user'
             )
         """
         )
