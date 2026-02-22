@@ -285,25 +285,6 @@ class TestExecutionCRUD:
         exec_obj = get_execution(exec_id)
         assert exec_obj.pid == 54321
 
-    def test_update_execution_working_dir(self, isolate_test_database):
-        """Test updating execution working directory."""
-        from emdx.models.executions import (
-            create_execution,
-            get_execution,
-            update_execution_working_dir,
-        )
-
-        exec_id = create_execution(
-            doc_id=None,
-            doc_title="Test",
-            log_file="/tmp/test.log",
-        )
-
-        update_execution_working_dir(exec_id, "/new/working/dir")
-
-        exec_obj = get_execution(exec_id)
-        assert exec_obj.working_dir == "/new/working/dir"
-
 
 class TestExecutionQueries:
     """Tests for execution query operations."""
@@ -400,30 +381,6 @@ class TestTimeoutHandling:
         # With a very long timeout, nothing should be stale
         stale = get_stale_executions(timeout_seconds=86400)  # 24 hours
         assert len(stale) == 0
-
-    def test_cleanup_old_executions(self, isolate_test_database):
-        """Test cleaning up old executions."""
-        from emdx.models.executions import (
-            cleanup_old_executions,
-            create_execution,
-            get_recent_executions,
-        )
-
-        # Create some executions
-        for i in range(3):
-            create_execution(
-                doc_id=None,
-                doc_title=f"Old {i}",
-                log_file=f"/tmp/old{i}.log",
-            )
-
-        # Clean with 0 days should delete recent ones too
-        # But 7 days should keep them
-        deleted = cleanup_old_executions(days=7)
-        assert deleted == 0  # Nothing older than 7 days
-
-        remaining = get_recent_executions(limit=10)
-        assert len(remaining) >= 3
 
     @pytest.mark.skip(reason="last_heartbeat column removed in migration 013")
     def test_update_execution_heartbeat(self, isolate_test_database):

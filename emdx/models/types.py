@@ -57,12 +57,6 @@ class TaskLogEntryDict(TypedDict):
     created_at: str | None
 
 
-class GameplanStatsDict(TypedDict):
-    total: int
-    done: int
-    by_status: dict[str, int]
-
-
 class CategoryDict(TypedDict):
     key: str
     name: str

@@ -14,7 +14,6 @@ from emdx.models.types import (
     ActiveDelegateTaskDict,
     EpicTaskDict,
     EpicViewDict,
-    GameplanStatsDict,
     TaskDict,
     TaskLogEntryDict,
 )
@@ -490,22 +489,6 @@ def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLo
             (task_id, limit),
         )
         return [cast(TaskLogEntryDict, dict(row)) for row in cursor.fetchall()]
-
-
-def get_gameplan_stats(gameplan_id: int) -> GameplanStatsDict:
-    """Get task stats for a gameplan."""
-    with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT status, COUNT(*) as count FROM tasks
-            WHERE gameplan_id = ? GROUP BY status
-        """,
-            (gameplan_id,),
-        )
-        by_status = {row["status"]: row["count"] for row in cursor.fetchall()}
-        total = sum(by_status.values())
-        done = by_status.get("done", 0)
-        return {"total": total, "done": done, "by_status": by_status}
 
 
 def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
