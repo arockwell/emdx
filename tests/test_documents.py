@@ -87,7 +87,7 @@ class TestSaveDocument:
     def test_save_special_characters_in_title(self):
         from emdx.database.documents import get_document, save_document
 
-        title = "Test's \"special\" <chars> & more: 日本語"
+        title = 'Test\'s "special" <chars> & more: 日本語'
         doc_id = save_document(title, "Content")
         doc = get_document(doc_id)
         assert doc["title"] == title
@@ -186,9 +186,18 @@ class TestGetDocument:
         doc_id = save_document("Full Fields", "Content", project="proj")
         doc = get_document(doc_id)
         # Verify all expected fields exist
-        for field in ["id", "title", "content", "project", "created_at",
-                       "updated_at", "accessed_at", "access_count",
-                       "is_deleted", "deleted_at"]:
+        for field in [
+            "id",
+            "title",
+            "content",
+            "project",
+            "created_at",
+            "updated_at",
+            "accessed_at",
+            "access_count",
+            "is_deleted",
+            "deleted_at",
+        ]:
             assert field in doc, f"Missing field: {field}"
 
 
@@ -271,9 +280,7 @@ class TestDeleteDocument:
         result = delete_document("Hard Del Title", hard_delete=True)
         assert result is True
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT id FROM documents WHERE title = ?", ("Hard Del Title",)
-            )
+            cursor = conn.execute("SELECT id FROM documents WHERE title = ?", ("Hard Del Title",))
             assert cursor.fetchone() is None
 
     def test_delete_nonexistent_returns_false(self):
@@ -499,6 +506,7 @@ class TestCountDocuments:
         save_document("C", "Content", project="y")
         assert count_documents(project="x", parent_id=-1) == 2
 
+
 class TestGetRecentDocuments:
     """Test get_recent_documents()."""
 
@@ -615,9 +623,7 @@ class TestAccessTracking:
 
         doc_id = save_document("Zero Access", "Content")
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT access_count FROM documents WHERE id = ?", (doc_id,)
-            )
+            cursor = conn.execute("SELECT access_count FROM documents WHERE id = ?", (doc_id,))
             assert cursor.fetchone()[0] == 0
 
     def test_each_get_increments_count(self):
@@ -630,10 +636,9 @@ class TestAccessTracking:
         # access_count should be 5 (each get increments, including the last one)
         # The last get_document also incremented, so we query the raw value
         from emdx.database.connection import db_connection
+
         with db_connection.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT access_count FROM documents WHERE id = ?", (doc_id,)
-            )
+            cursor = conn.execute("SELECT access_count FROM documents WHERE id = ?", (doc_id,))
             assert cursor.fetchone()[0] == 5
 
     def test_get_by_title_also_increments(self):
@@ -764,7 +769,7 @@ class TestSetParent:
 
 
 class TestGetChildren:
-    """Test get_children() and has_children()."""
+    """Test get_children()."""
 
     def test_get_children_basic(self):
         from emdx.database.documents import get_children, save_document
@@ -777,15 +782,6 @@ class TestGetChildren:
         assert len(children) == 2
         titles = {c["title"] for c in children}
         assert titles == {"Child 1", "Child 2"}
-
-    def test_has_children(self):
-        from emdx.database.documents import has_children, save_document
-
-        parent = save_document("Parent", "Content")
-        assert has_children(parent) is False
-
-        save_document("Child", "Content", parent_id=parent)
-        assert has_children(parent) is True
 
 
 class TestGetChildrenCount:
@@ -815,29 +811,6 @@ class TestGetChildrenCount:
         p1 = save_document("No Kids", "Content")
         counts = get_children_count([p1])
         assert counts[p1] == 0
-
-
-class TestGetDescendants:
-    """Test get_descendants()."""
-
-    def test_descendants_multi_level(self):
-        from emdx.database.documents import get_descendants, save_document
-
-        root = save_document("Root", "Content")
-        child = save_document("Child", "Content", parent_id=root)
-        grandchild = save_document("Grandchild", "Content", parent_id=child)
-
-        descendants = get_descendants(root)
-        ids = {d["id"] for d in descendants}
-        assert child in ids
-        assert grandchild in ids
-        assert root not in ids
-
-    def test_descendants_empty(self):
-        from emdx.database.documents import get_descendants, save_document
-
-        leaf = save_document("Leaf", "Content")
-        assert get_descendants(leaf) == []
 
 
 # =========================================================================

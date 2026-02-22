@@ -749,5 +749,57 @@ class TestTerminalStateSaveRestore:
         assert save_calls == ["save", "restore", "save", "restore"]
 
 
+class TestLinkifyDocRefs:
+    """Tests for _linkify_doc_refs function."""
+
+    def test_linkify_known_source(self) -> None:
+        """Convert #N to link when doc_id is in source set."""
+        from emdx.ui.qa.qa_screen import _linkify_doc_refs
+
+        result = _linkify_doc_refs("See Document #42 for details.", {42, 87})
+        assert "[#42](emdx://doc/42)" in result
+
+    def test_linkify_ignores_unknown_ids(self) -> None:
+        """Don't convert #N when doc_id is not a known source."""
+        from emdx.ui.qa.qa_screen import _linkify_doc_refs
+
+        result = _linkify_doc_refs("See issue #999 for details.", {42})
+        assert result == "See issue #999 for details."
+
+    def test_linkify_multiple_refs(self) -> None:
+        """Convert multiple #N references in one string."""
+        from emdx.ui.qa.qa_screen import _linkify_doc_refs
+
+        text = "Docs #42 and #87 agree, but #999 is unrelated."
+        result = _linkify_doc_refs(text, {42, 87})
+        assert "[#42](emdx://doc/42)" in result
+        assert "[#87](emdx://doc/87)" in result
+        assert "#999" in result
+        assert "emdx://doc/999" not in result
+
+    def test_linkify_skips_markdown_headings(self) -> None:
+        """Don't match # in markdown headings like ## Heading."""
+        from emdx.ui.qa.qa_screen import _linkify_doc_refs
+
+        result = _linkify_doc_refs("## Section 42", {42})
+        # Should not linkify the 42 after ##
+        assert "emdx://doc/42" not in result
+
+    def test_linkify_empty_source_set(self) -> None:
+        """No conversions when source set is empty."""
+        from emdx.ui.qa.qa_screen import _linkify_doc_refs
+
+        result = _linkify_doc_refs("See #42 and #87.", set())
+        assert result == "See #42 and #87."
+
+    def test_linkify_all_when_no_source_filter(self) -> None:
+        """Convert all #N refs when source_ids is None."""
+        from emdx.ui.qa.qa_screen import _linkify_doc_refs
+
+        result = _linkify_doc_refs("See #42 and #999.", None)
+        assert "[#42](emdx://doc/42)" in result
+        assert "[#999](emdx://doc/999)" in result
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

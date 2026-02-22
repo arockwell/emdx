@@ -2297,6 +2297,92 @@ def wiki_rename(
         print(f"  Document #{doc_id} title updated")
 
 
+@wiki_app.command(name="retitle")
+def wiki_retitle(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show changes without updating"),
+) -> None:
+    """Batch-update topic labels from article H1 headings.
+
+    Scans all active topics that have a generated article, extracts the
+    H1 heading from each article, and updates the topic label and slug
+    if the H1 differs from the current label.
+
+    Examples:
+        emdx maintain wiki retitle --dry-run   # Preview changes
+        emdx maintain wiki retitle             # Apply changes
+    """
+    import re
+
+    from ..database import db
+
+    def _slugify_label(label: str) -> str:
+        slug = label.lower().strip()
+        slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+        slug = re.sub(r"[\s-]+", "-", slug)
+        return slug[:80].strip("-")
+
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT t.id, t.topic_label, t.topic_slug, d.content, wa.document_id "
+            "FROM wiki_topics t "
+            "JOIN wiki_articles wa ON t.id = wa.topic_id "
+            "JOIN documents d ON wa.document_id = d.id "
+            "WHERE t.status != 'skipped' AND d.is_deleted = 0"
+        ).fetchall()
+
+    if not rows:
+        print("No topics with articles found")
+        return
+
+    retitled = 0
+    skipped = 0
+    for row in rows:
+        topic_id, old_label, old_slug, content, doc_id = row
+        # Extract H1 heading
+        match = re.search(r"^#\s+(.+)$", content or "", re.MULTILINE)
+        if not match:
+            continue
+        h1 = match.group(1).strip()
+        if h1 == old_label:
+            skipped += 1
+            continue
+
+        new_slug = _slugify_label(h1)
+
+        if dry_run:
+            print(f"  Topic {topic_id}: '{old_label}' -> '{h1}'")
+            retitled += 1
+            continue
+
+        with db.get_connection() as conn:
+            # Check slug uniqueness
+            conflict = conn.execute(
+                "SELECT id FROM wiki_topics WHERE topic_slug = ? AND id != ?",
+                (new_slug, topic_id),
+            ).fetchone()
+            if conflict:
+                print(
+                    f"  Topic {topic_id}: skipped — slug '{new_slug}' "
+                    f"conflicts with topic {conflict[0]}"
+                )
+                continue
+
+            conn.execute(
+                "UPDATE wiki_topics SET topic_label = ?, topic_slug = ? WHERE id = ?",
+                (h1, new_slug, topic_id),
+            )
+            conn.execute(
+                "UPDATE documents SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (h1, doc_id),
+            )
+            conn.commit()
+            print(f"  Topic {topic_id}: '{old_label}' -> '{h1}'")
+            retitled += 1
+
+    action = "Would retitle" if dry_run else "Retitled"
+    print(f"{action} {retitled}/{len(rows)} topics ({skipped} already matching)")
+
+
 def _set_topic_status(topic_id: int, new_status: str) -> tuple[str, str]:
     """Set a wiki topic's status. Returns (topic_label, old_status).
 
@@ -2934,6 +3020,37 @@ def wiki_export(
     ),
     build: bool = typer.Option(False, "--build", help="Run mkdocs build after export"),
     deploy: bool = typer.Option(False, "--deploy", help="Run mkdocs gh-deploy after export"),
+    remote: str = typer.Option(
+        "",
+        "--remote",
+        "-r",
+        help="Git remote name for gh-deploy (deploy to a different repo)",
+    ),
+    init_repo: bool = typer.Option(
+        False,
+        "--init-repo",
+        help="Initialize output dir as a git repo with optional GitHub remote",
+    ),
+    github_repo: str = typer.Option(
+        "",
+        "--github-repo",
+        help="GitHub repo to create/use with --init-repo (e.g. user/private-wiki)",
+    ),
+    private: bool = typer.Option(
+        True,
+        "--private/--public",
+        help="Make the GitHub repo private (default: private)",
+    ),
+    site_url: str = typer.Option(
+        "",
+        "--site-url",
+        help="Base URL for the published site (e.g. https://you.github.io/wiki/)",
+    ),
+    repo_url: str = typer.Option(
+        "",
+        "--repo-url",
+        help="Repository URL for 'edit this page' links in the wiki",
+    ),
 ) -> None:
     """Export wiki articles as a MkDocs site.
 
@@ -2941,15 +3058,28 @@ def wiki_export(
     generates mkdocs.yml with Material theme, and optionally builds or
     deploys to GitHub Pages.
 
+    Use --init-repo to bootstrap a separate git repo for your wiki, and
+    --remote to deploy to it. This keeps your wiki output separate from
+    your source KB repo.
+
     Examples:
         emdx maintain wiki export ./wiki-site
         emdx maintain wiki export ./wiki-site --build
         emdx maintain wiki export ./wiki-site --deploy
+        emdx maintain wiki export ./wiki-site --deploy --remote wiki
         emdx maintain wiki export ./wiki-site -n "My Wiki"
+
+        # Bootstrap a private wiki repo and deploy in one shot:
+        emdx maintain wiki export ./wiki-site --init-repo \\
+            --github-repo myuser/work-wiki --deploy
     """
     from ..services.wiki_export_service import export_mkdocs
 
-    result = export_mkdocs(output_dir, site_name=site_name)
+    # --init-repo: bootstrap the output dir as a git repo
+    if init_repo:
+        _init_wiki_repo(output_dir, github_repo=github_repo, private=private)
+
+    result = export_mkdocs(output_dir, site_name=site_name, site_url=site_url, repo_url=repo_url)
 
     print(f"Exported to {result.output_dir}/")
     print(f"  Articles:     {result.articles_exported}")
@@ -2964,7 +3094,10 @@ def wiki_export(
     if not build and not deploy:
         print(f"\nTo preview: cd {output_dir} && mkdocs serve")
         print(f"To build:   cd {output_dir} && mkdocs build")
-        print(f"To deploy:  cd {output_dir} && mkdocs gh-deploy")
+        deploy_hint = f"cd {output_dir} && mkdocs gh-deploy"
+        if remote:
+            deploy_hint += f" --remote-name {remote}"
+        print(f"To deploy:  {deploy_hint}")
         return
 
     # Check mkdocs is installed
@@ -2976,9 +3109,13 @@ def wiki_export(
         raise typer.Exit(1)
 
     if deploy:
-        print("\nRunning mkdocs gh-deploy...")
+        cmd = ["mkdocs", "gh-deploy", "--force"]
+        if remote:
+            cmd.extend(["--remote-name", remote])
+        remote_label = f" to remote '{remote}'" if remote else ""
+        print(f"\nRunning mkdocs gh-deploy{remote_label}...")
         proc = subprocess.run(
-            ["mkdocs", "gh-deploy", "--force"],
+            cmd,
             cwd=str(output_dir),
             capture_output=True,
             text=True,
@@ -2986,7 +3123,7 @@ def wiki_export(
         if proc.returncode != 0:
             print(f"Error: mkdocs gh-deploy failed:\n{proc.stderr}")
             raise typer.Exit(1)
-        print("Deployed to GitHub Pages")
+        print(f"Deployed to GitHub Pages{remote_label}")
     elif build:
         print("\nRunning mkdocs build...")
         proc = subprocess.run(
@@ -2999,6 +3136,85 @@ def wiki_export(
             print(f"Error: mkdocs build failed:\n{proc.stderr}")
             raise typer.Exit(1)
         print(f"Built to {output_dir}/site/")
+
+
+def _init_wiki_repo(
+    output_dir: Path,
+    github_repo: str = "",
+    private: bool = True,
+) -> None:
+    """Initialize the output directory as a git repo for wiki deployment.
+
+    If the directory already has a .git, this is a no-op (safe to re-run).
+    If --github-repo is provided, creates the repo on GitHub and adds it
+    as the 'origin' remote.
+    """
+    import shutil
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    git_dir = output_dir / ".git"
+
+    if not git_dir.exists():
+        # git init
+        proc = subprocess.run(
+            ["git", "init"],
+            cwd=str(output_dir),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            print(f"Error: git init failed:\n{proc.stderr}")
+            raise typer.Exit(1)
+        print(f"Initialized git repo in {output_dir}/")
+
+        # Write .gitignore
+        gitignore = output_dir / ".gitignore"
+        if not gitignore.exists():
+            gitignore.write_text("site/\n")
+    else:
+        print(f"Git repo already exists in {output_dir}/")
+
+    # Create GitHub repo if requested
+    if github_repo:
+        gh_bin = shutil.which("gh")
+        if not gh_bin:
+            print("Error: gh CLI not found. Install from https://cli.github.com/")
+            raise typer.Exit(1)
+
+        # Check if remote already exists
+        proc = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=str(output_dir),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            print(f"Remote 'origin' already set to {proc.stdout.strip()}")
+            return
+
+        # Create the repo on GitHub
+        visibility = "--private" if private else "--public"
+        proc = subprocess.run(
+            ["gh", "repo", "create", github_repo, visibility, "--confirm"],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            # Repo might already exist — that's fine
+            if "already exists" not in proc.stderr:
+                print(f"Error creating repo: {proc.stderr}")
+                raise typer.Exit(1)
+            print(f"Repo {github_repo} already exists")
+
+        # Add as remote
+        remote_url = f"git@github.com:{github_repo}.git"
+        subprocess.run(
+            ["git", "remote", "add", "origin", remote_url],
+            cwd=str(output_dir),
+            capture_output=True,
+            text=True,
+        )
+        print(f"Added remote 'origin' -> {remote_url}")
 
 
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")

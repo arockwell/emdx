@@ -27,10 +27,29 @@ _msg_counter = 0
 
 _MD_SYNTAX = re.compile(r"#{1,6}\s+|[*_]{1,3}|`{1,3}|^-{3,}$|^\s*[-*+]\s", re.MULTILINE)
 
+# Match #N doc references in answer text, but not inside markdown headings or code
+_DOC_REF = re.compile(r"(?<![#\w])#(\d+)\b")
+
 
 def _strip_md(text: str) -> str:
     """Strip markdown syntax for plain-text display."""
     return _MD_SYNTAX.sub("", text).strip()
+
+
+def _linkify_doc_refs(text: str, source_ids: set[int] | None = None) -> str:
+    """Convert #N doc references into clickable markdown links.
+
+    If source_ids is provided, only converts references matching those IDs.
+    If None, converts all #N patterns.
+    """
+
+    def _replace(m: re.Match[str]) -> str:
+        doc_id = int(m.group(1))
+        if source_ids is not None and doc_id not in source_ids:
+            return m.group(0)
+        return f"[#{doc_id}](emdx://doc/{doc_id})"
+
+    return _DOC_REF.sub(_replace, text)
 
 
 def _next_msg_id() -> str:
@@ -220,7 +239,7 @@ class QAScreen(HelpMixin, Widget):
                 yield Static("SOURCES", id="qa-source-header")
                 yield ScrollableContainer(id="qa-source-scroll")
                 with ScrollableContainer(id="qa-source-preview-scroll"):
-                    yield Markdown("", id="qa-source-preview")
+                    yield Markdown("", id="qa-source-preview", open_links=False)
                 yield Static(
                     "[bold]< Back[/bold] to sources",
                     id="qa-source-back",
@@ -273,7 +292,7 @@ class QAScreen(HelpMixin, Widget):
     def _append_markdown(self, content: str) -> None:
         """Append a rendered Markdown widget to the conversation."""
         container = self.query_one("#qa-conversation", ScrollableContainer)
-        md = Markdown(content, classes="qa-answer", id=_next_msg_id())
+        md = Markdown(content, classes="qa-answer", id=_next_msg_id(), open_links=False)
         container.mount(md)
         md.scroll_visible()
 
@@ -507,18 +526,28 @@ class QAScreen(HelpMixin, Widget):
 
     def _render_entry(self, entry: QAEntry) -> None:
         """Render a single Q&A entry into the conversation DOM."""
+        logger.info(
+            "_render_entry: sources=%d, answer_len=%d, elapsed=%dms",
+            len(entry.sources),
+            len(entry.answer),
+            entry.elapsed_ms,
+        )
         self._append_message("[bold green]A:[/bold green]")
-        self._append_markdown(entry.answer)
-        meta_parts: list[str] = []
+        # Linkify ALL #N doc references in the answer so they're clickable
+        answer_text = _linkify_doc_refs(entry.answer)
         if entry.sources:
             self._source_ids = [s.doc_id for s in entry.sources]
-            source_parts = [f"#{s.doc_id} {s.title}" for s in entry.sources]
-            meta_parts.append(f"Sources: {' · '.join(source_parts)}")
-        if entry.elapsed_ms:
-            elapsed_s = entry.elapsed_ms / 1000
-            meta_parts.append(f"{elapsed_s:.1f}s")
-        if meta_parts:
-            self._append_message(f"[dim]{' | '.join(meta_parts)}[/dim]")
+        self._append_markdown(answer_text)
+        if entry.sources:
+            source_lines = "\n".join(
+                f"- [#{s.doc_id}](emdx://doc/{s.doc_id}) {s.title}" for s in entry.sources
+            )
+            elapsed = ""
+            if entry.elapsed_ms:
+                elapsed = f" *({entry.elapsed_ms / 1000:.1f}s)*"
+            self._append_markdown(f"**Sources**{elapsed}\n\n{source_lines}")
+        elif entry.elapsed_ms:
+            self._append_message(f"[dim]{entry.elapsed_ms / 1000:.1f}s[/dim]")
         self._append_message("[dim]─────────────────────────────────────────[/dim]")
 
     # -- Actions --
@@ -602,6 +631,33 @@ class QAScreen(HelpMixin, Widget):
         except Exception:
             pass
 
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        """Handle clicks on links in any Markdown widget (answers + preview)."""
+        event.prevent_default()
+        href = event.href
+        # emdx://doc/N — open source preview
+        if href.startswith("emdx://doc/"):
+            try:
+                doc_id = int(href.removeprefix("emdx://doc/"))
+            except ValueError:
+                return
+            logger.info("Doc ref link clicked: #%d", doc_id)
+            self._show_source_preview(doc_id)
+            return
+        # Inline #N refs that got linkified — same pattern
+        if href.startswith("#") and href[1:].isdigit():
+            doc_id = int(href[1:])
+            logger.info("Hash ref link clicked: #%d", doc_id)
+            self._show_source_preview(doc_id)
+            return
+        # External URLs — open in browser
+        if href.startswith(("http://", "https://")):
+            import webbrowser
+
+            webbrowser.open(href)
+            return
+        logger.debug("Ignoring link click: %s", href)
+
     def on_click(self, event: events.Click) -> None:
         """Handle clicks on source items or back button."""
         widget = event.widget
@@ -644,6 +700,7 @@ class QAScreen(HelpMixin, Widget):
 
         if not row:
             logger.warning("Source preview: doc #%d not found", doc_id)
+            self.notify(f"Document #{doc_id} not found", severity="warning", timeout=2)
             return
 
         title, content = row[0], row[1]

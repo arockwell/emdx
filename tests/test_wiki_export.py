@@ -440,11 +440,15 @@ class TestWikiExportCli:
 
     def test_export_help(self) -> None:
         """Help text shows expected content."""
+        import re
+
         result = runner.invoke(app, ["maintain", "wiki", "export", "--help"])
         assert result.exit_code == 0
-        assert "mkdocs" in result.output.lower()
-        assert "--build" in result.output
-        assert "--deploy" in result.output
+        # Strip ANSI escape codes before checking content
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "mkdocs" in clean.lower()
+        assert "--build" in clean
+        assert "--deploy" in clean
 
     def test_export_build_no_mkdocs(self, clean_wiki_db: Any, tmp_path: Path) -> None:
         """--build fails gracefully when mkdocs is not installed."""

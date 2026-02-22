@@ -300,20 +300,6 @@ def update_execution_pid(exec_id: int, pid: int) -> None:
         conn.commit()
 
 
-def update_execution_working_dir(exec_id: int, working_dir: str) -> None:
-    """Update execution working directory."""
-    with db_connection.get_connection() as conn:
-        conn.execute(
-            """
-            UPDATE executions
-            SET working_dir = ?
-            WHERE id = ?
-        """,
-            (working_dir, exec_id),
-        )
-        conn.commit()
-
-
 def update_execution_heartbeat(exec_id: int) -> None:
     """Update execution heartbeat timestamp.
 
@@ -384,36 +370,6 @@ def get_stale_executions(timeout_seconds: int = 1800) -> list[Execution]:
             )
 
         return executions
-
-
-def cleanup_old_executions(days: int = 7) -> int:
-    """Clean up executions older than specified days.
-
-    Args:
-        days: Number of days to keep executions (must be positive)
-
-    Returns:
-        Number of executions deleted
-
-    Raises:
-        ValueError: If days is not positive
-    """
-    if days <= 0:
-        raise ValueError("days must be positive")
-
-    with db_connection.get_connection() as conn:
-        cursor = conn.cursor()
-        # Build interval string safely - days is validated as int by function signature
-        interval = f"-{int(days)} days"
-        cursor.execute(
-            """
-            DELETE FROM executions
-            WHERE started_at < datetime('now', ?)
-        """,
-            (interval,),
-        )
-        conn.commit()
-        return int(cursor.rowcount)
 
 
 def get_execution_stats() -> ExecutionStatsDict:
