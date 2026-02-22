@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-untyped-def"
 """Comprehensive tests for delegate command (emdx/commands/delegate.py).
 
 Tests cover:
@@ -6,6 +7,8 @@ Tests cover:
 - --pr flag for pull request creation
 - --worktree flag for git worktree isolation
 - --doc flag for document context
+- --json flag for structured output
+- Duration formatting and summary lines
 - Error handling and edge cases
 """
 
@@ -16,8 +19,11 @@ import typer
 
 from emdx.commands.delegate import (
     PR_INSTRUCTION_GENERIC,
+    ParallelResult,
     SingleResult,
     _extract_pr_url,
+    _format_duration,
+    _format_summary_line,
     _load_doc_context,
     _make_branch_instruction,
     _make_pr_instruction,
@@ -306,7 +312,12 @@ class TestRunSingle:
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
     def test_failed_single_task(
-        self, mock_subprocess, mock_create, mock_update, mock_create_exec, mock_update_exec,
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
         mock_read_batch,
     ):
         mock_create.return_value = 1
@@ -497,7 +508,7 @@ class TestRunParallel:
             SingleResult(doc_id=30, task_id=3),
         ]
 
-        doc_ids = _run_parallel(
+        result = _run_parallel(
             tasks=["task1", "task2", "task3"],
             tags=["test"],
             title=None,
@@ -507,8 +518,8 @@ class TestRunParallel:
             quiet=True,
         )
 
-        assert len(doc_ids) == 3
-        assert set(doc_ids) == {10, 20, 30}
+        assert len(result.doc_ids) == 3
+        assert set(result.doc_ids) == {10, 20, 30}
 
     @patch("emdx.commands.delegate._run_single")
     @patch("emdx.commands.delegate.get_document")
@@ -528,7 +539,7 @@ class TestRunParallel:
             SingleResult(doc_id=99, task_id=4),  # synthesis
         ]
 
-        doc_ids = _run_parallel(
+        result = _run_parallel(
             tasks=["task1", "task2", "task3"],
             tags=[],
             title=None,
@@ -539,8 +550,8 @@ class TestRunParallel:
         )
 
         # Should include synthesis doc
-        assert 99 in doc_ids
-        assert len(doc_ids) == 4
+        assert 99 in result.doc_ids
+        assert len(result.doc_ids) == 4
 
     @patch("emdx.commands.delegate._run_single")
     @patch("emdx.commands.delegate._safe_update_task")
@@ -628,6 +639,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         mock_run_single.assert_called_once()
@@ -637,7 +649,7 @@ class TestDelegateCommand:
     @patch("emdx.commands.delegate._run_parallel")
     def test_multiple_tasks_go_parallel(self, mock_run_parallel):
         """Test that multiple tasks trigger parallel execution."""
-        mock_run_parallel.return_value = [10, 20, 30]
+        mock_run_parallel.return_value = ParallelResult(doc_ids=[10, 20, 30])
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -656,6 +668,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         mock_run_parallel.assert_called_once()
@@ -684,6 +697,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         mock_load_doc.assert_called_once_with(42, "implement this")
@@ -713,6 +727,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=True,
             base_branch="main",
+            json_output=False,
         )
 
         mock_create_wt.assert_called_once_with("main", task_title="fix bug")
@@ -743,6 +758,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,  # Not explicitly set, but should be implied
             base_branch="develop",
+            json_output=False,
         )
 
         # Worktree should be created even though --worktree not set
@@ -753,7 +769,7 @@ class TestDelegateCommand:
     @patch("emdx.commands.delegate._run_parallel")
     def test_synthesize_flag_passed_to_parallel(self, mock_run_parallel):
         """Test that --synthesize flag is passed to parallel execution."""
-        mock_run_parallel.return_value = [10, 20, 99]
+        mock_run_parallel.return_value = ParallelResult(doc_ids=[10, 20, 99])
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -772,6 +788,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         call_kwargs = mock_run_parallel.call_args[1]
@@ -804,6 +821,7 @@ class TestDelegateCommand:
             draft=True,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -836,6 +854,7 @@ class TestDelegateCommand:
             draft=False,  # --no-draft
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -844,7 +863,7 @@ class TestDelegateCommand:
     @patch("emdx.commands.delegate._run_parallel")
     def test_draft_flag_passed_to_run_parallel(self, mock_run_parallel):
         """Test that --draft flag is passed to _run_parallel."""
-        mock_run_parallel.return_value = [10, 20]
+        mock_run_parallel.return_value = ParallelResult(doc_ids=[10, 20])
         ctx = MagicMock()
         ctx.invoked_subcommand = None
 
@@ -863,6 +882,7 @@ class TestDelegateCommand:
             draft=False,  # --no-draft
             worktree=True,
             base_branch="main",
+            json_output=False,
         )
 
         call_kwargs = mock_run_parallel.call_args[1]
@@ -885,9 +905,11 @@ class TestDelegateCommand:
                 quiet=False,
                 doc=None,
                 pr=False,
+                branch=False,
                 draft=False,
                 worktree=False,
                 base_branch="main",
+                json_output=False,
             )
 
     @patch("emdx.commands.delegate.get_document")
@@ -918,6 +940,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         mock_get_doc.assert_called_once_with(42)
@@ -947,6 +970,7 @@ class TestDelegateCommand:
             draft=False,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1080,6 +1104,7 @@ class TestBranchFlag:
             draft=False,
             worktree=False,
             base_branch="main",
+            json_output=False,
         )
 
         # Worktree should be created
@@ -1111,6 +1136,7 @@ class TestBranchFlag:
             draft=False,
             worktree=False,
             base_branch="develop",
+            json_output=False,
         )
 
         mock_create_wt.assert_called_once_with("develop", task_title="add feature")
@@ -1136,6 +1162,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
+                json_output=False,
             )
 
     @patch("emdx.commands.delegate._run_single")
@@ -1163,6 +1190,7 @@ class TestBranchFlag:
                 draft=False,
                 worktree=False,
                 base_branch="main",
+                json_output=False,
             )
 
         call_kwargs = mock_run_single.call_args[1]
@@ -1199,8 +1227,10 @@ class TestErrorHandling:
                 doc=None,
                 pr=False,
                 branch=False,
+                draft=False,
                 worktree=True,
                 base_branch="main",
+                json_output=False,
             )
 
     @patch("emdx.commands.delegate._run_single")
@@ -1223,8 +1253,10 @@ class TestErrorHandling:
                 doc=None,
                 pr=False,
                 branch=False,
+                draft=False,
                 worktree=False,
                 base_branch="main",
+                json_output=False,
             )
 
 
@@ -1299,3 +1331,467 @@ class TestRunSingleHooksIntegration:
         )
 
         assert result.doc_id is None
+
+
+# =============================================================================
+# Tests for _format_duration
+# =============================================================================
+
+
+class TestFormatDuration:
+    """Tests for _format_duration — formats seconds into human-readable strings."""
+
+    def test_none_returns_question_mark(self):
+        assert _format_duration(None) == "?"
+
+    def test_seconds_only(self):
+        assert _format_duration(45) == "45s"
+
+    def test_zero_seconds(self):
+        assert _format_duration(0) == "0s"
+
+    def test_minutes_and_seconds(self):
+        assert _format_duration(192) == "3m12s"
+
+    def test_exact_minute(self):
+        assert _format_duration(60) == "1m00s"
+
+    def test_hours(self):
+        assert _format_duration(3661) == "1h01m01s"
+
+    def test_large_duration(self):
+        assert _format_duration(7200) == "2h00m00s"
+
+
+# =============================================================================
+# Tests for _format_summary_line
+# =============================================================================
+
+
+class TestFormatSummaryLine:
+    """Tests for _format_summary_line — formats a summary line for delegate output."""
+
+    def test_successful_result(self):
+        result = SingleResult(
+            doc_id=42,
+            task_id=1,
+            exit_code=0,
+            duration_seconds=192.5,
+            execution_id=100,
+        )
+        line = _format_summary_line(result)
+        assert "delegate: done" in line
+        assert "task_id:1" in line
+        assert "doc_id:42" in line
+        assert "exit:0" in line
+        assert "duration:3m12s" in line
+        assert "exec_id:100" in line
+
+    def test_failed_result(self):
+        result = SingleResult(
+            task_id=1,
+            success=False,
+            exit_code=1,
+            duration_seconds=5.0,
+            error_message="command not found",
+        )
+        line = _format_summary_line(result)
+        assert "delegate: FAILED" in line
+        assert "exit:1" in line
+        assert "error:command not found" in line
+
+    def test_result_with_pr_url(self):
+        result = SingleResult(
+            doc_id=42,
+            task_id=1,
+            pr_url="https://github.com/user/repo/pull/123",
+            exit_code=0,
+            duration_seconds=60.0,
+        )
+        line = _format_summary_line(result)
+        assert "pr:https://github.com/user/repo/pull/123" in line
+
+    def test_result_with_branch(self):
+        result = SingleResult(
+            doc_id=42,
+            task_id=1,
+            branch_name="feat/test",
+            exit_code=0,
+            duration_seconds=60.0,
+        )
+        line = _format_summary_line(result)
+        assert "branch:feat/test" in line
+
+    def test_pr_takes_precedence_over_branch(self):
+        """When both pr_url and branch_name exist, only pr is shown."""
+        result = SingleResult(
+            doc_id=42,
+            task_id=1,
+            pr_url="https://github.com/user/repo/pull/123",
+            branch_name="feat/test",
+            exit_code=0,
+            duration_seconds=60.0,
+        )
+        line = _format_summary_line(result)
+        assert "pr:" in line
+        assert "branch:" not in line
+
+
+# =============================================================================
+# Tests for SingleResult.to_dict
+# =============================================================================
+
+
+class TestSingleResultToDict:
+    """Tests for SingleResult.to_dict — JSON serialization."""
+
+    def test_basic_success(self):
+        result = SingleResult(
+            doc_id=42,
+            task_id=1,
+            exit_code=0,
+            duration_seconds=192.5,
+            execution_id=100,
+            output_doc_id=42,
+        )
+        d = result.to_dict()
+        assert d["task_id"] == 1
+        assert d["doc_id"] == 42
+        assert d["exit_code"] == 0
+        assert d["success"] is True
+        assert d["duration_seconds"] == 192.5
+        assert d["duration"] == "3m12s"
+        assert d["execution_id"] == 100
+
+    def test_failure_includes_error(self):
+        result = SingleResult(
+            task_id=1,
+            success=False,
+            exit_code=1,
+            error_message="task failed",
+        )
+        d = result.to_dict()
+        assert d["success"] is False
+        assert d["error"] == "task failed"
+
+    def test_pr_url_included(self):
+        result = SingleResult(
+            doc_id=42,
+            task_id=1,
+            pr_url="https://github.com/user/repo/pull/123",
+        )
+        d = result.to_dict()
+        assert d["pr_url"] == "https://github.com/user/repo/pull/123"
+
+    def test_no_pr_url_when_absent(self):
+        result = SingleResult(doc_id=42, task_id=1)
+        d = result.to_dict()
+        assert "pr_url" not in d
+
+    def test_none_duration(self):
+        result = SingleResult(doc_id=42, task_id=1)
+        d = result.to_dict()
+        assert d["duration_seconds"] is None
+        assert d["duration"] is None
+
+
+# =============================================================================
+# Tests for ParallelResult.to_dict
+# =============================================================================
+
+
+class TestParallelResultToDict:
+    """Tests for ParallelResult.to_dict — JSON serialization for parallel runs."""
+
+    def test_basic_parallel(self):
+        results = {
+            0: SingleResult(doc_id=10, task_id=1, exit_code=0, duration_seconds=60.0),
+            1: SingleResult(doc_id=20, task_id=2, exit_code=0, duration_seconds=90.0),
+        }
+        pr = ParallelResult(
+            parent_task_id=100,
+            results=results,
+            doc_ids=[10, 20],
+            total_duration_seconds=150.0,
+            succeeded=2,
+            failed=0,
+        )
+        d = pr.to_dict()
+        assert d["parent_task_id"] == 100
+        assert d["task_count"] == 2
+        assert d["succeeded"] == 2
+        assert d["failed"] == 0
+        assert d["doc_ids"] == [10, 20]
+        assert len(d["tasks"]) == 2  # type: ignore[arg-type]
+        assert d["total_duration"] == "2m30s"
+
+    def test_partial_failure(self):
+        results = {
+            0: SingleResult(doc_id=10, task_id=1, exit_code=0, duration_seconds=60.0),
+            1: SingleResult(
+                task_id=2,
+                success=False,
+                exit_code=1,
+                error_message="failed",
+                duration_seconds=5.0,
+            ),
+        }
+        pr = ParallelResult(
+            parent_task_id=100,
+            results=results,
+            doc_ids=[10],
+            total_duration_seconds=65.0,
+            succeeded=1,
+            failed=1,
+        )
+        d = pr.to_dict()
+        assert d["succeeded"] == 1
+        assert d["failed"] == 1
+        tasks = d["tasks"]
+        assert isinstance(tasks, list)
+        assert len(tasks) == 2
+        # Task at index 1 should have error
+        task_1 = tasks[1]
+        assert isinstance(task_1, dict)
+        assert task_1["success"] is False
+        assert "error" in task_1
+
+
+# =============================================================================
+# Tests for --json flag in delegate command
+# =============================================================================
+
+
+class TestJsonOutput:
+    """Tests for --json flag in delegate command."""
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_json_flag_outputs_json(self, mock_run_single, capsys):
+        """Test that --json flag outputs structured JSON to stdout."""
+        mock_run_single.return_value = SingleResult(
+            doc_id=42,
+            task_id=1,
+            exit_code=0,
+            duration_seconds=60.0,
+            execution_id=100,
+            output_doc_id=42,
+        )
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["analyze code"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            json_output=True,
+        )
+
+        import json as json_mod
+
+        captured = capsys.readouterr()
+        data = json_mod.loads(captured.out)
+        assert data["task_id"] == 1
+        assert data["doc_id"] == 42
+        assert data["exit_code"] == 0
+        assert data["success"] is True
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_json_flag_implies_quiet(self, mock_run_single):
+        """Test that --json suppresses stderr metadata (passes quiet to _run_single)."""
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["analyze code"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            json_output=True,
+        )
+
+        # _run_single should have been called with quiet=True (effective_quiet)
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["quiet"] is True
+
+    @patch("emdx.commands.delegate._run_parallel")
+    def test_json_flag_parallel(self, mock_run_parallel, capsys):
+        """Test that --json works for parallel tasks."""
+        mock_run_parallel.return_value = ParallelResult(
+            parent_task_id=100,
+            results={
+                0: SingleResult(doc_id=10, task_id=1),
+                1: SingleResult(doc_id=20, task_id=2),
+            },
+            doc_ids=[10, 20],
+            total_duration_seconds=120.0,
+            succeeded=2,
+            failed=0,
+        )
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["task1", "task2"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            json_output=True,
+        )
+
+        import json as json_mod
+
+        captured = capsys.readouterr()
+        data = json_mod.loads(captured.out)
+        assert data["parent_task_id"] == 100
+        assert data["succeeded"] == 2
+        assert data["doc_ids"] == [10, 20]
+
+
+# =============================================================================
+# Tests for _run_single timing and new fields
+# =============================================================================
+
+
+class TestRunSingleNewFields:
+    """Tests for new fields in _run_single results."""
+
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_successful_result_has_timing(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
+    ):
+        """Successful _run_single should populate duration, exit_code, execution_id."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
+
+        result = _run_single(
+            prompt="test task",
+            tags=["test"],
+            title="Test Title",
+            model=None,
+            quiet=True,
+        )
+
+        assert result.exit_code == 0
+        assert result.execution_id == 100
+        assert result.duration_seconds is not None
+        assert result.duration_seconds >= 0
+        assert result.output_doc_id == 42
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_failed_result_has_timing(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """Failed _run_single should still populate duration and exit_code."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_failure("Task failed")
+        mock_read_batch.return_value = None
+
+        result = _run_single(
+            prompt="failing task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+        )
+
+        assert result.exit_code == 1
+        assert result.duration_seconds is not None
+        assert result.duration_seconds >= 0
+        assert result.execution_id == 100
+        assert not result.success
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_timeout_result_has_timing(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """Timed-out _run_single should populate duration and exit_code=-1."""
+        import subprocess as sp
+
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.side_effect = sp.TimeoutExpired(cmd="claude", timeout=30)
+        mock_subprocess.TimeoutExpired = sp.TimeoutExpired
+
+        result = _run_single(
+            prompt="slow task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+            timeout=1,
+        )
+
+        assert result.exit_code == -1
+        assert result.duration_seconds is not None
+        assert result.error_message == "timeout"
+        assert result.execution_id == 100

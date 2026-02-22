@@ -26,13 +26,15 @@ With worktree isolation:
     emdx delegate --worktree "fix X"
 """
 
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import typer
@@ -422,6 +424,54 @@ def _cleanup_stale_worktrees(quiet: bool = False) -> None:
         sys.stderr.write(f"delegate: cleaned up {removed} stale worktree(s)\n")
 
 
+def _format_duration(seconds: float | None) -> str:
+    """Format seconds into a human-readable duration string like '3m12s'."""
+    if seconds is None:
+        return "?"
+    total = int(seconds)
+    if total < 60:
+        return f"{total}s"
+    minutes, secs = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m{secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m{secs:02d}s"
+
+
+def _format_summary_line(result: "SingleResult") -> str:
+    """Format a clean summary line for a completed delegate.
+
+    Example: 'delegate: done task_id:1 doc_id:42 exit:0 duration:3m12s'
+    """
+    parts = ["delegate:"]
+
+    if result.success:
+        parts.append("done")
+    else:
+        parts.append("FAILED")
+
+    if result.task_id is not None:
+        parts.append(f"task_id:{result.task_id}")
+    if result.doc_id is not None:
+        parts.append(f"doc_id:{result.doc_id}")
+    if result.output_doc_id is not None and result.output_doc_id != result.doc_id:
+        parts.append(f"output_doc_id:{result.output_doc_id}")
+    if result.execution_id is not None:
+        parts.append(f"exec_id:{result.execution_id}")
+    if result.exit_code is not None:
+        parts.append(f"exit:{result.exit_code}")
+    if result.duration_seconds is not None:
+        parts.append(f"duration:{_format_duration(result.duration_seconds)}")
+    if result.pr_url:
+        parts.append(f"pr:{result.pr_url}")
+    elif result.branch_name:
+        parts.append(f"branch:{result.branch_name}")
+    if result.error_message:
+        parts.append(f"error:{result.error_message[:100]}")
+
+    return " ".join(parts)
+
+
 @dataclass
 class SingleResult:
     """Result from a single delegate execution."""
@@ -432,6 +482,34 @@ class SingleResult:
     branch_name: str | None = None
     success: bool = True
     error_message: str | None = None
+    exit_code: int | None = None
+    duration_seconds: float | None = None
+    execution_id: int | None = None
+    output_doc_id: int | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        """Convert to a JSON-serializable dict."""
+        d: dict[str, object] = {
+            "task_id": self.task_id,
+            "doc_id": self.doc_id,
+            "output_doc_id": self.output_doc_id,
+            "execution_id": self.execution_id,
+            "exit_code": self.exit_code,
+            "success": self.success,
+            "duration_seconds": (
+                round(self.duration_seconds, 2) if self.duration_seconds else None
+            ),
+            "duration": (
+                _format_duration(self.duration_seconds) if self.duration_seconds else None
+            ),
+        }
+        if self.pr_url:
+            d["pr_url"] = self.pr_url
+        if self.branch_name:
+            d["branch_name"] = self.branch_name
+        if self.error_message:
+            d["error"] = self.error_message
+        return d
 
 
 def _run_single(
@@ -519,6 +597,7 @@ def _run_single(
 
     # Run the subprocess — hooks handle priming, saving, and task tracking
     effective_timeout = timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT
+    start_time = time.monotonic()
     try:
         result = subprocess.run(
             cmd,
@@ -529,20 +608,42 @@ def _run_single(
             cwd=working_dir,
             env=env,
         )
+        elapsed = time.monotonic() - start_time
         output = result.stdout
         success = result.returncode == 0
     except subprocess.TimeoutExpired:
-        sys.stderr.write("delegate: task timed out\n")
+        elapsed = time.monotonic() - start_time
+        sys.stderr.write(
+            f"delegate: FAILED task_id:{task_id} exit:-1 "
+            f"duration:{_format_duration(elapsed)} error:timeout\n"
+        )
         _safe_update_task(task_id, status="failed", error="timeout")
         _safe_update_execution_status(execution_id, "failed", exit_code=-1)
         _cleanup_batch_file(batch_path)
-        return SingleResult(task_id=task_id, success=False, error_message="timeout")
+        return SingleResult(
+            task_id=task_id,
+            success=False,
+            error_message="timeout",
+            exit_code=-1,
+            duration_seconds=elapsed,
+            execution_id=execution_id,
+        )
     except Exception as e:
-        sys.stderr.write(f"delegate: subprocess failed: {e}\n")
+        elapsed = time.monotonic() - start_time
+        sys.stderr.write(
+            f"delegate: FAILED task_id:{task_id} "
+            f"duration:{_format_duration(elapsed)} error:{str(e)[:100]}\n"
+        )
         _safe_update_task(task_id, status="failed", error=str(e)[:200])
         _safe_update_execution_status(execution_id, "failed")
         _cleanup_batch_file(batch_path)
-        return SingleResult(task_id=task_id, success=False, error_message=str(e))
+        return SingleResult(
+            task_id=task_id,
+            success=False,
+            error_message=str(e),
+            duration_seconds=elapsed,
+            execution_id=execution_id,
+        )
 
     # Update execution with exit code
     status = "completed" if success else "failed"
@@ -550,10 +651,20 @@ def _run_single(
 
     if not success:
         error_msg = (result.stderr or "")[:200] or f"exit code {result.returncode}"
-        sys.stderr.write(f"delegate: task failed: {error_msg}\n")
+        sys.stderr.write(
+            f"delegate: FAILED task_id:{task_id} exit:{result.returncode} "
+            f"duration:{_format_duration(elapsed)} error:{error_msg[:100]}\n"
+        )
         _safe_update_task(task_id, status="failed", error=error_msg)
         _cleanup_batch_file(batch_path)
-        return SingleResult(task_id=task_id, success=False, error_message=error_msg)
+        return SingleResult(
+            task_id=task_id,
+            success=False,
+            error_message=error_msg,
+            exit_code=result.returncode,
+            duration_seconds=elapsed,
+            execution_id=execution_id,
+        )
 
     # Validate PR preconditions if --pr was requested
     if pr and working_dir:
@@ -575,12 +686,6 @@ def _run_single(
             if doc:
                 pr_url = _extract_pr_url(doc.get("content", ""))
         _print_doc_content(doc_id)
-        if not quiet:
-            pr_info = f" pr:{pr_url}" if pr_url else ""
-            branch_info = f" branch:{pushed_branch}" if pushed_branch and not pr_url else ""
-            sys.stderr.write(
-                f"task_id:{task_id} doc_id:{doc_id} exec_id:{execution_id}{pr_info}{branch_info}\n"
-            )
     else:
         _safe_update_task(task_id, status="done")
         # Hook didn't save — print captured output directly
@@ -588,18 +693,23 @@ def _run_single(
             sys.stdout.write(output)
             if not output.endswith("\n"):
                 sys.stdout.write("\n")
-        if not quiet:
-            sys.stderr.write(
-                f"delegate: agent completed (no doc saved) "
-                f"task_id:{task_id} exec_id:{execution_id}\n"
-            )
 
-    return SingleResult(
+    single_result = SingleResult(
         doc_id=doc_id,
         task_id=task_id,
         pr_url=pr_url,
         branch_name=pushed_branch,
+        exit_code=result.returncode,
+        duration_seconds=elapsed,
+        execution_id=execution_id,
+        output_doc_id=doc_id,
     )
+
+    # Print summary line (unless suppressed by quiet or caller)
+    if not quiet:
+        sys.stderr.write(_format_summary_line(single_result) + "\n")
+
+    return single_result
 
 
 def _print_pr_summary(
@@ -636,6 +746,48 @@ def _print_branch_summary(
     sys.stderr.write("\n")
 
 
+@dataclass
+class ParallelResult:
+    """Result from a parallel delegate execution."""
+
+    parent_task_id: int | None = None
+    results: dict[int, SingleResult] = field(default_factory=dict)
+    doc_ids: list[int] = field(default_factory=list)
+    synthesis_result: SingleResult | None = None
+    total_duration_seconds: float | None = None
+    succeeded: int = 0
+    failed: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        """Convert to a JSON-serializable dict."""
+        task_results: list[dict[str, object]] = []
+        for i in sorted(self.results):
+            r = self.results[i]
+            rd = r.to_dict()
+            rd["index"] = i
+            task_results.append(rd)
+
+        d: dict[str, object] = {
+            "parent_task_id": self.parent_task_id,
+            "task_count": len(self.results),
+            "succeeded": self.succeeded,
+            "failed": self.failed,
+            "doc_ids": self.doc_ids,
+            "tasks": task_results,
+            "total_duration_seconds": (
+                round(self.total_duration_seconds, 2) if self.total_duration_seconds else None
+            ),
+            "total_duration": (
+                _format_duration(self.total_duration_seconds)
+                if self.total_duration_seconds
+                else None
+            ),
+        }
+        if self.synthesis_result:
+            d["synthesis"] = self.synthesis_result.to_dict()
+        return d
+
+
 def _run_parallel(
     tasks: list[str],
     tags: list[str],
@@ -652,8 +804,8 @@ def _run_parallel(
     worktree: bool = False,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
-) -> list[int]:
-    """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
+) -> ParallelResult:
+    """Run multiple tasks in parallel via ThreadPoolExecutor."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
 
     # Create parent group task (does NOT get epic numbering)
@@ -747,22 +899,37 @@ def _run_parallel(
     succeeded_count = len(doc_ids)
     failed_count = len(failed_tasks)
 
+    # Calculate total wall-clock duration from individual tasks
+    total_duration = (
+        sum(r.duration_seconds for r in results.values() if r.duration_seconds is not None) or None
+    )
+
     if not doc_ids:
-        sys.stderr.write(
-            f"delegate: parallel run completed but all {failed_count} task(s) failed\n"
+        # Build result even for all-failures case
+        parallel_result = ParallelResult(
+            parent_task_id=parent_task_id,
+            results=results,
+            doc_ids=[],
+            total_duration_seconds=total_duration,
+            succeeded=0,
+            failed=failed_count,
         )
+        if not quiet:
+            sys.stderr.write(
+                f"delegate: FAILED group task_id:{parent_task_id} "
+                f"0/{len(tasks)} succeeded "
+                f"duration:{_format_duration(total_duration)}\n"
+            )
+            for i in range(len(tasks)):
+                r = results.get(i)
+                if r and not r.success:
+                    sys.stderr.write(f"  [{i + 1}] FAILED: {r.error_message or 'unknown'}\n")
         _safe_update_task(
             parent_task_id,
             status="failed",
             error="all tasks failed",
         )
         raise typer.Exit(1) from None
-
-    # Log partial failures
-    if failed_count > 0:
-        sys.stderr.write(
-            f"delegate: {succeeded_count}/{len(tasks)} task(s) succeeded, {failed_count} failed\n"
-        )
 
     # Print PR/branch summary if any were created
     if pr:
@@ -771,6 +938,7 @@ def _run_parallel(
         _print_branch_summary(tasks, results)
 
     # Update parent task
+    synthesis_result_obj: SingleResult | None = None
     if synthesize and (len(doc_ids) > 1 or (len(doc_ids) >= 1 and failed_count > 0)):
         # Run a synthesis task that combines all outputs
         # Include both successful results and note about failed tasks
@@ -811,7 +979,7 @@ def _run_parallel(
 
         synthesis_prompt = synthesis_intro + "\n\n---\n\n".join(combined)
         synthesis_title = title or "Delegate synthesis"
-        synthesis_result = _run_single(
+        synthesis_result_obj = _run_single(
             prompt=synthesis_prompt,
             tags=tags,
             title=f"{synthesis_title} [synthesis]",
@@ -819,8 +987,8 @@ def _run_parallel(
             quiet=True,
             parent_task_id=parent_task_id,
         )
-        if synthesis_result.doc_id:
-            doc_ids.append(synthesis_result.doc_id)
+        if synthesis_result_obj.doc_id:
+            doc_ids.append(synthesis_result_obj.doc_id)
             # _run_single already printed the synthesis content to stdout
 
         # Set status based on partial failures
@@ -829,16 +997,9 @@ def _run_parallel(
         _safe_update_task(
             parent_task_id,
             status=final_status,
-            output_doc_id=synthesis_result.doc_id,
+            output_doc_id=synthesis_result_obj.doc_id,
             error=error_msg,
         )
-        if not quiet:
-            status_suffix = f" ({failed_count} failed)" if failed_count > 0 else ""
-            sys.stderr.write(
-                f"task_id:{parent_task_id} "
-                f"doc_ids:{','.join(str(d) for d in doc_ids)} "
-                f"synthesis_id:{synthesis_result.doc_id or 'none'}{status_suffix}\n"
-            )
     else:
         # Set status based on partial failures
         final_status = "partial" if failed_count > 0 else "done"
@@ -851,14 +1012,27 @@ def _run_parallel(
                 sys.stdout.write(f"\n=== Task {i + 1}: {tasks[i] if i < len(tasks) else '?'} ===\n")
             _print_doc_content(doc_id)
 
-        if not quiet:
-            status_suffix = f" ({failed_count} failed)" if failed_count > 0 else ""
-            sys.stderr.write(
-                f"task_id:{parent_task_id} "
-                f"doc_ids:{','.join(str(d) for d in doc_ids)}{status_suffix}\n"
-            )
+    parallel_result = ParallelResult(
+        parent_task_id=parent_task_id,
+        results=results,
+        doc_ids=doc_ids,
+        synthesis_result=synthesis_result_obj,
+        total_duration_seconds=total_duration,
+        succeeded=succeeded_count,
+        failed=failed_count,
+    )
 
-    return doc_ids
+    # Print group summary line
+    if not quiet:
+        fail_info = f" ({failed_count} failed)" if failed_count > 0 else ""
+        sys.stderr.write(
+            f"delegate: done group task_id:{parent_task_id} "
+            f"{succeeded_count}/{len(tasks)} succeeded{fail_info} "
+            f"doc_ids:{','.join(str(d) for d in doc_ids)} "
+            f"duration:{_format_duration(total_duration)}\n"
+        )
+
+    return parallel_result
 
 
 @app.callback(invoke_without_command=True)
@@ -964,6 +1138,11 @@ def delegate(
         "--cleanup",
         help="Remove stale delegate worktrees (>1 hour old)",
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Output structured JSON with task_id, doc_id, exit_code, duration",
+    ),
 ) -> None:
     """Delegate tasks to Claude agents with results on stdout.
 
@@ -1003,6 +1182,9 @@ def delegate(
 
     Quiet mode (just content, no metadata):
         emdx delegate -q "do something"
+
+    Structured JSON output:
+        emdx delegate --json "analyze code"
     """
     # Handle --cleanup: remove stale delegate worktrees
     if cleanup is True:
@@ -1064,6 +1246,7 @@ def delegate(
         "--cat",
         "-c",
         "--cleanup",
+        "--json",
     }
     consumed_flags = [t for t in task_list if t in known_flags]
     if consumed_flags:
@@ -1131,6 +1314,9 @@ def delegate(
             sys.stderr.write(f"delegate: failed to create worktree: {e}\n")
             raise typer.Exit(1) from None
 
+    # --json implies --quiet for stderr (structured output goes to stdout)
+    effective_quiet = quiet or json_output
+
     try:
         # 4. Route
         if len(task_list) == 1:
@@ -1139,7 +1325,7 @@ def delegate(
                 tags=flat_tags,
                 title=title,
                 model=model,
-                quiet=quiet,
+                quiet=effective_quiet,
                 pr=pr,
                 branch=branch,
                 pr_branch=worktree_branch,
@@ -1149,21 +1335,24 @@ def delegate(
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
             )
-            if single_result.pr_url and not quiet:
-                sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
-            elif single_result.branch_name and not quiet:
-                sys.stderr.write(f"delegate: branch pushed: {single_result.branch_name}\n")
+            if json_output:
+                sys.stdout.write(json.dumps(single_result.to_dict(), indent=2) + "\n")
+            else:
+                if single_result.pr_url and not quiet:
+                    sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
+                elif single_result.branch_name and not quiet:
+                    sys.stderr.write(f"delegate: branch pushed: {single_result.branch_name}\n")
             if single_result.doc_id is None:
                 raise typer.Exit(1) from None
         else:
-            _run_parallel(
+            parallel_result = _run_parallel(
                 tasks=task_list,
                 tags=flat_tags,
                 title=title,
                 jobs=jobs,
                 synthesize=synthesize,
                 model=model,
-                quiet=quiet,
+                quiet=effective_quiet,
                 pr=pr,
                 branch=branch,
                 draft=draft,
@@ -1173,6 +1362,8 @@ def delegate(
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
             )
+            if json_output:
+                sys.stdout.write(json.dumps(parallel_result.to_dict(), indent=2) + "\n")
     finally:
         # Clean up worktree unless --branch (needs local branch)
         # For --pr: branch is already pushed, worktree no longer needed
