@@ -160,6 +160,11 @@ class LazyCommand(click.MultiCommand):
         # Delegate to the real command
         return real_cmd.invoke(ctx)
 
+    def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        """Format help text (delegates to real command for full help)."""
+        real_cmd = self._load_real_command()
+        real_cmd.format_help(ctx, formatter)
+
     def get_params(self, ctx: click.Context) -> list[click.Parameter]:
         """Get parameters (loads the real command first for accurate params)."""
         real_cmd = self._load_real_command()

@@ -37,6 +37,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import click
 import typer
 
 from ..config.cli_config import (
@@ -51,7 +52,6 @@ from ..utils.git import generate_delegate_branch_name, validate_pr_preconditions
 
 app = typer.Typer(
     name="delegate",
-    help="Delegate tasks to agents (stdout-friendly)",
     context_settings={"allow_interspersed_args": False},
 )
 
@@ -528,6 +528,7 @@ def _run_single(
     seq: int | None = None,
     epic_key: str | None = None,
     timeout: int | None = None,
+    limit: float | None = None,
 ) -> SingleResult:
     """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -594,6 +595,10 @@ def _run_single(
     # Build claude command: claude --print --model <model>
     resolved_model = resolve_model_alias(model or "opus", CliTool.CLAUDE)
     cmd = ["claude", "--print", "--model", resolved_model]
+
+    # Apply budget limit if specified
+    if limit is not None:
+        cmd += ["--max-budget-usd", str(limit)]
 
     # Grant tool permissions so delegates can operate without interactive approval.
     # --print mode can't prompt for permission, so we must pre-authorize tools.
@@ -819,6 +824,7 @@ def _run_parallel(
     worktree: bool = False,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
+    limit: float | None = None,
 ) -> ParallelResult:
     """Run multiple tasks in parallel via ThreadPoolExecutor."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
@@ -881,6 +887,7 @@ def _run_parallel(
                     parent_task_id=parent_task_id,
                     seq=idx + 1,
                     epic_key=epic_key,
+                    limit=limit,
                 ),
             )
             return result
@@ -1153,6 +1160,12 @@ def delegate(
         "--cleanup",
         help="Remove stale delegate worktrees (>1 hour old)",
     ),
+    limit: float | None = typer.Option(
+        None,
+        "--limit",
+        "-l",
+        help="Max budget in USD per task (passed as --max-budget-usd to claude)",
+    ),
     json_output: bool = typer.Option(
         False,
         "--json",
@@ -1201,6 +1214,20 @@ def delegate(
     Structured JSON output:
         emdx delegate --json "analyze code"
     """
+    # Route subcommands: typer's invoke_without_command=True with a variadic
+    # positional arg swallows subcommand names (e.g. "list") as task arguments.
+    # Detect this and re-invoke through click's subcommand machinery.
+    # Uses click.Group.get_command() which works on TyperGroup and LazyCommand.
+    multi_cmd = ctx.command if isinstance(ctx.command, click.Group) else None
+    if tasks and multi_cmd is not None:
+        subcmd = multi_cmd.get_command(ctx, tasks[0])
+        if subcmd:
+            remaining = list(tasks[1:])
+            sub_ctx = subcmd.make_context(tasks[0], remaining, parent=ctx)
+            with sub_ctx:
+                subcmd.invoke(sub_ctx)
+            raise typer.Exit(0)
+
     # Handle --cleanup: remove stale delegate worktrees
     if cleanup is True:
         _cleanup_stale_worktrees(quiet)
@@ -1349,6 +1376,7 @@ def delegate(
                 source_doc_id=doc,
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
+                limit=limit,
             )
             if json_output:
                 sys.stdout.write(json.dumps(single_result.to_dict(), indent=2) + "\n")
@@ -1376,6 +1404,7 @@ def delegate(
                 worktree=use_worktree,
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
+                limit=limit,
             )
             if json_output:
                 sys.stdout.write(json.dumps(parallel_result.to_dict(), indent=2) + "\n")
