@@ -205,6 +205,8 @@ def _generate_mkdocs_yml(
     articles: list[ExportedArticle],
     entity_pages: list[EntityPage],
     site_name: str = "Knowledge Base Wiki",
+    site_url: str = "",
+    repo_url: str = "",
 ) -> str:
     """Generate mkdocs.yml configuration."""
     # Build nav tree
@@ -229,47 +231,57 @@ def _generate_mkdocs_yml(
 
     config: dict[str, object] = {
         "site_name": site_name,
-        "theme": {
-            "name": "material",
-            "palette": [
-                {
-                    "scheme": "default",
-                    "primary": "indigo",
-                    "accent": "indigo",
-                    "toggle": {
-                        "icon": "material/brightness-7",
-                        "name": "Switch to dark mode",
-                    },
-                },
-                {
-                    "scheme": "slate",
-                    "primary": "indigo",
-                    "accent": "indigo",
-                    "toggle": {
-                        "icon": "material/brightness-4",
-                        "name": "Switch to light mode",
-                    },
-                },
-            ],
-            "features": [
-                "navigation.instant",
-                "navigation.tabs",
-                "navigation.sections",
-                "navigation.expand",
-                "search.suggest",
-                "search.highlight",
-                "content.code.copy",
-            ],
-        },
-        "plugins": ["search"],
-        "nav": nav,
-        "markdown_extensions": [
-            "toc",
-            "tables",
-            "fenced_code",
-            {"toc": {"permalink": True}},
-        ],
     }
+    if site_url:
+        config["site_url"] = site_url
+    if repo_url:
+        config["repo_url"] = repo_url
+        config["repo_name"] = repo_url.rstrip("/").rsplit("/", 1)[-1]
+
+    config.update(
+        {
+            "theme": {
+                "name": "material",
+                "palette": [
+                    {
+                        "scheme": "default",
+                        "primary": "indigo",
+                        "accent": "indigo",
+                        "toggle": {
+                            "icon": "material/brightness-7",
+                            "name": "Switch to dark mode",
+                        },
+                    },
+                    {
+                        "scheme": "slate",
+                        "primary": "indigo",
+                        "accent": "indigo",
+                        "toggle": {
+                            "icon": "material/brightness-4",
+                            "name": "Switch to light mode",
+                        },
+                    },
+                ],
+                "features": [
+                    "navigation.instant",
+                    "navigation.tabs",
+                    "navigation.sections",
+                    "navigation.expand",
+                    "search.suggest",
+                    "search.highlight",
+                    "content.code.copy",
+                ],
+            },
+            "plugins": ["search"],
+            "nav": nav,
+            "markdown_extensions": [
+                "toc",
+                "tables",
+                "fenced_code",
+                {"toc": {"permalink": True}},
+            ],
+        }
+    )
 
     result: str = yaml.dump(config, default_flow_style=False, sort_keys=False)
     return result
@@ -278,6 +290,8 @@ def _generate_mkdocs_yml(
 def export_mkdocs(
     output_dir: Path,
     site_name: str = "Knowledge Base Wiki",
+    site_url: str = "",
+    repo_url: str = "",
 ) -> ExportResult:
     """Export wiki articles and entity pages as a MkDocs site.
 
@@ -292,6 +306,8 @@ def export_mkdocs(
     Args:
         output_dir: Directory to write the MkDocs site to.
         site_name: Site name for mkdocs.yml.
+        site_url: Base URL for the published site (e.g. https://you.github.io/wiki/).
+        repo_url: Repository URL for "edit this page" links.
 
     Returns:
         ExportResult with counts and any errors.
@@ -345,7 +361,9 @@ def export_mkdocs(
     (docs_dir / "index.md").write_text(index_md, encoding="utf-8")
 
     # Generate mkdocs.yml
-    mkdocs_yml = _generate_mkdocs_yml(articles, entity_pages, site_name)
+    mkdocs_yml = _generate_mkdocs_yml(
+        articles, entity_pages, site_name, site_url=site_url, repo_url=repo_url
+    )
     (output_dir / "mkdocs.yml").write_text(mkdocs_yml, encoding="utf-8")
     result.mkdocs_yml_generated = True
 
