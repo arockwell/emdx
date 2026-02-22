@@ -134,31 +134,6 @@ class TestDistillService:
         assert me_prompt != docs_prompt
         assert "documentation" in docs_prompt.lower()
 
-    def test_distill_single_delegates_to_synthesize(self):
-        """distill_single calls synthesize_documents with single doc."""
-        service = DistillService()
-
-        with patch.object(service, "synthesize_documents") as mock_synth:
-            mock_synth.return_value = DistillResult(
-                content="distilled",
-                source_ids=[1],
-                source_count=1,
-                audience=Audience.ME,
-                input_tokens=100,
-                output_tokens=50,
-            )
-
-            doc = {"id": 1, "title": "Test", "content": "Content"}
-            result = service.distill_single(doc, audience=Audience.COWORKERS)
-
-            mock_synth.assert_called_once_with(
-                documents=[doc],
-                topic=None,
-                audience=Audience.COWORKERS,
-                max_tokens=2000,
-            )
-            assert result.content == "distilled"
-
 
 # ---------------------------------------------------------------------------
 # Distill command tests
@@ -170,7 +145,6 @@ class TestDistillCommand:
     def test_distill_requires_topic_or_tags(self, mock_db):
         """Distill without topic or tags shows error."""
         from emdx.commands.distill import app
-
 
         result = runner.invoke(app, [])
         assert result.exit_code != 0
@@ -300,7 +274,6 @@ class TestDistillCommand:
     def test_distill_invalid_audience(self, mock_db):
         """Distill with invalid --for shows error."""
         from emdx.commands.distill import app
-
 
         result = runner.invoke(app, ["--for", "invalid", "topic"])
         assert result.exit_code != 0

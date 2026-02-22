@@ -8,7 +8,6 @@ import pytest
 from emdx.services.document_merger import (
     DocumentMerger,
     MergeCandidate,
-    MergeStrategy,
 )
 
 
@@ -137,28 +136,6 @@ class TestMergeCandidate:
         assert candidate.similarity_score == 0.85
         assert candidate.merge_reason == "Similar content"
         assert candidate.recommended_action == "Merge into #1 (more views)"
-
-
-class TestMergeStrategy:
-    """Tests for MergeStrategy dataclass."""
-
-    def test_merge_strategy_creation(self):
-        """Test creating a MergeStrategy instance."""
-        strategy = MergeStrategy(
-            keep_doc_id=1,
-            merge_doc_id=2,
-            merged_title="Combined Document",
-            merged_content="Full merged content here",
-            merged_tags=["python", "testing"],
-            preserve_metadata={"original_ids": [1, 2]}
-        )
-
-        assert strategy.keep_doc_id == 1
-        assert strategy.merge_doc_id == 2
-        assert strategy.merged_title == "Combined Document"
-        assert strategy.merged_content == "Full merged content here"
-        assert strategy.merged_tags == ["python", "testing"]
-        assert strategy.preserve_metadata == {"original_ids": [1, 2]}
 
 
 class TestDocumentMergerUnit:

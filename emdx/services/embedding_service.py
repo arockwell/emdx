@@ -409,14 +409,6 @@ class EmbeddingService:
             chunk_index_size_bytes=chunk_size,
         )
 
-    def delete_embedding(self, doc_id: int) -> bool:
-        """Delete embedding for a document."""
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM document_embeddings WHERE document_id = ?", (doc_id,))
-            conn.commit()
-            return cursor.rowcount > 0
-
     def clear_index(self) -> int:
         """Clear all embeddings. Returns count deleted."""
         with db.get_connection() as conn:
@@ -562,25 +554,3 @@ class EmbeddingService:
         # Sort by similarity descending
         results.sort(key=lambda x: x.similarity, reverse=True)
         return results[:limit]
-
-    def has_chunks(self) -> bool:
-        """Check if chunk index exists."""
-        try:
-            with db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT COUNT(*) FROM chunk_embeddings WHERE model_name = ?",
-                    (self.MODEL_NAME,),
-                )
-                count: int = cursor.fetchone()[0]
-                return count > 0
-        except Exception:
-            return False
-
-    def delete_chunk_embeddings(self, doc_id: int) -> bool:
-        """Delete chunk embeddings for a document."""
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM chunk_embeddings WHERE document_id = ?", (doc_id,))
-            conn.commit()
-            return cursor.rowcount > 0

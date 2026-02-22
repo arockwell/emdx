@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -423,53 +422,6 @@ class SimilarityService:
         results.sort(key=lambda x: x.similarity_score, reverse=True)
         return results[:limit]
 
-    def find_similar_by_text(
-        self, text: str, limit: int = 5, min_similarity: float = 0.1
-    ) -> list[SimilarDocument]:
-        """Find documents similar to arbitrary text.
-
-        Args:
-            text: Text to find similar documents for
-            limit: Maximum number of results to return
-            min_similarity: Minimum similarity score threshold
-
-        Returns:
-            List of similar documents, ordered by similarity score
-        """
-        _require_sklearn()
-        self._ensure_index()
-
-        if not self._doc_ids or self._tfidf_matrix is None or self._vectorizer is None:
-            return []
-
-        # Transform the query text
-        query_vector = self._vectorizer.transform([text])
-
-        # Compute similarities
-        similarities = cosine_similarity(query_vector, self._tfidf_matrix)[0]
-
-        # Build results
-        results = []
-        for i, doc_id in enumerate(self._doc_ids):
-            score = float(similarities[i])
-
-            if score >= min_similarity:
-                results.append(
-                    SimilarDocument(
-                        doc_id=doc_id,
-                        title=self._doc_titles[i],
-                        project=self._doc_projects[i],
-                        similarity_score=score,
-                        content_similarity=score,
-                        tag_similarity=0.0,  # No tag comparison for text queries
-                        common_tags=[],
-                    )
-                )
-
-        # Sort by score and limit
-        results.sort(key=lambda x: x.similarity_score, reverse=True)
-        return results[:limit]
-
     def get_index_stats(self) -> IndexStats:
         """Get statistics about the current index.
 
@@ -502,19 +454,6 @@ class SimilarityService:
             cache_age_seconds=cache_age,
             last_built=self._last_built,
         )
-
-    def invalidate_cache(self) -> None:
-        """Clear the cached index (force rebuild on next query)."""
-        if self._cache_path.exists() and self._cache_path.is_dir():
-            shutil.rmtree(self._cache_path)
-
-        self._vectorizer = None
-        self._tfidf_matrix = None
-        self._doc_ids = []
-        self._doc_titles = []
-        self._doc_projects = []
-        self._doc_tags = []
-        self._last_built = None
 
     def find_all_duplicate_pairs(
         self,

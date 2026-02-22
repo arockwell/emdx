@@ -54,12 +54,6 @@ _DELEGATE_BOILERPLATE = [
     re.compile(r"git worktree (?:add|remove|list).*$", re.MULTILINE),
 ]
 
-# Draft/incomplete markers
-_DRAFT_MARKERS = re.compile(
-    r"\b(?:TODO|FIXME|HACK|XXX|WIP|TBD|PLACEHOLDER)\b",
-    re.IGNORECASE,
-)
-
 
 def preprocess_content(content: str) -> tuple[str, list[str]]:
     """Apply Layer 1 pre-processing filters to document content.
@@ -119,21 +113,6 @@ def preprocess_content(content: str) -> tuple[str, list[str]]:
     result = re.sub(r"\n{3,}", "\n\n", result)
 
     return result.strip(), warnings
-
-
-def compute_draft_score(content: str) -> float:
-    """Score how "drafty" a document is (0.0 = polished, 1.0 = rough draft).
-
-    Based on density of TODO/WIP/TBD/FIXME markers.
-    """
-    words = content.split()
-    if not words:
-        return 0.0
-
-    marker_count = len(_DRAFT_MARKERS.findall(content))
-    # Normalize: 1 marker per 100 words = 0.5, 2+ per 100 = 1.0
-    density = marker_count / (len(words) / 100)
-    return min(density / 2.0, 1.0)
 
 
 # ── Layer 2: Synthesis prompt construction ──────────────────────────
