@@ -2017,6 +2017,39 @@ def wiki_coverage(
         console.print("\n[green]All user documents are covered by wiki topics![/green]")
 
 
+@wiki_app.command(name="diff")
+def wiki_diff_command(
+    topic_id: int = typer.Argument(..., help="Topic ID to show diff for"),
+) -> None:
+    """Show unified diff between previous and current article content.
+
+    When wiki generate regenerates an existing article, the previous
+    content is stashed. This command shows what changed.
+
+    Examples:
+        emdx maintain wiki diff 5              # Diff for topic 5
+    """
+    from ..services.wiki_synthesis_service import get_article_diff
+
+    diff = get_article_diff(topic_id)
+
+    if diff is None:
+        console.print(
+            f"[dim]No previous content for topic {topic_id} "
+            f"(article not found or never regenerated)[/dim]"
+        )
+        raise typer.Exit(1)
+
+    if not diff:
+        console.print("[green]No changes — previous and current content are identical[/green]")
+        return
+
+    from rich.syntax import Syntax
+
+    syntax = Syntax(diff, "diff", theme="monokai")
+    console.print(syntax)
+
+
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 
 # Register stale as a subcommand group of maintain

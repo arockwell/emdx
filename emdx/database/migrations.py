@@ -2646,6 +2646,13 @@ def migration_047_add_wiki_runs(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_048_add_wiki_previous_content(conn: sqlite3.Connection) -> None:
+    """Add previous_content column to wiki_articles for diff on regeneration."""
+    cursor = conn.cursor()
+    cursor.execute("ALTER TABLE wiki_articles ADD COLUMN previous_content TEXT DEFAULT ''")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2696,6 +2703,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (45, "Add wiki system tables", migration_045_add_wiki_tables),
     (46, "Add doc_type column to documents", migration_046_add_doc_type),
     (47, "Add wiki runs tracking", migration_047_add_wiki_runs),
+    (48, "Add previous_content to wiki_articles", migration_048_add_wiki_previous_content),
 ]
 
 
