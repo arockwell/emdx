@@ -595,6 +595,21 @@ def _run_single(
     resolved_model = resolve_model_alias(model or "opus", CliTool.CLAUDE)
     cmd = ["claude", "--print", "--model", resolved_model]
 
+    # Grant tool permissions so delegates can operate without interactive approval.
+    # --print mode can't prompt for permission, so we must pre-authorize tools.
+    allowed = [
+        "Bash(git:*)",
+        "Bash(poetry:*)",
+        "Bash(ruff:*)",
+        "Bash(mypy:*)",
+        "Bash(pytest:*)",
+        "Bash(emdx:*)",
+    ]
+    if pr or branch:
+        allowed.append("Bash(gh pr:*)")
+        allowed.append("Bash(gh issue:*)")
+    cmd += ["--allowedTools", " ".join(allowed)]
+
     # Run the subprocess — hooks handle priming, saving, and task tracking
     effective_timeout = timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT
     start_time = time.monotonic()
