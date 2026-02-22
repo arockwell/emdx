@@ -2142,6 +2142,83 @@ def wiki_rate(
     print(f"Rated {row[1]} {stars} ({resolved_rating}/5)")
 
 
+@wiki_app.command(name="rename")
+def wiki_rename(
+    topic_id: int = typer.Argument(..., help="Topic ID to rename"),
+    new_label: str = typer.Argument(..., help="New topic label"),
+) -> None:
+    """Rename a wiki topic (label, slug, and associated document title).
+
+    The slug is auto-generated from the new label (lowercase, hyphens).
+
+    Examples:
+        emdx maintain wiki rename 5 "Database Architecture"
+        emdx maintain wiki rename 12 "Auth / OAuth / JWT"
+    """
+    import re
+
+    from ..database import db
+
+    def _slugify_label(label: str) -> str:
+        slug = label.lower().strip()
+        slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+        slug = re.sub(r"[\s-]+", "-", slug)
+        return slug[:80].strip("-")
+
+    new_slug = _slugify_label(new_label)
+
+    with db.get_connection() as conn:
+        # Look up current topic
+        topic_row = conn.execute(
+            "SELECT topic_label, topic_slug FROM wiki_topics WHERE id = ?",
+            (topic_id,),
+        ).fetchone()
+
+        if not topic_row:
+            print(f"Topic {topic_id} not found")
+            raise typer.Exit(1)
+
+        old_label = topic_row[0]
+        old_slug = topic_row[1]
+
+        # Check slug uniqueness
+        conflict = conn.execute(
+            "SELECT id FROM wiki_topics WHERE topic_slug = ? AND id != ?",
+            (new_slug, topic_id),
+        ).fetchone()
+
+        if conflict:
+            print(f"Error: slug '{new_slug}' already in use by topic {conflict[0]}")
+            raise typer.Exit(1)
+
+        # Update topic
+        conn.execute(
+            "UPDATE wiki_topics SET topic_label = ?, topic_slug = ? WHERE id = ?",
+            (new_label, new_slug, topic_id),
+        )
+
+        # Update associated wiki document title if article exists
+        article_row = conn.execute(
+            "SELECT document_id FROM wiki_articles WHERE topic_id = ?",
+            (topic_id,),
+        ).fetchone()
+
+        if article_row:
+            doc_id = article_row[0]
+            conn.execute(
+                "UPDATE documents SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_label, doc_id),
+            )
+
+        conn.commit()
+
+    print(f"Renamed topic {topic_id}:")
+    print(f"  Label: {old_label} -> {new_label}")
+    print(f"  Slug:  {old_slug} -> {new_slug}")
+    if article_row:
+        print(f"  Document #{doc_id} title updated")
+
+
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 
 # Register stale as a subcommand group of maintain
