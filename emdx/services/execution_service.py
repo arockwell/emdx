@@ -23,6 +23,7 @@ __all__ = [
     "get_execution",
     "get_execution_log_file",
     "get_recent_executions",
+    "get_running_count",
     "update_execution",
     "update_execution_pid",
     "update_execution_status",
@@ -77,6 +78,14 @@ def get_agent_executions(cutoff_iso: str, limit: int = 30) -> list[dict]:
             }
         )
     return results
+
+
+def get_running_count() -> int:
+    """Count currently running executions."""
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute("SELECT COUNT(*) FROM executions WHERE status = 'running'")
+        row = cursor.fetchone()
+        return row[0] if row else 0
 
 
 def get_execution_log_file(doc_title_pattern: str) -> str | None:

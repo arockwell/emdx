@@ -69,7 +69,7 @@ class BrowserContainer(App[None]):
     # Note: 'q' key handling is done in on_key() method to support context-sensitive behavior
 
     BINDINGS = [
-        Binding("1", "switch_activity", "Activity", show=True),
+        Binding("1", "switch_activity", "Docs", show=True),
         Binding("2", "switch_tasks", "Tasks", show=True),
         Binding("3", "switch_qa", "Q&A", show=True),
         Binding("backslash", "cycle_theme", "Theme", show=True),
