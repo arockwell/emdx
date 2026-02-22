@@ -91,7 +91,6 @@ from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
-from emdx.commands.stale import app as stale_app  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
@@ -137,9 +136,6 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
-
-# Add stale as a subcommand group for knowledge decay
-app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
 
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)

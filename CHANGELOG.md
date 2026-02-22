@@ -421,7 +421,7 @@ Two new commands for staying on top of agent activity:
 - **`emdx briefing`** — Generate an activity summary of recent delegate work
 
 #### Knowledge decay — stale docs and `touch` (#583)
-Documents now track freshness. `emdx maintain --stale` identifies documents that haven't been accessed recently. `emdx touch <id>` marks a document as still relevant, resetting its decay clock.
+Documents now track freshness. `emdx maintain stale list` identifies documents that haven't been accessed recently. `emdx maintain stale touch <id>` marks a document as still relevant, resetting its decay clock.
 
 #### Task system overhaul (#576, #582, #609)
 Tasks gained structure and visibility:

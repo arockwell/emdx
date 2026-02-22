@@ -2,8 +2,8 @@
 Knowledge decay commands for emdx.
 
 Provides staleness tracking to surface documents that need review:
-- `emdx stale` - Show documents needing review, prioritized by urgency
-- `emdx touch` - Reset staleness timer without incrementing view count
+- `emdx maintain stale list` - Show documents needing review, prioritized by urgency
+- `emdx maintain stale touch` - Reset staleness timer without incrementing view count
 """
 
 from datetime import datetime
@@ -230,12 +230,11 @@ def stale_list(
     Tag weights: security=3, gameplan=2, active=2, reference=2, default=1.
 
     Examples:
-        emdx stale              # Show all stale documents
-        emdx stale -l critical  # Show only critical ones
-        emdx stale --critical-days 15  # Custom threshold
+        emdx maintain stale list              # Show all stale documents
+        emdx maintain stale list -l critical  # Show only critical ones
+        emdx maintain stale list --critical-days 15  # Custom threshold
     """
     try:
-
         stale_docs = _get_stale_documents(
             critical_days=critical_days,
             warning_days=warning_days,
@@ -323,7 +322,7 @@ def stale_list(
 
         console.print(table)
         console.print()
-        console.print("[dim]💡 Use 'emdx touch <id>' to mark as reviewed[/dim]")
+        console.print("[dim]💡 Use 'emdx maintain stale touch <id>' to mark as reviewed[/dim]")
         console.print("[dim]💡 Use 'emdx view <id>' to review (also resets staleness)[/dim]")
 
     except Exception as e:
@@ -341,11 +340,10 @@ def touch(
     Use this when you've verified a document is still current.
 
     Examples:
-        emdx touch 42           # Touch single document
-        emdx touch 42 43 44     # Touch multiple documents
+        emdx maintain stale touch 42           # Touch single document
+        emdx maintain stale touch 42 43 44     # Touch multiple documents
     """
     try:
-
         touched = []
         not_found = []
 

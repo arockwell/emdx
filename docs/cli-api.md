@@ -1235,23 +1235,23 @@ emdx briefing --save --model sonnet
 
 ---
 
-## ⏳ Staleness Tracking (`emdx stale`)
+## ⏳ Staleness Tracking (`emdx maintain stale`)
 
 Track knowledge decay and identify documents needing review.
 
 ```bash
 # Show stale documents prioritized by urgency
-emdx stale list
+emdx maintain stale list
 ```
 
-### **emdx stale touch**
+### **emdx maintain stale touch**
 
 Reset a document's staleness timer without incrementing the view count.
 
 ```bash
 # Touch single document
-emdx stale touch 42
+emdx maintain stale touch 42
 
 # Touch multiple documents
-emdx stale touch 42 43 44
+emdx maintain stale touch 42 43 44
 ```
