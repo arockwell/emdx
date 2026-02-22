@@ -163,17 +163,17 @@ emdx prime --json          # already includes links in doc metadata
 
 ## Implementation Plan
 
-### Phase 1: Title-Match Wikification
-- Add `wikify` command to CLI (`commands/wikify.py`)
-- Implement `services/wikify_service.py` with `title_match_wikify(doc_id)`
-- Wire into save command (after document creation, like existing auto-link)
-- Add `--dry-run` flag
-- Tests for edge cases (short titles, self-links, word boundaries)
+### Phase 1: Title-Match Wikification ✅
+- ~~Add `wikify` command to CLI~~ → `emdx maintain wikify`
+- ~~Implement `services/wikify_service.py`~~ with `title_match_wikify(doc_id)`
+- ~~Wire into save command~~ (runs automatically on every save)
+- ~~Add `--dry-run` flag~~
+- ~~Tests for edge cases~~ (31 tests: short titles, self-links, word boundaries, etc.)
 
-### Phase 2: Enhanced Semantic (improve existing)
-- Make `--auto-link` default on save
-- Add project scoping to `auto_link_document()`
-- Surface links in `emdx show` output
+### Phase 2: Enhanced Semantic (improve existing) ✅
+- ~~Make `--auto-link` default on save~~ (`--auto-link/--no-auto-link`, default on)
+- ~~Add project scoping~~ (`--cross-project` flag, default: same project only)
+- Surface links in `emdx show` output (already exists via `--links`)
 
 ### Phase 3: Entity Extraction (future)
 - Add `document_entities` table via migration

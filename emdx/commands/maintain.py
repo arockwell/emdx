@@ -1228,13 +1228,20 @@ def create_links(
     all_docs: bool = typer.Option(False, "--all", help="Backfill links for all documents"),
     threshold: float = typer.Option(0.5, "--threshold", "-t", help="Minimum similarity (0-1)"),
     max_links: int = typer.Option(5, "--max", "-m", help="Maximum links per document"),
+    cross_project: bool = typer.Option(
+        False, "--cross-project", help="Match across all projects (default: same project only)"
+    ),
 ) -> None:
     """Create semantic links for a document (or all documents).
+
+    By default, only matches documents within the same project.
+    Use --cross-project to match across all projects.
 
     Examples:
         emdx maintain link 42
         emdx maintain link 0 --all
         emdx maintain link 42 --threshold 0.6 --max 3
+        emdx maintain link 42 --cross-project
     """
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -1251,11 +1258,29 @@ def create_links(
             console=console,
         ) as progress:
             task = progress.add_task("Linking all documents...", total=None)
-            total = auto_link_all(threshold=threshold, max_links=max_links)
+            total = auto_link_all(
+                threshold=threshold,
+                max_links=max_links,
+                cross_project=cross_project,
+            )
             progress.update(task, completed=True)
         console.print(f"[green]Created {total} links across all documents[/green]")
     else:
-        result = auto_link_document(doc_id, threshold=threshold, max_links=max_links)
+        # Look up the document's project for scoping
+        doc_project: str | None = None
+        if not cross_project:
+            from ..database import db
+
+            with db.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT project FROM documents WHERE id = ?", (doc_id,)
+                ).fetchone()
+                if row:
+                    doc_project = row[0]
+
+        result = auto_link_document(
+            doc_id, threshold=threshold, max_links=max_links, project=doc_project
+        )
         if result.links_created > 0:
             console.print(
                 f"[green]Created {result.links_created} link(s) for document #{doc_id}[/green]"
