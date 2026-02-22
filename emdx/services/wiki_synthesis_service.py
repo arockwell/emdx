@@ -568,7 +568,8 @@ def generate_article(
     # Look up topic
     with db.get_connection() as conn:
         topic_row = conn.execute(
-            "SELECT id, topic_slug, topic_label, description, status FROM wiki_topics WHERE id = ?",
+            "SELECT id, topic_slug, topic_label, description, status, model_override "
+            "FROM wiki_topics WHERE id = ?",
             (topic_id,),
         ).fetchone()
 
@@ -605,6 +606,12 @@ def generate_article(
             skipped=True,
             skip_reason="Topic is skipped",
         )
+
+    # Per-topic model override: explicit `model` arg takes priority,
+    # then topic-level override, then the global default.
+    topic_model_override: str | None = topic_row[5]
+    if not model and topic_model_override:
+        model = topic_model_override
 
     # Parse top entities from description (stored as JSON array)
     import json

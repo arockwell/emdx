@@ -2675,6 +2675,13 @@ def migration_050_add_wiki_article_rating(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_051_add_wiki_topic_model_override(conn: sqlite3.Connection) -> None:
+    """Add model_override column to wiki_topics for per-topic model selection."""
+    cursor = conn.cursor()
+    cursor.execute("ALTER TABLE wiki_topics ADD COLUMN model_override TEXT")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2728,6 +2735,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (48, "Add previous_content to wiki_articles", migration_048_add_wiki_previous_content),
     (49, "Add step-level timing to wiki articles", migration_049_add_wiki_article_timing),
     (50, "Add wiki article quality rating", migration_050_add_wiki_article_rating),
+    (51, "Add per-topic model override for wiki", migration_051_add_wiki_topic_model_override),
 ]
 
 

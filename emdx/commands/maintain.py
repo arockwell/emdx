@@ -1520,6 +1520,9 @@ def wiki_topics(
     resolution: float = typer.Option(0.005, "--resolution", "-r", help="Clustering resolution"),
     save: bool = typer.Option(False, "--save", help="Save discovered topics to DB"),
     min_size: int = typer.Option(3, "--min-size", help="Minimum cluster size"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show extra columns (model override)"
+    ),
 ) -> None:
     """Discover topic clusters using Leiden community detection.
 
@@ -1527,6 +1530,7 @@ def wiki_topics(
         emdx maintain wiki topics              # Preview topics
         emdx maintain wiki topics --save       # Save to DB
         emdx maintain wiki topics -r 0.01      # Finer resolution
+        emdx maintain wiki topics --verbose    # Show model overrides
     """
     from ..services.wiki_clustering_service import discover_topics, save_topics
 
@@ -1553,16 +1557,30 @@ def wiki_topics(
     table.add_column("Docs", justify="right")
     table.add_column("Coherence", justify="right")
     table.add_column("Top Entities", style="dim")
+    if verbose:
+        table.add_column("Model Override", style="yellow")
+
+    # If verbose, fetch saved topics with model_override from DB
+    saved_overrides: dict[int, str | None] = {}
+    if verbose:
+        from ..services.wiki_clustering_service import get_topics as _get_saved
+
+        for t in _get_saved():
+            saved_overrides[cast(int, t["id"])] = cast("str | None", t.get("model_override"))
 
     for cluster in result.clusters[:30]:
         entities = ", ".join(e[0] for e in cluster.top_entities[:3])
-        table.add_row(
+        row_data = [
             str(cluster.cluster_id),
             cluster.label[:50],
             str(len(cluster.doc_ids)),
             f"{cluster.coherence_score:.3f}",
             entities[:60],
-        )
+        ]
+        if verbose:
+            override = saved_overrides.get(cluster.cluster_id)
+            row_data.append(override or "[dim]-[/dim]")
+        table.add_row(*row_data)
 
     console.print(table)
 
@@ -1607,11 +1625,16 @@ def wiki_status() -> None:
     if topics:
         from rich.table import Table
 
+        # Check if any topic has a model override
+        has_overrides = any(t.get("model_override") for t in topics[:20])
+
         table = Table(title="Topics (by size)", box=box.SIMPLE)
         table.add_column("ID", style="dim", width=4)
         table.add_column("Label", style="cyan")
         table.add_column("Docs", justify="right")
         table.add_column("Status")
+        if has_overrides:
+            table.add_column("Model", style="yellow")
 
         for t in topics[:20]:
             status_str = str(t["status"])
@@ -1620,12 +1643,16 @@ def wiki_status() -> None:
                 "skipped": "[red]skipped[/red]",
                 "pinned": "[yellow]pinned[/yellow]",
             }.get(status_str, status_str)
-            table.add_row(
+            row_data = [
                 str(t["id"]),
                 str(t["label"])[:50],
                 str(t["member_count"]),
                 status_styled,
-            )
+            ]
+            if has_overrides:
+                override = t.get("model_override")
+                row_data.append(str(override) if override else "")
+            table.add_row(*row_data)
         console.print(table)
 
 
@@ -2308,6 +2335,56 @@ def wiki_unpin(
     """
     label, old_status = _set_topic_status(topic_id, "active")
     print(f"Unpinned topic {topic_id} ({label}) [was: {old_status}]")
+
+
+@wiki_app.command(name="model")
+def wiki_model(
+    topic_id: int = typer.Argument(..., help="Topic ID to set model for"),
+    model_name: str | None = typer.Argument(None, help="Model name to use for this topic"),
+    clear: bool = typer.Option(False, "--clear", help="Remove model override"),
+) -> None:
+    """Set or clear a per-topic model override for wiki generation.
+
+    Examples:
+        emdx maintain wiki model 5 claude-opus-4-5-20250514     # Set override
+        emdx maintain wiki model 5 --clear                       # Remove override
+    """
+    from ..database import db
+
+    if clear and model_name is not None:
+        print("Error: Cannot use both a model name and --clear")
+        raise typer.Exit(1)
+
+    if not clear and model_name is None:
+        print("Error: Provide a model name or use --clear")
+        raise typer.Exit(1)
+
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, topic_label, model_override FROM wiki_topics WHERE id = ?",
+            (topic_id,),
+        ).fetchone()
+
+        if not row:
+            print(f"Topic {topic_id} not found")
+            raise typer.Exit(1)
+
+        topic_label = row[1]
+
+        if clear:
+            conn.execute(
+                "UPDATE wiki_topics SET model_override = NULL WHERE id = ?",
+                (topic_id,),
+            )
+            conn.commit()
+            print(f"Cleared model override for topic {topic_id} ({topic_label})")
+        else:
+            conn.execute(
+                "UPDATE wiki_topics SET model_override = ? WHERE id = ?",
+                (model_name, topic_id),
+            )
+            conn.commit()
+            print(f"Set model override for topic {topic_id} ({topic_label}): {model_name}")
 
 
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
