@@ -25,7 +25,6 @@ emdx/
 │   ├── gist.py            # GitHub gist integration
 │   ├── executions.py      # execution monitoring
 │   ├── delegate.py        # one-shot AI execution (parallel, worktree, PR)
-│   ├── recipe.py          # reusable recipe management
 │   ├── ask.py             # AI Q&A over knowledge base
 │   ├── prime.py           # session priming context
 │   ├── status.py          # project status overview

@@ -528,56 +528,6 @@ emdx group delete 1 --hard
 
 ---
 
-## 📋 **Recipe System**
-
-Recipes are reusable emdx documents tagged with `recipe` that contain instructions for Claude to follow via `emdx delegate`.
-
-### **emdx recipe list**
-List all recipes.
-
-```bash
-# List all recipes (documents tagged "recipe")
-emdx recipe list
-```
-
-### **emdx recipe run**
-Run a recipe by passing it to `emdx delegate`.
-
-```bash
-# Run by ID
-emdx recipe run 42
-
-# Run by title search
-emdx recipe run "Deep Analysis"
-
-# Run with extra arguments
-emdx recipe run 42 -- "analyze auth module"
-
-# Run with PR creation and worktree isolation
-emdx recipe run 42 --pr --worktree
-```
-
-**Options:**
-- `--quiet, -q` - Suppress metadata on stderr
-- `--model, -m TEXT` - Model to use
-- `--pr` - Instruct agent to create a PR
-- `--worktree, -w` - Run in isolated git worktree
-
-### **emdx recipe create**
-Create a recipe from a markdown file.
-
-```bash
-# Save a file as a recipe (tags it with 📋)
-emdx recipe create instructions.md
-
-# With custom title
-emdx recipe create instructions.md --title "Security Audit"
-```
-
-Equivalent to `emdx save <file> --tags "recipe"`.
-
----
-
 ## 🧹 **Maintenance Commands**
 
 ### **emdx maintain**
@@ -807,7 +757,6 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 
 **Disabled commands in safe mode:**
 - `delegate` - One-shot AI execution
-- `recipe` - Recipe execution
 
 **Always available commands:**
 - `save`, `find`, `view`, `edit`, `delete` - Document management
