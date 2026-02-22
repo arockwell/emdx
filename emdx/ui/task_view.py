@@ -1,6 +1,6 @@
-"""Task View — read-only task browser with two-pane layout.
+"""Task View — task browser with DataTable + detail pane.
 
-Left pane: OptionList with tasks grouped by status (ready, active, blocked, done)
+Left pane: DataTable with tasks grouped by status (ready, active, blocked, done)
 Right pane: RichLog with selected task detail (description, deps, log, executions)
 """
 
@@ -9,11 +9,11 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
-from textual.widgets import OptionList, RichLog, Static
-from textual.widgets.option_list import Option
+from textual.widgets import DataTable, RichLog, Static
 
 from emdx.models.tasks import (
     get_dependencies,
@@ -21,6 +21,7 @@ from emdx.models.tasks import (
     get_task_log,
     list_epics,
     list_tasks,
+    update_task,
 )
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
 
@@ -42,6 +43,17 @@ STATUS_LABELS = {
     "done": "DONE",
     "failed": "FAILED",
 }
+STATUS_COLORS = {
+    "open": "",
+    "active": "green",
+    "blocked": "yellow",
+    "done": "dim",
+    "failed": "red",
+}
+
+# Row key prefix for section headers
+HEADER_PREFIX = "header:"
+SEPARATOR_PREFIX = "sep:"
 
 
 def _format_time_ago(dt_str: str | None) -> str:
@@ -76,18 +88,53 @@ def _format_time_ago(dt_str: str | None) -> str:
         return ""
 
 
+def _format_time_short(dt_str: str | None) -> str:
+    """Format a datetime string as a compact relative time (no 'ago')."""
+    if not dt_str:
+        return ""
+    result = _format_time_ago(dt_str)
+    return result.replace(" ago", "") if result else ""
+
+
+def _priority_str(priority: int) -> str:
+    """Return a short priority indicator."""
+    if priority <= 1:
+        return "!!!"
+    if priority <= 2:
+        return "!! "
+    return "   "
+
+
+def _priority_style(priority: int) -> str:
+    """Return a Rich style for a priority level."""
+    if priority <= 1:
+        return "bold red"
+    if priority <= 2:
+        return "yellow"
+    return "dim"
+
+
+def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -> str:
+    """Strip the 'KEY-N: ' prefix from a title if it matches the epic."""
+    if epic_key and epic_seq:
+        prefix = f"{epic_key}-{epic_seq}: "
+        if title.startswith(prefix):
+            return title[len(prefix) :]
+    return title
+
+
 def _task_label(task: TaskDict) -> str:
-    """Build a compact label for the OptionList: icon + key + title."""
+    """Build a plain text label for tests and fallback display."""
     icon = STATUS_ICONS.get(task["status"], "?")
     title = task["title"]
-    # Truncate long titles
+    title = _strip_epic_prefix(title, task.get("epic_key"), task.get("epic_seq"))
     if len(title) > 50:
         title = title[:47] + "..."
     return f"{icon} {title}"
 
 
 class TaskView(Widget):
-    """Two-pane task browser view."""
+    """Two-pane task browser view using DataTable."""
 
     BINDINGS = [
         ("j", "cursor_down", "Down"),
@@ -95,6 +142,9 @@ class TaskView(Widget):
         ("r", "refresh", "Refresh"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
+        ("d", "mark_done", "Mark Done"),
+        ("a", "mark_active", "Mark Active"),
+        ("b", "mark_blocked", "Mark Blocked"),
     ]
 
     DEFAULT_CSS = """
@@ -124,7 +174,7 @@ class TaskView(Widget):
         padding: 0 1;
     }
 
-    #task-option-list {
+    #task-table {
         height: 1fr;
         scrollbar-size: 1 1;
     }
@@ -151,7 +201,7 @@ class TaskView(Widget):
         super().__init__(*args, **kwargs)
         self._tasks: list[TaskDict] = []
         self._tasks_by_status: dict[str, list[TaskDict]] = defaultdict(list)
-        self._option_id_to_task: dict[str, TaskDict] = {}
+        self._row_key_to_task: dict[str, TaskDict] = {}
         self._epics: dict[str | None, EpicTaskDict] = {}
 
     def compose(self) -> ComposeResult:
@@ -159,7 +209,13 @@ class TaskView(Widget):
         with Horizontal(id="task-main"):
             with Vertical(id="task-list-panel"):
                 yield Static("TASKS", id="task-list-header")
-                yield OptionList(id="task-option-list")
+                table: DataTable[str | Text] = DataTable(
+                    id="task-table",
+                    cursor_type="row",
+                    zebra_stripes=True,
+                    show_header=False,
+                )
+                yield table
             with Vertical(id="task-detail-panel"):
                 yield Static("DETAIL", id="task-detail-header")
                 yield RichLog(
@@ -172,10 +228,16 @@ class TaskView(Widget):
 
     async def on_mount(self) -> None:
         """Load tasks on mount."""
+        table = self.query_one("#task-table", DataTable)
+        table.add_column("pri", key="pri", width=3)
+        table.add_column("icon", key="icon", width=2)
+        table.add_column("epic", key="epic", width=7)
+        table.add_column("title", key="title")
+        table.add_column("age", key="age", width=4)
         await self._load_tasks()
-        self.query_one("#task-option-list", OptionList).focus()
+        table.focus()
 
-    async def _load_tasks(self) -> None:
+    async def _load_tasks(self, *, restore_row: int | None = None) -> None:
         """Load all manual tasks from the database."""
         try:
             self._tasks = list_tasks(exclude_delegate=True, limit=200)
@@ -196,17 +258,36 @@ class TaskView(Widget):
         for task in self._tasks:
             self._tasks_by_status[task["status"]].append(task)
 
-        self._render_task_list()
+        self._render_task_table(restore_row=restore_row)
         self._update_status_bar()
 
-    def _render_task_list(self) -> None:
-        """Render the grouped task list into the OptionList."""
-        option_list = self.query_one("#task-option-list", OptionList)
-        option_list.clear_options()
-        self._option_id_to_task = {}
+    def _row_key_for_task(self, task: TaskDict) -> str:
+        """Generate a stable row key for a task."""
+        return f"task:{task['id']}"
 
-        first_option_added = False
+    def _render_task_table(self, *, restore_row: int | None = None) -> None:
+        """Render the grouped task list into the DataTable.
 
+        Args:
+            restore_row: If given, restore cursor to this row index
+                (clamped to table size) instead of following by key.
+                Used after status changes so the cursor stays put.
+        """
+        table = self.query_one("#task-table", DataTable)
+
+        # Remember current selection for key-based restore
+        current_key: str | None = None
+        if restore_row is None:
+            try:
+                if table.cursor_row is not None and table.row_count > 0:
+                    current_key = str(table.ordered_rows[table.cursor_row].key.value)
+            except (IndexError, AttributeError):
+                pass
+
+        table.clear()
+        self._row_key_to_task = {}
+
+        first_group = True
         for status in STATUS_ORDER:
             tasks = self._tasks_by_status.get(status, [])
             if not tasks:
@@ -214,18 +295,78 @@ class TaskView(Widget):
 
             label = STATUS_LABELS.get(status, status.upper())
 
-            # Add blank line separator before groups (except the first)
-            if first_option_added:
-                option_list.add_option(Option("", disabled=True))
+            # Separator before groups (except the first)
+            if not first_group:
+                table.add_row(
+                    "",
+                    "",
+                    "",
+                    Text(""),
+                    "",
+                    key=f"{SEPARATOR_PREFIX}{status}",
+                )
+            first_group = False
 
-            # Section header as a disabled option
-            option_list.add_option(Option(f"[bold]{label} ({len(tasks)})[/bold]", disabled=True))
+            # Section header row
+            header_text = f"{label} ({len(tasks)})"
+            table.add_row(
+                "",
+                "",
+                "",
+                Text(header_text, style="bold"),
+                "",
+                key=f"{HEADER_PREFIX}{status}",
+            )
 
             for task in tasks:
-                opt_id = f"task-{task['id']}"
-                self._option_id_to_task[opt_id] = task
-                option_list.add_option(Option(f"  {_task_label(task)}", id=opt_id))
-                first_option_added = True
+                row_key = self._row_key_for_task(task)
+                self._row_key_to_task[row_key] = task
+                color = STATUS_COLORS.get(task["status"], "")
+                icon = STATUS_ICONS.get(task["status"], "?")
+                priority = task.get("priority", 3) or 3
+                title = _strip_epic_prefix(
+                    task["title"],
+                    task.get("epic_key"),
+                    task.get("epic_seq"),
+                )
+                if len(title) > 45:
+                    title = title[:42] + "..."
+
+                # Epic badge
+                epic_key = task.get("epic_key")
+                epic_seq = task.get("epic_seq")
+                if epic_key and epic_seq:
+                    epic_text = Text(f"{epic_key}-{epic_seq}", style="cyan")
+                elif epic_key:
+                    epic_text = Text(epic_key, style="cyan")
+                else:
+                    epic_text = Text("")
+
+                title_style = f"{color}" if color else ""
+
+                table.add_row(
+                    Text(_priority_str(priority), style=_priority_style(priority)),
+                    Text(icon, style=color),
+                    epic_text,
+                    Text(title, style=title_style),
+                    Text(_format_time_short(task.get("created_at")), style="dim"),
+                    key=row_key,
+                )
+
+        # Restore cursor
+        if restore_row is not None and table.row_count > 0:
+            target = min(restore_row, table.row_count - 1)
+            table.move_cursor(row=target)
+        elif current_key:
+            self._select_row_by_key(current_key)
+
+    def _select_row_by_key(self, key: str) -> None:
+        """Move cursor to a row by its key string."""
+        table = self.query_one("#task-table", DataTable)
+        for i, row in enumerate(table.ordered_rows):
+            if str(row.key.value) == key:
+                table.move_cursor(row=i)
+                return
 
     def _update_status_bar(self) -> None:
         """Update the status bar with summary counts."""
@@ -252,21 +393,17 @@ class TaskView(Widget):
 
     def _get_selected_task(self) -> TaskDict | None:
         """Get the currently highlighted task."""
-        option_list = self.query_one("#task-option-list", OptionList)
-        if option_list.highlighted is None:
-            return None
+        table = self.query_one("#task-table", DataTable)
         try:
-            option = option_list.get_option_at_index(option_list.highlighted)
-            if option and option.id:
-                return self._option_id_to_task.get(option.id)
-        except Exception:
-            pass
-        return None
+            if table.cursor_row is None or table.row_count == 0:
+                return None
+            row_key = str(table.ordered_rows[table.cursor_row].key.value)
+            return self._row_key_to_task.get(row_key)
+        except (IndexError, AttributeError):
+            return None
 
-    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
-        """Update detail pane when a task is highlighted."""
-        if event.option_list.id != "task-option-list":
-            return
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """Update detail pane when a task row is highlighted."""
         task = self._get_selected_task()
         if task:
             self._render_task_detail(task)
@@ -373,22 +510,71 @@ class TaskView(Widget):
         if task.get("output_doc_id"):
             detail_log.write(f"Output doc: #{task['output_doc_id']}")
 
-    # Actions
+    # Navigation actions
 
     def action_cursor_down(self) -> None:
-        option_list = self.query_one("#task-option-list", OptionList)
-        option_list.action_cursor_down()
+        table = self.query_one("#task-table", DataTable)
+        table.action_cursor_down()
 
     def action_cursor_up(self) -> None:
-        option_list = self.query_one("#task-option-list", OptionList)
-        option_list.action_cursor_up()
+        table = self.query_one("#task-table", DataTable)
+        table.action_cursor_up()
 
     async def action_refresh(self) -> None:
         """Reload tasks from database."""
         await self._load_tasks()
 
+    def _toggle_pane_focus(self) -> None:
+        """Toggle focus between list and detail panes."""
+        table = self.query_one("#task-table", DataTable)
+        detail_log = self.query_one("#task-detail-log", RichLog)
+        if table.has_focus:
+            detail_log.focus()
+        else:
+            table.focus()
+
     def action_focus_next(self) -> None:
-        pass
+        """Toggle focus between panes."""
+        self._toggle_pane_focus()
 
     def action_focus_prev(self) -> None:
-        pass
+        """Toggle focus between panes."""
+        self._toggle_pane_focus()
+
+    # Status mutation actions
+
+    async def _set_task_status(self, new_status: str) -> None:
+        """Change status of the selected task and refresh.
+
+        Cursor stays at the same row position (not following the task
+        into its new status group).
+        """
+        task = self._get_selected_task()
+        if not task:
+            return
+        if task["status"] == new_status:
+            return
+
+        # Save row index — we want to stay at this position
+        table = self.query_one("#task-table", DataTable)
+        saved_row = table.cursor_row
+
+        try:
+            update_task(task["id"], status=new_status)
+            self.notify(f"Task #{task['id']} → {new_status}", timeout=2)
+            await self._load_tasks(restore_row=saved_row)
+        except Exception as e:
+            logger.error(f"Failed to update task: {e}")
+            self.notify(f"Error: {e}", severity="error", timeout=3)
+
+    async def action_mark_done(self) -> None:
+        """Mark selected task as done."""
+        await self._set_task_status("done")
+
+    async def action_mark_active(self) -> None:
+        """Mark selected task as active."""
+        await self._set_task_status("active")
+
+    async def action_mark_blocked(self) -> None:
+        """Mark selected task as blocked."""
+        await self._set_task_status("blocked")

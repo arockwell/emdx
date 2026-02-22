@@ -15,6 +15,7 @@ class Context(Enum):
     Hierarchy:
         GLOBAL
         ├── ACTIVITY_*
+        ├── TASK_*
         ├── DOCUMENT_*
         │   └── VIM_* (when editing)
         ├── AGENT_*
@@ -38,6 +39,9 @@ class Context(Enum):
     # Agent browser contexts
     AGENT_NORMAL = "agent:normal"
     AGENT_FORM = "agent:form"
+
+    # Task browser contexts
+    TASK_NORMAL = "task:normal"
 
     # Log browser contexts
     LOG_NORMAL = "log:normal"
@@ -93,6 +97,8 @@ class Context(Enum):
             # Agent contexts
             cls.AGENT_NORMAL: [cls.GLOBAL],
             cls.AGENT_FORM: [cls.AGENT_NORMAL, cls.GLOBAL],
+            # Task contexts
+            cls.TASK_NORMAL: [cls.GLOBAL],
             # Log contexts
             cls.LOG_NORMAL: [cls.GLOBAL],
             cls.LOG_SEARCH: [cls.LOG_NORMAL, cls.GLOBAL],
@@ -183,5 +189,8 @@ class Context(Enum):
             "DeleteConfirmationDialog": cls.MODAL_DELETE,
             # Activity browser
             "ActivityBrowser": cls.ACTIVITY_NORMAL,
+            # Task browser
+            "TaskBrowser": cls.TASK_NORMAL,
+            "TaskView": cls.TASK_NORMAL,
         }
         return mapping.get(widget_class_name, cls.GLOBAL)

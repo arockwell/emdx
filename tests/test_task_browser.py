@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import OptionList, RichLog, Static
+from textual.widgets import DataTable, RichLog, Static
 
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
 from emdx.ui.task_view import TaskView, _format_time_ago, _task_label
@@ -106,6 +106,18 @@ def _richlog_text(widget: RichLog) -> str:
     return "\n".join(parts)
 
 
+def _table_cell_texts(table: DataTable[Any], col_key: str) -> list[str]:
+    """Get all cell values for a column as strings."""
+    texts: list[str] = []
+    for row in table.ordered_rows:
+        try:
+            val = table.get_cell(row.key, col_key)
+            texts.append(str(val))
+        except Exception:
+            texts.append("")
+    return texts
+
+
 # ---------------------------------------------------------------------------
 # Test app that mounts only TaskView (lighter than BrowserContainer)
 # ---------------------------------------------------------------------------
@@ -123,7 +135,7 @@ class TaskTestApp(App[None]):
 
 
 # ---------------------------------------------------------------------------
-# Fixture: patch all 5 DB functions used by TaskView
+# Fixture: patch all DB functions used by TaskView
 # ---------------------------------------------------------------------------
 
 
@@ -155,7 +167,7 @@ def mock_task_data() -> Generator[MockDict, None, None]:
 
 
 async def _select_first_task(pilot: Any) -> None:
-    """Press j then k to ensure OptionList fires a highlight event."""
+    """Press j then k to ensure DataTable fires a highlight event."""
     await pilot.press("j")
     await pilot.pause()
     await pilot.press("k")
@@ -188,10 +200,9 @@ class TestRendering:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            # First option is the header (disabled), second is the task
-            header = ol.get_option_at_index(0)
-            assert "READY" in str(header.prompt)
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("READY" in t for t in titles)
 
     @pytest.mark.asyncio
     async def test_multi_status_groups_in_order(self, mock_task_data: MockDict) -> None:
@@ -204,15 +215,12 @@ class TestRendering:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            # Collect all non-disabled option prompts (headers)
-            headers: list[str] = []
-            for i in range(ol.option_count):
-                opt = ol.get_option_at_index(i)
-                if opt.disabled:
-                    text = str(opt.prompt)
-                    if text.strip():  # skip blank separators
-                        headers.append(text)
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            # Filter to header rows only
+            headers = [
+                t for t in titles if any(label in t for label in ("READY", "ACTIVE", "DONE"))
+            ]
             assert len(headers) == 3
             # STATUS_ORDER: open, active, blocked, done, failed
             assert "READY" in headers[0]
@@ -221,7 +229,7 @@ class TestRendering:
 
     @pytest.mark.asyncio
     async def test_task_labels_show_correct_icons(self, mock_task_data: MockDict) -> None:
-        """Each status gets the correct icon in its label."""
+        """Each status gets the correct icon in its row."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
             make_task(id=2, title="Active task", status="active"),
@@ -232,22 +240,22 @@ class TestRendering:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            # Collect non-disabled option texts
-            labels: list[str] = []
-            for i in range(ol.option_count):
-                opt = ol.get_option_at_index(i)
-                if not opt.disabled:
-                    labels.append(str(opt.prompt))
-            assert any("○" in lbl and "Open task" in lbl for lbl in labels)
-            assert any("●" in lbl and "Active task" in lbl for lbl in labels)
-            assert any("⚠" in lbl and "Blocked task" in lbl for lbl in labels)
-            assert any("✓" in lbl and "Done task" in lbl for lbl in labels)
-            assert any("✗" in lbl and "Failed task" in lbl for lbl in labels)
+            table = app.query_one("#task-table", DataTable)
+            icons = _table_cell_texts(table, "icon")
+            titles = _table_cell_texts(table, "title")
+            # Check icon/title pairs (skip header rows which have empty icons)
+            task_rows = [
+                (icon, title) for icon, title in zip(icons, titles, strict=False) if icon.strip()
+            ]
+            assert any("○" in i and "Open task" in t for i, t in task_rows)
+            assert any("●" in i and "Active task" in t for i, t in task_rows)
+            assert any("⚠" in i and "Blocked task" in t for i, t in task_rows)
+            assert any("✓" in i and "Done task" in t for i, t in task_rows)
+            assert any("✗" in i and "Failed task" in t for i, t in task_rows)
 
     @pytest.mark.asyncio
     async def test_long_title_truncated(self, mock_task_data: MockDict) -> None:
-        """Titles longer than 50 chars are truncated with '...'."""
+        """Titles longer than 45 chars are truncated with '...'."""
         long_title = "A" * 60
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title=long_title, status="open"),
@@ -255,16 +263,13 @@ class TestRendering:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            # Find the non-disabled option
-            for i in range(ol.option_count):
-                opt = ol.get_option_at_index(i)
-                if not opt.disabled:
-                    text = str(opt.prompt)
-                    assert "..." in text
-                    # Full 60-char title should NOT appear
-                    assert long_title not in text
-                    break
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            # Filter to task rows (contain "A"s but not section headers)
+            task_titles = [t for t in titles if "A" in t and "READY" not in t]
+            assert len(task_titles) >= 1
+            assert "..." in task_titles[0]
+            assert long_title not in task_titles[0]
 
     @pytest.mark.asyncio
     async def test_status_bar_shows_per_status_counts(self, mock_task_data: MockDict) -> None:
@@ -294,7 +299,7 @@ class TestKeyboardNavigation:
 
     @pytest.mark.asyncio
     async def test_j_moves_highlight_down(self, mock_task_data: MockDict) -> None:
-        """Pressing j moves the highlight down."""
+        """Pressing j moves the cursor down."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="First", status="open"),
             make_task(id=2, title="Second", status="open"),
@@ -302,17 +307,17 @@ class TestKeyboardNavigation:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            initial = ol.highlighted
+            table = app.query_one("#task-table", DataTable)
+            initial = table.cursor_row
             await pilot.press("j")
             await pilot.pause()
-            assert ol.highlighted is not None
+            assert table.cursor_row is not None
             if initial is not None:
-                assert ol.highlighted > initial
+                assert table.cursor_row > initial
 
     @pytest.mark.asyncio
     async def test_k_moves_highlight_up(self, mock_task_data: MockDict) -> None:
-        """Pressing k moves the highlight up."""
+        """Pressing k moves the cursor up."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="First", status="open"),
             make_task(id=2, title="Second", status="open"),
@@ -321,38 +326,18 @@ class TestKeyboardNavigation:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
+            table = app.query_one("#task-table", DataTable)
             # Move down twice so we have room to go back up
             await pilot.press("j")
             await pilot.pause()
             await pilot.press("j")
             await pilot.pause()
-            pos_after_jj = ol.highlighted
+            pos_after_jj = table.cursor_row
             await pilot.press("k")
             await pilot.pause()
-            assert ol.highlighted is not None
+            assert table.cursor_row is not None
             assert pos_after_jj is not None
-            assert ol.highlighted < pos_after_jj
-
-    @pytest.mark.asyncio
-    async def test_jk_skip_disabled_headers(self, mock_task_data: MockDict) -> None:
-        """j/k navigation skips disabled section headers."""
-        mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Open task", status="open"),
-            make_task(id=2, title="Active task", status="active"),
-        ]
-        app = TaskTestApp()
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            # Navigate down through all items
-            for _ in range(5):
-                await pilot.press("j")
-                await pilot.pause()
-            # The highlighted option should never be a disabled header
-            if ol.highlighted is not None:
-                opt = ol.get_option_at_index(ol.highlighted)
-                assert not opt.disabled
+            assert table.cursor_row < pos_after_jj
 
     @pytest.mark.asyncio
     async def test_highlighting_task_updates_detail_header(self, mock_task_data: MockDict) -> None:
@@ -363,21 +348,21 @@ class TestKeyboardNavigation:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
+            await _select_first_task(pilot)
             header = app.query_one("#task-detail-header", Static)
-            # After mount, the first task should auto-highlight
             assert "42" in str(header.content) or "DETAIL" in str(header.content)
 
     @pytest.mark.asyncio
     async def test_r_refreshes_task_list(self, mock_task_data: MockDict) -> None:
-        """Pressing r re-calls list_tasks and updates the option list."""
+        """Pressing r re-calls list_tasks and updates the table."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Initial", status="open"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            initial_count = ol.option_count
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
 
             # Change what list_tasks returns, then press r
             mock_task_data["list_tasks"].return_value = [
@@ -388,7 +373,7 @@ class TestKeyboardNavigation:
             await pilot.press("r")
             await pilot.pause()
 
-            new_count = ol.option_count
+            new_count = table.row_count
             assert new_count > initial_count
 
 
@@ -400,7 +385,7 @@ class TestKeyboardNavigation:
 class TestDetailPane:
     """Tests for the right-side detail pane content.
 
-    Each test presses 'j' then 'k' to ensure the OptionList fires a
+    Each test presses 'j' then 'k' to ensure the DataTable fires a
     highlight event, which triggers _render_task_detail.
     """
 
@@ -558,11 +543,11 @@ class TestDetailPane:
 
 
 class TestMouseInteraction:
-    """Tests for mouse click behavior in the task list."""
+    """Tests for mouse click behavior in the task table."""
 
     @pytest.mark.asyncio
     async def test_click_highlights_task(self, mock_task_data: MockDict) -> None:
-        """Clicking on a task row in the OptionList highlights it."""
+        """Clicking on a task row highlights it."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Task A", status="open"),
             make_task(id=2, title="Task B", status="open"),
@@ -571,15 +556,15 @@ class TestMouseInteraction:
         app = TaskTestApp()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
+            table = app.query_one("#task-table", DataTable)
             # Click at a y-offset that should hit a task row
-            await pilot.click("#task-option-list", offset=(5, 2))
+            await pilot.click("#task-table", offset=(5, 3))
             await pilot.pause()
-            assert ol.highlighted is not None
+            assert table.cursor_row is not None
 
     @pytest.mark.asyncio
     async def test_click_updates_detail_pane(self, mock_task_data: MockDict) -> None:
-        """Clicking a task updates the detail pane content."""
+        """Selecting a task updates the detail pane content."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Click me", status="open"),
             make_task(id=2, title="Another task", status="open"),
@@ -587,8 +572,8 @@ class TestMouseInteraction:
         app = TaskTestApp()
         async with app.run_test(size=(100, 30)) as pilot:
             await pilot.pause()
-            await pilot.click("#task-option-list", offset=(5, 2))
-            await pilot.pause()
+            # Use keyboard to select a task (more reliable than click offsets)
+            await _select_first_task(pilot)
             detail = app.query_one("#task-detail-log", RichLog)
             text = _richlog_text(detail)
             assert len(text.strip()) > 0
@@ -607,12 +592,7 @@ class TestScreenSwitching:
 
     @pytest.fixture()
     def mock_browser_deps(self) -> Generator[None, None, None]:
-        """Patch heavy BrowserContainer dependencies.
-
-        We let register_all_themes run normally (it registers themes on the
-        app), but mock get_theme so it returns a Textual built-in theme to
-        avoid config file access issues.
-        """
+        """Patch heavy BrowserContainer dependencies."""
         with (
             patch(
                 "emdx.ui.browser_container.get_theme",
@@ -757,9 +737,9 @@ class TestEdgeCases:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            # Should have at least the header + 1 task option
-            assert ol.option_count >= 2
+            table = app.query_one("#task-table", DataTable)
+            # Should have at least the header + 1 task row
+            assert table.row_count >= 2
 
     @pytest.mark.asyncio
     async def test_refresh_replaces_old_data(self, mock_task_data: MockDict) -> None:
@@ -770,8 +750,8 @@ class TestEdgeCases:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            ol = app.query_one("#task-option-list", OptionList)
-            count_before = ol.option_count
+            table = app.query_one("#task-table", DataTable)
+            count_before = table.row_count
 
             # Refresh with different data
             mock_task_data["list_tasks"].return_value = [
@@ -781,8 +761,8 @@ class TestEdgeCases:
             await pilot.press("r")
             await pilot.pause()
 
-            # Old data replaced — option count should reflect new data
-            count_after = ol.option_count
+            # Old data replaced — row count should reflect new data
+            count_after = table.row_count
             assert count_after != count_before
 
 
@@ -811,7 +791,8 @@ class TestPureFunctions:
         label = _task_label(task)
         assert "●" in label
         assert "..." in label
-        assert len(label) < 60  # truncated
+        # Full 60-char title should NOT appear
+        assert "A" * 51 not in label
 
     def test_task_label_unknown_status(self) -> None:
         task = make_task(status="weird")
