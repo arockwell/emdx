@@ -1,74 +1,7 @@
 """Configuration module for emdx."""
 
-# Re-export commonly used constants
-from .constants import (
-    BRANCH_CLEANUP_DAYS,
-    DEFAULT_BATCH_LIMIT,
-    DEFAULT_BROWSE_LIMIT,
-    # Claude model
-    DEFAULT_CLAUDE_MODEL,
-    # Database limits
-    DEFAULT_LIST_LIMIT,
-    DEFAULT_MAX_AGENT_ITERATIONS,
-    # Concurrency
-    DEFAULT_MAX_CONCURRENT_STAGES,
-    # Content limits
-    DEFAULT_MAX_CONTEXT_DOCS,
-    DEFAULT_MAX_SUGGESTIONS,
-    DEFAULT_MAX_TAGS_PER_DOC,
-    DEFAULT_RECENT_LIMIT,
-    DEFAULT_REFRESH_INTERVAL_SECONDS,
-    # Thresholds
-    DEFAULT_SIMILARITY_THRESHOLD,
-    DEFAULT_TAGGING_CONFIDENCE,
-    # Task defaults
-    DEFAULT_TASK_PRIORITY,
-    # Paths
-    EMDX_CONFIG_DIR,
-    EMDX_LOG_DIR,
-    EXECUTION_HISTORY_DAYS,
-    # Timeouts
-    EXECUTION_TIMEOUT_SECONDS,
-    NEAR_DUPLICATE_THRESHOLD,
-    STALE_DOCUMENT_ARCHIVAL_DAYS,
-    STALE_EXECUTION_TIMEOUT_SECONDS,
-    # Cleanup
-    TRASH_CLEANUP_DAYS,
-)
 from .settings import get_db_path
 
 __all__ = [
     "get_db_path",
-    # Paths
-    "EMDX_CONFIG_DIR",
-    "EMDX_LOG_DIR",
-    # Database limits
-    "DEFAULT_LIST_LIMIT",
-    "DEFAULT_RECENT_LIMIT",
-    "DEFAULT_BROWSE_LIMIT",
-    "DEFAULT_BATCH_LIMIT",
-    # Timeouts
-    "EXECUTION_TIMEOUT_SECONDS",
-    "STALE_EXECUTION_TIMEOUT_SECONDS",
-    "DEFAULT_REFRESH_INTERVAL_SECONDS",
-    # Concurrency
-    "DEFAULT_MAX_CONCURRENT_STAGES",
-    "DEFAULT_MAX_AGENT_ITERATIONS",
-    # Content limits
-    "DEFAULT_MAX_CONTEXT_DOCS",
-    "DEFAULT_MAX_TAGS_PER_DOC",
-    "DEFAULT_MAX_SUGGESTIONS",
-    # Thresholds
-    "DEFAULT_SIMILARITY_THRESHOLD",
-    "NEAR_DUPLICATE_THRESHOLD",
-    "DEFAULT_TAGGING_CONFIDENCE",
-    # Cleanup
-    "TRASH_CLEANUP_DAYS",
-    "STALE_DOCUMENT_ARCHIVAL_DAYS",
-    "BRANCH_CLEANUP_DAYS",
-    "EXECUTION_HISTORY_DAYS",
-    # Task defaults
-    "DEFAULT_TASK_PRIORITY",
-    # Claude model
-    "DEFAULT_CLAUDE_MODEL",
 ]

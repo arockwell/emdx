@@ -14,9 +14,11 @@ from .constants import DEFAULT_TAGGING_CONFIDENCE, EMDX_CONFIG_DIR
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class TaggingRule:
     """Represents a single tagging rule."""
+
     name: str
     title_patterns: list[str]
     content_patterns: list[str]
@@ -29,9 +31,10 @@ class TaggingRule:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> 'TaggingRule':
+    def from_dict(cls, data: dict[str, Any]) -> "TaggingRule":
         """Create from dictionary."""
         return cls(**data)
+
 
 class TaggingConfig:
     """Manages tagging configuration and custom rules."""
@@ -51,11 +54,8 @@ class TaggingConfig:
                     data = yaml.safe_load(f) or {}
 
                 # Load custom rules
-                for name, rule_data in data.get('rules', {}).items():
-                    self.rules[name] = TaggingRule.from_dict({
-                        'name': name,
-                        **rule_data
-                    })
+                for name, rule_data in data.get("rules", {}).items():
+                    self.rules[name] = TaggingRule.from_dict({"name": name, **rule_data})
             except Exception as e:
                 # If config is invalid, start fresh but log the error
                 logger.warning(f"Could not load tagging config: {e}")
@@ -70,147 +70,67 @@ class TaggingConfig:
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Convert rules to serializable format
-        data = {
-            'rules': {
-                name: rule.to_dict()
-                for name, rule in self.rules.items()
-            }
-        }
+        data = {"rules": {name: rule.to_dict() for name, rule in self.rules.items()}}
 
         # Remove 'name' from each rule dict (redundant with key)
-        for rule_data in data['rules'].values():
-            rule_data.pop('name', None)
+        for rule_data in data["rules"].values():
+            rule_data.pop("name", None)
 
-        with open(self.config_path, 'w') as f:
+        with open(self.config_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
     def create_default_config(self) -> None:
         """Create default configuration with example rules."""
         self.rules = {
-            'meeting_notes': TaggingRule(
-                name='meeting_notes',
-                title_patterns=[r'meeting:', r'meeting with', r'standup:', r'1:1 with'],
-                content_patterns=[r'action items:', r'decisions:', r'attendees:'],
-                tags=['notes', 'meeting'],
-                confidence=0.85
+            "meeting_notes": TaggingRule(
+                name="meeting_notes",
+                title_patterns=[r"meeting:", r"meeting with", r"standup:", r"1:1 with"],
+                content_patterns=[r"action items:", r"decisions:", r"attendees:"],
+                tags=["notes", "meeting"],
+                confidence=0.85,
             ),
-            'code_review': TaggingRule(
-                name='code_review',
-                title_patterns=[r'review:', r'code review:', r'pr review:'],
-                content_patterns=[r'lgtm', r'approved', r'changes requested', r'nit:'],
-                tags=['review', 'code'],
-                confidence=0.8
+            "code_review": TaggingRule(
+                name="code_review",
+                title_patterns=[r"review:", r"code review:", r"pr review:"],
+                content_patterns=[r"lgtm", r"approved", r"changes requested", r"nit:"],
+                tags=["review", "code"],
+                confidence=0.8,
             ),
-            'learning': TaggingRule(
-                name='learning',
-                title_patterns=[r'til:', r'learned:', r'learning:'],
-                content_patterns=[r'learned that', r'discovered', r'found out'],
-                tags=['learning', 'notes'],
-                confidence=0.75
+            "learning": TaggingRule(
+                name="learning",
+                title_patterns=[r"til:", r"learned:", r"learning:"],
+                content_patterns=[r"learned that", r"discovered", r"found out"],
+                tags=["learning", "notes"],
+                confidence=0.75,
             ),
-            'ideas': TaggingRule(
-                name='ideas',
-                title_patterns=[r'idea:', r'concept:', r'proposal:'],
-                content_patterns=[r'what if', r'we could', r'propose'],
-                tags=['idea', 'proposal'],
-                confidence=0.7
-            )
+            "ideas": TaggingRule(
+                name="ideas",
+                title_patterns=[r"idea:", r"concept:", r"proposal:"],
+                content_patterns=[r"what if", r"we could", r"propose"],
+                tags=["idea", "proposal"],
+                confidence=0.7,
+            ),
         }
         self.save_config()
-
-    def add_rule(self, rule: TaggingRule) -> bool:
-        """Add or update a tagging rule."""
-        self.rules[rule.name] = rule
-        self.save_config()
-        return True
-
-    def remove_rule(self, name: str) -> bool:
-        """Remove a tagging rule."""
-        if name in self.rules:
-            del self.rules[name]
-            self.save_config()
-            return True
-        return False
-
-    def get_rule(self, name: str) -> TaggingRule | None:
-        """Get a specific rule by name."""
-        return self.rules.get(name)
-
-    def list_rules(self) -> list[TaggingRule]:
-        """List all active rules."""
-        return [rule for rule in self.rules.values() if rule.enabled]
-
-    def enable_rule(self, name: str) -> bool:
-        """Enable a rule."""
-        if name in self.rules:
-            self.rules[name].enabled = True
-            self.save_config()
-            return True
-        return False
-
-    def disable_rule(self, name: str) -> bool:
-        """Disable a rule."""
-        if name in self.rules:
-            self.rules[name].enabled = False
-            self.save_config()
-            return True
-        return False
 
     def export_rules(self) -> dict[str, Any]:
         """Export rules as a dictionary compatible with AutoTagger."""
         return {
             name: {
-                'title_patterns': rule.title_patterns,
-                'content_patterns': rule.content_patterns,
-                'tags': rule.tags,
-                'confidence': rule.confidence
+                "title_patterns": rule.title_patterns,
+                "content_patterns": rule.content_patterns,
+                "tags": rule.tags,
+                "confidence": rule.confidence,
             }
             for name, rule in self.rules.items()
             if rule.enabled
         }
 
-    def import_rules(self, rules_data: dict[str, Any]) -> None:
-        """Import rules from a dictionary."""
-        for name, rule_data in rules_data.items():
-            self.rules[name] = TaggingRule(
-                name=name,
-                title_patterns=rule_data.get('title_patterns', []),
-                content_patterns=rule_data.get('content_patterns', []),
-                tags=rule_data.get('tags', []),
-                confidence=rule_data.get('confidence', DEFAULT_TAGGING_CONFIDENCE),
-                enabled=rule_data.get('enabled', True)
-            )
-        self.save_config()
-
-    def validate_rule(self, rule: TaggingRule) -> list[str]:
-        """Validate a tagging rule and return any errors."""
-        errors = []
-
-        if not rule.name:
-            errors.append("Rule must have a name")
-
-        if not rule.tags:
-            errors.append("Rule must specify at least one tag")
-
-        if not rule.title_patterns and not rule.content_patterns:
-            errors.append("Rule must have at least one title or content pattern")
-
-        if rule.confidence < 0 or rule.confidence > 1:
-            errors.append("Confidence must be between 0 and 1")
-
-        # Test regex patterns
-        import re
-        for pattern in rule.title_patterns + rule.content_patterns:
-            try:
-                re.compile(pattern)
-            except re.error as e:
-                errors.append(f"Invalid regex pattern '{pattern}': {e}")
-
-        return errors
 
 def get_default_config() -> TaggingConfig:
     """Get the default tagging configuration."""
     return TaggingConfig()
+
 
 def merge_with_defaults(custom_patterns: dict[str, Any]) -> dict[str, Any]:
     """

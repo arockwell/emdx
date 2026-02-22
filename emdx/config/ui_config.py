@@ -92,15 +92,3 @@ def get_code_theme() -> str:
         Code theme name, or "auto" for automatic detection
     """
     return str(load_ui_config().get("code_theme", "auto"))
-
-
-def set_code_theme(theme_name: str) -> None:
-    """
-    Set and persist code theme preference.
-
-    Args:
-        theme_name: Name of Pygments theme, or "auto"
-    """
-    config = load_ui_config()
-    config["code_theme"] = theme_name
-    save_ui_config(config)
