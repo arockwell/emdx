@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from emdx.models.types import TaskDict
 from emdx.ui.types import AgentExecutionDict
 
 if TYPE_CHECKING:
