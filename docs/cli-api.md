@@ -932,6 +932,52 @@ emdx delegate --worktree --pr "fix X"
 | `--epic` | `-e` | Epic task ID to add tasks to |
 | `--cat` | `-c` | Category key for auto-numbered tasks |
 | `--cleanup` | | Remove stale delegate worktrees (>1 hour old) |
+| `--json` | | Structured JSON output (implies `--quiet`) |
+
+### JSON Output
+
+Use `--json` for structured, machine-readable output. Metadata on stderr is suppressed (same as `--quiet`).
+
+```bash
+# Single task with JSON output
+emdx delegate --json "analyze code"
+```
+
+**Single task output:**
+```json
+{
+  "task_id": 42,
+  "doc_id": 1234,
+  "output_doc_id": 1235,
+  "execution_id": 87,
+  "exit_code": 0,
+  "success": true,
+  "duration_seconds": 34.52,
+  "duration": "34s"
+}
+```
+
+Fields `pr_url`, `branch_name`, and `error` are included when applicable (e.g., `--pr` adds `pr_url`).
+
+**Parallel task output:**
+```json
+{
+  "parent_task_id": 50,
+  "task_count": 3,
+  "succeeded": 3,
+  "failed": 0,
+  "doc_ids": [1234, 1235, 1236],
+  "tasks": [
+    {"index": 0, "task_id": 51, "doc_id": 1234, "exit_code": 0, "success": true, "duration_seconds": 28.1, "duration": "28s"},
+    {"index": 1, "task_id": 52, "doc_id": 1235, "exit_code": 0, "success": true, "duration_seconds": 31.4, "duration": "31s"},
+    {"index": 2, "task_id": 53, "doc_id": 1236, "exit_code": 0, "success": true, "duration_seconds": 25.7, "duration": "25s"}
+  ],
+  "total_duration_seconds": 31.4,
+  "total_duration": "31s"
+}
+```
+
+When `--synthesize` is used, a `synthesis` object is added with the same fields as a single task result.
 
 ### Output Format
 
