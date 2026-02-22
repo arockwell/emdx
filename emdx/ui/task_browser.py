@@ -56,7 +56,7 @@ class TaskBrowser(HelpMixin, Widget):
             "[dim]j/k[/dim] nav │ [dim]/[/dim] filter │ "
             "[dim]o[/dim] ready [dim]i[/dim] active [dim]x[/dim] blocked "
             "[dim]f[/dim] done [dim]*[/dim] all │ "
-            "[dim]d[/dim] done │ [dim]a[/dim] active │ "
+            "[dim]g[/dim] group │ [dim]d[/dim] done │ [dim]a[/dim] active │ "
             "[dim]r[/dim] refresh │ [dim]?[/dim] help",
             id="task-help-bar",
         )
