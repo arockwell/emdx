@@ -190,6 +190,14 @@ class TaskView(Widget):
     }
     """
 
+    # Status filter key mapping: key -> set of statuses to show
+    STATUS_FILTERS: dict[str, set[str]] = {
+        "o": {"open"},
+        "i": {"active"},
+        "x": {"blocked"},
+        "f": {"done", "failed"},
+    }
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._tasks: list[TaskDict] = []
@@ -198,6 +206,7 @@ class TaskView(Widget):
         self._epics: dict[str | None, EpicTaskDict] = {}
         self._filter_text: str = ""
         self._debounce_timer: Timer | None = None
+        self._status_filter: set[str] | None = None  # None = show all
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
@@ -248,11 +257,12 @@ class TaskView(Widget):
             logger.error(f"Failed to load epics: {e}")
             self._epics = {}
 
-        # Group by status (respecting active filter)
+        # Group by status (respecting active filters)
         self._tasks_by_status = defaultdict(list)
         for task in self._tasks:
-            if not self._filter_text or self._task_matches_filter(task, self._filter_text):
-                self._tasks_by_status[task["status"]].append(task)
+            if not self._task_passes_filters(task):
+                continue
+            self._tasks_by_status[task["status"]].append(task)
 
         self._render_task_table(restore_row=restore_row)
         self._update_status_bar()
@@ -379,12 +389,17 @@ class TaskView(Widget):
             parts.append(f"[red]{counts['failed']} failed[/red]")
 
         if not any(counts.values()):
-            if self._filter_text:
+            if self._filter_text or self._status_filter:
                 parts.append("[yellow]no matches[/yellow]")
             else:
                 parts.append("[dim]no tasks[/dim]")
 
-        # Show filter count when active
+        # Show status filter indicator
+        if self._status_filter:
+            labels = [STATUS_LABELS.get(s, s) for s in sorted(self._status_filter)]
+            parts.append(f"[magenta]{'+'.join(labels)}[/magenta]")
+
+        # Show text filter count when active
         if self._filter_text:
             matched = sum(counts.values())
             total = len(self._tasks)
@@ -407,12 +422,21 @@ class TaskView(Widget):
         ]
         return any(q in f.lower() for f in fields)
 
+    def _task_passes_filters(self, task: TaskDict) -> bool:
+        """Check if a task passes both text and status filters."""
+        if self._status_filter and task["status"] not in self._status_filter:
+            return False
+        if self._filter_text and not self._task_matches_filter(task, self._filter_text):
+            return False
+        return True
+
     def _apply_filter(self) -> None:
-        """Re-group tasks through the active filter and re-render."""
+        """Re-group tasks through the active filters and re-render."""
         self._tasks_by_status = defaultdict(list)
         for task in self._tasks:
-            if not self._filter_text or self._task_matches_filter(task, self._filter_text):
-                self._tasks_by_status[task["status"]].append(task)
+            if not self._task_passes_filters(task):
+                continue
+            self._tasks_by_status[task["status"]].append(task)
         self._render_task_table()
         self._update_status_bar()
 
@@ -435,7 +459,7 @@ class TaskView(Widget):
         table.focus()
 
     def on_key(self, event: events.Key) -> None:
-        """Block vim keys when filter input has focus."""
+        """Block vim keys when filter input has focus; handle status filter keys."""
         try:
             filter_input = self.query_one("#task-filter-input", Input)
             if filter_input.has_focus:
@@ -450,11 +474,33 @@ class TaskView(Widget):
                     "1",
                     "2",
                     "3",
+                    "o",
+                    "i",
+                    "x",
+                    "f",
+                    "asterisk",
                 }
                 if event.key in vim_keys:
                     return
         except Exception:
             pass
+
+        # Status filter keys (only when filter input is not focused)
+        if event.key in self.STATUS_FILTERS:
+            new_filter = self.STATUS_FILTERS[event.key]
+            # Toggle: pressing same key again clears the filter
+            if self._status_filter == new_filter:
+                self._status_filter = None
+            else:
+                self._status_filter = new_filter
+            self._apply_filter()
+            event.prevent_default()
+            event.stop()
+        elif event.key == "asterisk":
+            self._status_filter = None
+            self._apply_filter()
+            event.prevent_default()
+            event.stop()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle filter input changes with debouncing."""
