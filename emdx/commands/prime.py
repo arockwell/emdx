@@ -261,7 +261,7 @@ def _get_ready_tasks() -> list[ReadyTask]:
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps td
                 JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = t.id AND blocker.status != 'done'
+                WHERE td.task_id = t.id AND blocker.status NOT IN ('done', 'wontdo')
             )
             ORDER BY t.priority ASC, t.created_at ASC
             LIMIT 20

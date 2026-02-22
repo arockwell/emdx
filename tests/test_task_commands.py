@@ -22,6 +22,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_simple_task(self, mock_tasks):
         mock_tasks.create_task.return_value = 1
+        mock_tasks.get_task.return_value = {
+            "id": 1,
+            "title": "Fix the auth bug",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Fix the auth bug"])
         assert result.exit_code == 0
         out = _out(result)
@@ -37,8 +43,29 @@ class TestTaskAdd:
         )
 
     @patch("emdx.commands.tasks.tasks")
+    def test_add_task_shows_epic_key(self, mock_tasks):
+        mock_tasks.create_task.return_value = 10
+        mock_tasks.get_task.return_value = {
+            "id": 10,
+            "title": "FEAT-3: Add auth",
+            "epic_key": "FEAT",
+            "epic_seq": 3,
+        }
+        result = runner.invoke(app, ["add", "Add auth", "--cat", "FEAT"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Task FEAT-3" in out
+        assert "Add auth" in out
+
+    @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_doc_id(self, mock_tasks):
         mock_tasks.create_task.return_value = 2
+        mock_tasks.get_task.return_value = {
+            "id": 2,
+            "title": "Implement this",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Implement this", "--doc", "42"])
         assert result.exit_code == 0
         out = _out(result)
@@ -57,6 +84,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_doc_id_short_flag(self, mock_tasks):
         mock_tasks.create_task.return_value = 3
+        mock_tasks.get_task.return_value = {
+            "id": 3,
+            "title": "Another task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Another task", "-d", "99"])
         assert result.exit_code == 0
         out = _out(result)
@@ -74,6 +107,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_description(self, mock_tasks):
         mock_tasks.create_task.return_value = 4
+        mock_tasks.get_task.return_value = {
+            "id": 4,
+            "title": "Refactor tests",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(
             app, ["add", "Refactor tests", "--description", "Split into unit and integration"]
         )
@@ -93,6 +132,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_description_short_flag(self, mock_tasks):
         mock_tasks.create_task.return_value = 5
+        mock_tasks.get_task.return_value = {
+            "id": 5,
+            "title": "Task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Task", "-D", "Details here"])
         assert result.exit_code == 0
         mock_tasks.create_task.assert_called_once_with(
@@ -107,6 +152,12 @@ class TestTaskAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_with_all_options(self, mock_tasks):
         mock_tasks.create_task.return_value = 6
+        mock_tasks.get_task.return_value = {
+            "id": 6,
+            "title": "Full task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Full task", "-d", "10", "-D", "Full description"])
         assert result.exit_code == 0
         out = _out(result)
@@ -441,8 +492,9 @@ class TestTaskDelete:
         assert result.exit_code == 1
         assert "not found" in _out(result)
 
+    @patch("emdx.commands.tasks.is_non_interactive", return_value=False)
     @patch("emdx.commands.tasks.tasks")
-    def test_delete_with_confirmation(self, mock_tasks):
+    def test_delete_with_confirmation(self, mock_tasks, mock_interactive):
         mock_tasks.resolve_task_id.return_value = 3
         mock_tasks.get_task.return_value = {"id": 3, "title": "Confirm delete"}
         mock_tasks.delete_task.return_value = True
@@ -451,8 +503,9 @@ class TestTaskDelete:
         out = _out(result)
         assert "Deleted #3" in out
 
+    @patch("emdx.commands.tasks.is_non_interactive", return_value=False)
     @patch("emdx.commands.tasks.tasks")
-    def test_delete_cancelled(self, mock_tasks):
+    def test_delete_cancelled(self, mock_tasks, mock_interactive):
         mock_tasks.resolve_task_id.return_value = 4
         mock_tasks.get_task.return_value = {"id": 4, "title": "Cancel delete"}
         result = runner.invoke(app, ["delete", "4"], input="n\n")
@@ -790,12 +843,126 @@ class TestTaskBlocked:
         assert result.exit_code != 0
 
 
+class TestTaskPriority:
+    """Tests for task priority command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_show_current(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 2}
+        result = runner.invoke(app, ["priority", "42"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#42" in out
+        assert "Fix auth" in out
+        assert "priority 2" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_show_default(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 10
+        mock_tasks.get_task.return_value = {"id": 10, "title": "Some task", "priority": 3}
+        result = runner.invoke(app, ["priority", "10"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "priority 3" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_set_value(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "42", "1"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#42" in out
+        assert "priority set to 1" in out
+        mock_tasks.update_task.assert_called_once_with(42, priority=1)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_set_value_5(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
+        mock_tasks.get_task.return_value = {"id": 5, "title": "Low task", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "5", "5"])
+        assert result.exit_code == 0
+        mock_tasks.update_task.assert_called_once_with(5, priority=5)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_invalid_value_too_high(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        result = runner.invoke(app, ["priority", "42", "6"])
+        assert result.exit_code == 1
+        assert "between 1 and 5" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_invalid_value_too_low(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        result = runner.invoke(app, ["priority", "42", "0"])
+        assert result.exit_code == 1
+        assert "between 1 and 5" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_task_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["priority", "999", "1"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_with_prefixed_id(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 78
+        mock_tasks.get_task.return_value = {"id": 78, "title": "FEAT-5: Feature", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "FEAT-5", "2"])
+        assert result.exit_code == 0
+        mock_tasks.resolve_task_id.assert_called_once_with("FEAT-5")
+        mock_tasks.update_task.assert_called_once_with(78, priority=2)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_show_json(self, mock_tasks):
+        import json
+
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 2}
+        result = runner.invoke(app, ["priority", "42", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["id"] == 42
+        assert data["priority"] == 2
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_priority_set_json(self, mock_tasks):
+        import json
+
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = {"id": 42, "title": "Fix auth", "priority": 3}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["priority", "42", "1", "--json"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["id"] == 42
+        assert data["priority"] == 1
+
+    def test_priority_requires_task_id(self):
+        result = runner.invoke(app, ["priority"])
+        assert result.exit_code != 0
+
+
 class TestTaskAddWithAfter:
     """Tests for --after flag on task add."""
 
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_single_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 10
+        mock_tasks.get_task.return_value = {
+            "id": 10,
+            "title": "Deploy",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Deploy", "--after", "5"])
         assert result.exit_code == 0
         out = _out(result)
@@ -813,6 +980,12 @@ class TestTaskAddWithAfter:
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_multiple_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 20
+        mock_tasks.get_task.return_value = {
+            "id": 20,
+            "title": "Release",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         result = runner.invoke(app, ["add", "Release", "--after", "10", "--after", "11"])
         assert result.exit_code == 0
         out = _out(result)

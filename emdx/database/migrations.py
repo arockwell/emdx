@@ -2561,6 +2561,36 @@ def migration_045_add_wiki_tables(conn: sqlite3.Connection) -> None:
     )
 
     conn.commit()
+    """Add document_entities table for entity-based wikification (Layer 3).
+
+    Stores key entities/concepts extracted from each document.
+    When a new document is saved, its entities are cross-referenced
+    against existing documents to create links.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_entities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            entity TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            confidence REAL DEFAULT 1.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE,
+            UNIQUE(document_id, entity)
+        )
+        """
+    )
+
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entities_document ON document_entities(document_id)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_entities_entity ON document_entities(entity)")
+
+    conn.commit()
 
 
 # List of all migrations in order

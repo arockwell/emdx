@@ -35,7 +35,7 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import console
+from emdx.utils.output import console, is_non_interactive
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Core CRUD operations for documents")
@@ -1493,8 +1493,8 @@ def delete(
             console.print("\n[dim]This is a dry run. No documents were deleted.[/dim]")
             return
 
-        # Confirmation
-        if not force:
+        # Confirmation (skip when stdin is not a TTY to avoid hanging agents)
+        if not force and not is_non_interactive():
             if hard:
                 console.print(
                     f"\n[red bold]⚠️  WARNING: This will PERMANENTLY delete "

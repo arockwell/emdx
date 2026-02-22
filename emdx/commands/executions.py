@@ -19,7 +19,7 @@ from ..models.executions import (
     get_running_executions,
     update_execution_status,
 )
-from ..utils.output import console
+from ..utils.output import console, is_non_interactive
 from ..utils.text_formatting import truncate_description
 
 logger = logging.getLogger(__name__)
@@ -355,11 +355,12 @@ def kill_all_executions() -> None:
     for exec in executions:
         console.print(f"  [cyan]{exec.id}[/cyan] - {exec.doc_title}")
 
-    # Ask for confirmation
-    confirm = typer.confirm("Are you sure you want to kill all running executions?")
-    if not confirm:
-        console.print("[yellow]Cancelled.[/yellow]")
-        return
+    # Ask for confirmation (skip when stdin is not a TTY)
+    if not is_non_interactive():
+        confirm = typer.confirm("Are you sure you want to kill all running executions?")
+        if not confirm:
+            console.print("[yellow]Cancelled.[/yellow]")
+            return
 
     # Kill all running executions
     for execution in executions:
@@ -455,9 +456,7 @@ def execution_health() -> None:
     # Show recommendations if there are unhealthy executions
     if metrics["unhealthy_running"] > 0:
         console.print("\n[yellow]⚠ Found unhealthy executions![/yellow]")
-        console.print(
-            "Run [cyan]emdx maintain cleanup --executions --execute[/cyan] to clean up"
-        )
+        console.print("Run [cyan]emdx maintain cleanup --executions --execute[/cyan] to clean up")
 
 
 @app.command(name="monitor")

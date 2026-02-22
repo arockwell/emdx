@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from ..utils.output import console
+from ..utils.output import console, is_non_interactive
 
 app = typer.Typer(help="AI-powered knowledge base features")
 
@@ -395,7 +395,7 @@ def clear_index(
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
 
-    if not confirm:
+    if not confirm and not is_non_interactive():
         confirm = typer.confirm("This will delete all embeddings. Continue?")
         if not confirm:
             raise typer.Abort()
@@ -409,9 +409,7 @@ def clear_index(
 @app.command("links")
 def show_links(
     doc_id: int = typer.Argument(..., help="Document ID to show links for"),
-    depth: int = typer.Option(
-        1, "--depth", "-d", help="Traversal depth (1=direct, 2=two hops)"
-    ),
+    depth: int = typer.Option(1, "--depth", "-d", help="Traversal depth (1=direct, 2=two hops)"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """
@@ -440,12 +438,14 @@ def show_links(
             else:
                 other_id = link["source_doc_id"]
                 other_title = link["source_title"]
-            items.append({
-                "doc_id": other_id,
-                "title": other_title,
-                "similarity": link["similarity_score"],
-                "method": link["method"],
-            })
+            items.append(
+                {
+                    "doc_id": other_id,
+                    "title": other_title,
+                    "similarity": link["similarity_score"],
+                    "method": link["method"],
+                }
+            )
         print(json.dumps({"doc_id": doc_id, "links": items}, indent=2))
         return
 
@@ -457,9 +457,7 @@ def show_links(
     from ..database import db
 
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT title FROM documents WHERE id = ?", (doc_id,)
-        )
+        cursor = conn.execute("SELECT title FROM documents WHERE id = ?", (doc_id,))
         row = cursor.fetchone()
         source_title = row[0] if row else f"Document #{doc_id}"
 
@@ -513,10 +511,7 @@ def show_links(
                     seen.add(h_other)
 
             if hop2_new:
-                console.print(
-                    f"\n[dim]  via #{neighbor_id} "
-                    f"'{neighbor_title}':[/dim]"
-                )
+                console.print(f"\n[dim]  via #{neighbor_id} '{neighbor_title}':[/dim]")
                 for h in hop2_new:
                     if h["source_doc_id"] == neighbor_id:
                         h_id = h["target_doc_id"]
@@ -533,15 +528,9 @@ def show_links(
 @app.command("link")
 def create_link(
     doc_id: int = typer.Argument(..., help="Document ID to create links for"),
-    all_docs: bool = typer.Option(
-        False, "--all", help="Backfill links for all indexed documents"
-    ),
-    threshold: float = typer.Option(
-        0.5, "--threshold", "-t", help="Minimum similarity (0-1)"
-    ),
-    max_links: int = typer.Option(
-        5, "--max", "-m", help="Maximum links per document"
-    ),
+    all_docs: bool = typer.Option(False, "--all", help="Backfill links for all indexed documents"),
+    threshold: float = typer.Option(0.5, "--threshold", "-t", help="Minimum similarity (0-1)"),
+    max_links: int = typer.Option(5, "--max", "-m", help="Maximum links per document"),
 ) -> None:
     """
     Create semantic links for a document (or all documents).
@@ -571,22 +560,16 @@ def create_link(
             progress.update(task, completed=True)
         console.print(f"[green]Created {total} links across all documents[/green]")
     else:
-        result = auto_link_document(
-            doc_id, threshold=threshold, max_links=max_links
-        )
+        result = auto_link_document(doc_id, threshold=threshold, max_links=max_links)
         if result.links_created > 0:
             console.print(
-                f"[green]Created {result.links_created} link(s) "
-                f"for document #{doc_id}[/green]"
+                f"[green]Created {result.links_created} link(s) for document #{doc_id}[/green]"
             )
-            for lid, score in zip(
-                result.linked_doc_ids, result.scores, strict=False
-            ):
+            for lid, score in zip(result.linked_doc_ids, result.scores, strict=False):
                 console.print(f"  [cyan]#{lid}[/cyan] ({score:.0%})")
         else:
             console.print(
-                f"[yellow]No similar documents found above "
-                f"{threshold:.0%} threshold[/yellow]"
+                f"[yellow]No similar documents found above {threshold:.0%} threshold[/yellow]"
             )
 
 
@@ -607,10 +590,6 @@ def remove_link(
 
     deleted = document_links.delete_link(source_id, target_id)
     if deleted:
-        console.print(
-            f"[green]Removed link between #{source_id} and #{target_id}[/green]"
-        )
+        console.print(f"[green]Removed link between #{source_id} and #{target_id}[/green]")
     else:
-        console.print(
-            f"[yellow]No link found between #{source_id} and #{target_id}[/yellow]"
-        )
+        console.print(f"[yellow]No link found between #{source_id} and #{target_id}[/yellow]")

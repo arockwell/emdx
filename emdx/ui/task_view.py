@@ -10,10 +10,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.timer import Timer
 from textual.widget import Widget
-from textual.widgets import DataTable, RichLog, Static
+from textual.widgets import DataTable, Input, RichLog, Static
 
 from emdx.models.tasks import (
     get_dependencies,
@@ -28,13 +30,14 @@ from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
 logger = logging.getLogger(__name__)
 
 # Status display order and icons
-STATUS_ORDER = ["open", "active", "blocked", "done", "failed"]
+STATUS_ORDER = ["open", "active", "blocked", "done", "failed", "wontdo"]
 STATUS_ICONS = {
     "open": "○",
     "active": "●",
     "blocked": "⚠",
     "done": "✓",
     "failed": "✗",
+    "wontdo": "⊘",
 }
 STATUS_LABELS = {
     "open": "READY",
@@ -42,6 +45,7 @@ STATUS_LABELS = {
     "blocked": "BLOCKED",
     "done": "DONE",
     "failed": "FAILED",
+    "wontdo": "WON'T DO",
 }
 STATUS_COLORS = {
     "open": "",
@@ -49,6 +53,7 @@ STATUS_COLORS = {
     "blocked": "yellow",
     "done": "dim",
     "failed": "red",
+    "wontdo": "dim",
 }
 
 # Row key prefix for section headers
@@ -145,6 +150,9 @@ class TaskView(Widget):
         ("d", "mark_done", "Mark Done"),
         ("a", "mark_active", "Mark Active"),
         ("b", "mark_blocked", "Mark Blocked"),
+        ("w", "mark_wontdo", "Won't Do"),
+        ("slash", "show_filter", "Filter"),
+        ("escape", "clear_filter", "Clear Filter"),
     ]
 
     DEFAULT_CSS = """
@@ -157,6 +165,13 @@ class TaskView(Widget):
         height: 1;
         background: $boost;
         padding: 0 1;
+    }
+
+    #task-filter-input {
+        height: 3;
+        padding: 0 1;
+        border-bottom: solid $primary;
+        display: none;
     }
 
     #task-main {
@@ -197,15 +212,28 @@ class TaskView(Widget):
     }
     """
 
+    # Status filter key mapping: key -> set of statuses to show
+    STATUS_FILTERS: dict[str, set[str]] = {
+        "o": {"open"},
+        "i": {"active"},
+        "x": {"blocked"},
+        "f": {"done", "failed", "wontdo"},
+    }
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._tasks: list[TaskDict] = []
         self._tasks_by_status: dict[str, list[TaskDict]] = defaultdict(list)
         self._row_key_to_task: dict[str, TaskDict] = {}
         self._epics: dict[str | None, EpicTaskDict] = {}
+        self._filter_text: str = ""
+        self._debounce_timer: Timer | None = None
+        self._status_filter: set[str] | None = None  # None = show all
+        self._group_by: str = "status"  # "status" or "epic"
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
+        yield Input(placeholder="Filter tasks...", id="task-filter-input")
         with Horizontal(id="task-main"):
             with Vertical(id="task-list-panel"):
                 yield Static("TASKS", id="task-list-header")
@@ -229,7 +257,6 @@ class TaskView(Widget):
     async def on_mount(self) -> None:
         """Load tasks on mount."""
         table = self.query_one("#task-table", DataTable)
-        table.add_column("pri", key="pri", width=3)
         table.add_column("icon", key="icon", width=2)
         table.add_column("epic", key="epic", width=7)
         table.add_column("title", key="title")
@@ -253,9 +280,11 @@ class TaskView(Widget):
             logger.error(f"Failed to load epics: {e}")
             self._epics = {}
 
-        # Group by status
+        # Group by status (respecting active filters)
         self._tasks_by_status = defaultdict(list)
         for task in self._tasks:
+            if not self._task_passes_filters(task):
+                continue
             self._tasks_by_status[task["status"]].append(task)
 
         self._render_task_table(restore_row=restore_row)
@@ -287,6 +316,54 @@ class TaskView(Widget):
         table.clear()
         self._row_key_to_task = {}
 
+        if self._group_by == "epic":
+            self._render_groups_by_epic(table)
+        else:
+            self._render_groups_by_status(table)
+
+        # Restore cursor
+        if restore_row is not None and table.row_count > 0:
+            target = min(restore_row, table.row_count - 1)
+            table.move_cursor(row=target)
+        elif current_key:
+            self._select_row_by_key(current_key)
+
+    def _render_task_row(self, table: "DataTable[str | Text]", task: TaskDict) -> None:
+        """Add a single task row to the table."""
+        row_key = self._row_key_for_task(task)
+        self._row_key_to_task[row_key] = task
+        color = STATUS_COLORS.get(task["status"], "")
+        icon = STATUS_ICONS.get(task["status"], "?")
+        title = _strip_epic_prefix(
+            task["title"],
+            task.get("epic_key"),
+            task.get("epic_seq"),
+        )
+        if len(title) > 45:
+            title = title[:42] + "..."
+
+        # Epic badge
+        epic_key = task.get("epic_key")
+        epic_seq = task.get("epic_seq")
+        if epic_key and epic_seq:
+            epic_text = Text(f"{epic_key}-{epic_seq}", style="cyan")
+        elif epic_key:
+            epic_text = Text(epic_key, style="cyan")
+        else:
+            epic_text = Text("")
+
+        title_style = f"{color}" if color else ""
+
+        table.add_row(
+            Text(icon, style=color),
+            epic_text,
+            Text(title, style=title_style),
+            Text(_format_time_short(task.get("created_at")), style="dim"),
+            key=row_key,
+        )
+
+    def _render_groups_by_status(self, table: "DataTable[str | Text]") -> None:
+        """Render tasks grouped by status."""
         first_group = True
         for status in STATUS_ORDER:
             tasks = self._tasks_by_status.get(status, [])
@@ -295,10 +372,8 @@ class TaskView(Widget):
 
             label = STATUS_LABELS.get(status, status.upper())
 
-            # Separator before groups (except the first)
             if not first_group:
                 table.add_row(
-                    "",
                     "",
                     "",
                     Text(""),
@@ -307,10 +382,8 @@ class TaskView(Widget):
                 )
             first_group = False
 
-            # Section header row
             header_text = f"{label} ({len(tasks)})"
             table.add_row(
-                "",
                 "",
                 "",
                 Text(header_text, style="bold"),
@@ -319,46 +392,66 @@ class TaskView(Widget):
             )
 
             for task in tasks:
-                row_key = self._row_key_for_task(task)
-                self._row_key_to_task[row_key] = task
-                color = STATUS_COLORS.get(task["status"], "")
-                icon = STATUS_ICONS.get(task["status"], "?")
-                priority = task.get("priority", 3) or 3
-                title = _strip_epic_prefix(
-                    task["title"],
-                    task.get("epic_key"),
-                    task.get("epic_seq"),
-                )
-                if len(title) > 45:
-                    title = title[:42] + "..."
+                self._render_task_row(table, task)
 
-                # Epic badge
-                epic_key = task.get("epic_key")
-                epic_seq = task.get("epic_seq")
-                if epic_key and epic_seq:
-                    epic_text = Text(f"{epic_key}-{epic_seq}", style="cyan")
-                elif epic_key:
-                    epic_text = Text(epic_key, style="cyan")
-                else:
-                    epic_text = Text("")
+    def _render_groups_by_epic(self, table: "DataTable[str | Text]") -> None:
+        """Render tasks grouped by epic."""
+        # Collect all filtered tasks into epic groups
+        tasks_by_epic: dict[str, list[TaskDict]] = defaultdict(list)
+        for status in STATUS_ORDER:
+            for task in self._tasks_by_status.get(status, []):
+                epic_key = task.get("epic_key") or ""
+                tasks_by_epic[epic_key].append(task)
 
-                title_style = f"{color}" if color else ""
+        # Sort epic keys: named epics alphabetically, ungrouped last
+        epic_keys = sorted(
+            tasks_by_epic.keys(),
+            key=lambda k: (k == "", k),
+        )
 
+        finished = {"done", "failed", "wontdo"}
+        first_group = True
+        for epic_key in epic_keys:
+            tasks = tasks_by_epic[epic_key]
+            if not tasks:
+                continue
+
+            # Hide epic groups where all tasks are done/failed
+            if all(t["status"] in finished for t in tasks):
+                continue
+
+            if not first_group:
                 table.add_row(
-                    Text(_priority_str(priority), style=_priority_style(priority)),
-                    Text(icon, style=color),
-                    epic_text,
-                    Text(title, style=title_style),
-                    Text(_format_time_short(task.get("created_at")), style="dim"),
-                    key=row_key,
+                    "",
+                    "",
+                    Text(""),
+                    "",
+                    key=f"{SEPARATOR_PREFIX}epic:{epic_key or 'none'}",
                 )
+            first_group = False
 
-        # Restore cursor
-        if restore_row is not None and table.row_count > 0:
-            target = min(restore_row, table.row_count - 1)
-            table.move_cursor(row=target)
-        elif current_key:
-            self._select_row_by_key(current_key)
+            # Build header with progress if we have epic info
+            if epic_key:
+                epic = self._epics.get(epic_key)
+                if epic:
+                    done = epic.get("children_done", 0)
+                    total = epic.get("child_count", 0)
+                    header_text = f"{epic_key} ({done}/{total} done)"
+                else:
+                    header_text = f"{epic_key} ({len(tasks)})"
+            else:
+                header_text = f"UNGROUPED ({len(tasks)})"
+
+            table.add_row(
+                "",
+                "",
+                Text(header_text, style="bold cyan"),
+                "",
+                key=f"{HEADER_PREFIX}epic:{epic_key or 'none'}",
+            )
+
+            for task in tasks:
+                self._render_task_row(table, task)
 
     def _select_row_by_key(self, key: str) -> None:
         """Move cursor to a row by its key string."""
@@ -385,11 +478,156 @@ class TaskView(Widget):
             parts.append(f"[dim]{counts['done']} done[/dim]")
         if counts["failed"]:
             parts.append(f"[red]{counts['failed']} failed[/red]")
+        if counts["wontdo"]:
+            parts.append(f"[dim]{counts['wontdo']} wontdo[/dim]")
 
         if not any(counts.values()):
-            parts.append("[dim]no tasks[/dim]")
+            if self._filter_text or self._status_filter:
+                parts.append("[yellow]no matches[/yellow]")
+            else:
+                parts.append("[dim]no tasks[/dim]")
+
+        # Show grouping mode indicator
+        if self._group_by == "epic":
+            parts.append("[magenta]by epic[/magenta]")
+
+        # Show status filter indicator
+        if self._status_filter:
+            labels = [STATUS_LABELS.get(s, s) for s in sorted(self._status_filter)]
+            parts.append(f"[magenta]{'+'.join(labels)}[/magenta]")
+
+        # Show text filter count when active
+        if self._filter_text:
+            matched = sum(counts.values())
+            total = len(self._tasks)
+            parts.append(f"[cyan]filter: {matched}/{total}[/cyan]")
 
         status_bar.update(" · ".join(parts))
+
+    # ------------------------------------------------------------------
+    # Filter logic
+    # ------------------------------------------------------------------
+
+    def _task_matches_filter(self, task: TaskDict, query: str) -> bool:
+        """Check if a task matches the filter query (case-insensitive substring)."""
+        q = query.lower()
+        fields = [
+            task.get("title") or "",
+            task.get("epic_key") or "",
+            task.get("description") or "",
+            task.get("tags") or "",
+        ]
+        return any(q in f.lower() for f in fields)
+
+    def _task_passes_filters(self, task: TaskDict) -> bool:
+        """Check if a task passes both text and status filters."""
+        if self._status_filter and task["status"] not in self._status_filter:
+            return False
+        if self._filter_text and not self._task_matches_filter(task, self._filter_text):
+            return False
+        return True
+
+    def _apply_filter(self) -> None:
+        """Re-group tasks through the active filters and re-render."""
+        self._tasks_by_status = defaultdict(list)
+        for task in self._tasks:
+            if not self._task_passes_filters(task):
+                continue
+            self._tasks_by_status[task["status"]].append(task)
+        self._render_task_table()
+        self._update_status_bar()
+
+    def action_show_filter(self) -> None:
+        """Show and focus the filter input."""
+        filter_input = self.query_one("#task-filter-input", Input)
+        filter_input.display = True
+        filter_input.focus()
+
+    def action_clear_filter(self) -> None:
+        """Clear filter, hide input, refocus table."""
+        filter_input = self.query_one("#task-filter-input", Input)
+        if not filter_input.display:
+            return
+        filter_input.value = ""
+        filter_input.display = False
+        self._filter_text = ""
+        self._apply_filter()
+        table = self.query_one("#task-table", DataTable)
+        table.focus()
+
+    def on_key(self, event: events.Key) -> None:
+        """Block vim keys when filter input has focus; handle status filter keys."""
+        try:
+            filter_input = self.query_one("#task-filter-input", Input)
+            if filter_input.has_focus:
+                vim_keys = {
+                    "j",
+                    "k",
+                    "r",
+                    "d",
+                    "a",
+                    "b",
+                    "w",
+                    "g",
+                    "slash",
+                    "1",
+                    "2",
+                    "3",
+                    "o",
+                    "i",
+                    "x",
+                    "f",
+                    "asterisk",
+                }
+                if event.key in vim_keys:
+                    return
+        except Exception:
+            pass
+
+        # Status filter keys (only when filter input is not focused)
+        if event.key in self.STATUS_FILTERS:
+            new_filter = self.STATUS_FILTERS[event.key]
+            # Toggle: pressing same key again clears the filter
+            if self._status_filter == new_filter:
+                self._status_filter = None
+            else:
+                self._status_filter = new_filter
+            self._apply_filter()
+            event.prevent_default()
+            event.stop()
+        elif event.key == "asterisk":
+            self._status_filter = None
+            self._apply_filter()
+            event.prevent_default()
+            event.stop()
+        elif event.key == "g":
+            self._group_by = "epic" if self._group_by == "status" else "status"
+            self._render_task_table()
+            self._update_status_bar()
+            event.prevent_default()
+            event.stop()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle filter input changes with debouncing."""
+        if event.input.id != "task-filter-input":
+            return
+
+        query = event.value
+
+        # Cancel pending filter
+        if self._debounce_timer:
+            try:
+                self._debounce_timer.stop()
+            except Exception:
+                pass
+            self._debounce_timer = None
+
+        def do_filter() -> None:
+            self._debounce_timer = None
+            self._filter_text = query
+            self._apply_filter()
+
+        self._debounce_timer = self.set_timer(0.2, do_filter)
 
     def _get_selected_task(self) -> TaskDict | None:
         """Get the currently highlighted task."""
@@ -524,22 +762,22 @@ class TaskView(Widget):
         """Reload tasks from database."""
         await self._load_tasks()
 
-    def _toggle_pane_focus(self) -> None:
-        """Toggle focus between list and detail panes."""
+    def _toggle_filter_focus(self) -> None:
+        """Toggle focus between filter input and task table."""
+        filter_input = self.query_one("#task-filter-input", Input)
         table = self.query_one("#task-table", DataTable)
-        detail_log = self.query_one("#task-detail-log", RichLog)
-        if table.has_focus:
-            detail_log.focus()
+        if filter_input.display and not filter_input.has_focus:
+            filter_input.focus()
         else:
             table.focus()
 
     def action_focus_next(self) -> None:
-        """Toggle focus between panes."""
-        self._toggle_pane_focus()
+        """Toggle focus between filter and table."""
+        self._toggle_filter_focus()
 
     def action_focus_prev(self) -> None:
-        """Toggle focus between panes."""
-        self._toggle_pane_focus()
+        """Toggle focus between filter and table."""
+        self._toggle_filter_focus()
 
     # Status mutation actions
 
@@ -578,3 +816,7 @@ class TaskView(Widget):
     async def action_mark_blocked(self) -> None:
         """Mark selected task as blocked."""
         await self._set_task_status("blocked")
+
+    async def action_mark_wontdo(self) -> None:
+        """Mark selected task as won't do."""
+        await self._set_task_status("wontdo")

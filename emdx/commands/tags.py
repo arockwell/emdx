@@ -5,8 +5,6 @@ The `add` subcommand is also the default callback, so `emdx tag 42 gameplan`
 works as a shorthand for `emdx tag add 42 gameplan`.
 """
 
-
-
 import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
@@ -22,7 +20,7 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import console, print_json
+from emdx.utils.output import console, is_non_interactive, print_json
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Manage document tags")
@@ -36,7 +34,6 @@ def _add_tags_impl(
 ) -> None:
     """Shared implementation for adding tags (used by both callback and add subcommand)."""
     try:
-
         # Check if document exists
         doc = get_document(str(doc_id))
         if not doc:
@@ -74,7 +71,9 @@ def _add_tags_impl(
 
                 for tag_name, confidence in suggestions:
                     conf_percent = f"{confidence:.0%}"
-                    apply_hint = "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"  # noqa: E501
+                    apply_hint = (
+                        "High" if confidence >= 0.8 else "Medium" if confidence >= 0.7 else "Low"
+                    )  # noqa: E501
                     table.add_row(tag_name, conf_percent, apply_hint)
 
                 console.print(table)
@@ -145,7 +144,6 @@ def remove(
 ) -> None:
     """Remove tags from a document."""
     try:
-
         # Check if document exists
         doc = get_document(str(doc_id))
         if not doc:
@@ -183,7 +181,6 @@ def list_tags(
 ) -> None:
     """List all tags with statistics."""
     try:
-
         # Get all tags
         all_tags = list_all_tags(sort_by=sort)
 
@@ -205,8 +202,14 @@ def list_tags(
         table.add_column("Last Used", style="magenta")
 
         for tag_entry in all_tags[:limit]:
-            created = tag_entry["created_at"].strftime("%Y-%m-%d") if tag_entry["created_at"] else "Unknown"  # noqa: E501
-            last_used = tag_entry["last_used"].strftime("%Y-%m-%d") if tag_entry["last_used"] else "Never"  # noqa: E501
+            created = (
+                tag_entry["created_at"].strftime("%Y-%m-%d")
+                if tag_entry["created_at"]
+                else "Unknown"
+            )  # noqa: E501
+            last_used = (
+                tag_entry["last_used"].strftime("%Y-%m-%d") if tag_entry["last_used"] else "Never"
+            )  # noqa: E501
 
             table.add_row(tag_entry["name"], str(tag_entry["count"]), created, last_used)
 
@@ -230,7 +233,6 @@ def rename(
 ) -> None:
     """Rename a tag globally."""
     try:
-
         # Get current usage
         all_tags = list_all_tags()
         old_tag_info = next((t for t in all_tags if t["name"] == old_tag.lower()), None)
@@ -239,8 +241,8 @@ def rename(
             console.print(f"[red]Error: Tag '{old_tag}' not found[/red]")
             raise typer.Exit(1)
 
-        # Confirm
-        if not force:
+        # Confirm (skip when stdin is not a TTY)
+        if not force and not is_non_interactive():
             console.print(
                 f"\n[yellow]This will rename tag '{old_tag}' to '{new_tag}' across "
                 f"{old_tag_info['count']} document(s)[/yellow]"
@@ -272,7 +274,6 @@ def merge(
 ) -> None:
     """Merge multiple tags into one."""
     try:
-
         # Get info about source tags
         all_tags = list_all_tags()
         source_infos = []
@@ -288,8 +289,8 @@ def merge(
             console.print("[red]Error: No valid source tags found[/red]")
             raise typer.Exit(1)
 
-        # Confirm
-        if not force:
+        # Confirm (skip when stdin is not a TTY)
+        if not force and not is_non_interactive():
             console.print(
                 f"\n[yellow]This will merge {len(source_infos)} tag(s) into '{target}':[/yellow]"
             )
@@ -314,24 +315,27 @@ def merge(
 
 @app.command()
 def batch(
-    untagged_only: bool = typer.Option(True, "--untagged/--all", help="Only process untagged documents"),  # noqa: E501
+    untagged_only: bool = typer.Option(
+        True, "--untagged/--all", help="Only process untagged documents"
+    ),  # noqa: E501
     project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
-    confidence: float = typer.Option(0.7, "--confidence", "-c", help="Minimum confidence threshold"),  # noqa: E501
+    confidence: float = typer.Option(
+        0.7, "--confidence", "-c", help="Minimum confidence threshold"
+    ),  # noqa: E501
     max_tags: int = typer.Option(3, "--max-tags", "-m", help="Maximum tags per document"),
-    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"),  # noqa: E501
+    dry_run: bool = typer.Option(
+        True, "--dry-run/--execute", help="Execute tagging (default: dry run only)"
+    ),  # noqa: E501
     limit: int | None = typer.Option(None, "--limit", "-l", help="Maximum documents to process"),
 ) -> None:
     """Batch auto-tag multiple documents."""
     try:
-
         tagger = AutoTagger()
 
         # Get suggestions first
         with console.status("[bold green]Analyzing documents..."):
             suggestions = tagger.batch_suggest(
-                untagged_only=untagged_only,
-                project=project,
-                limit=limit
+                untagged_only=untagged_only, project=project, limit=limit
             )
 
         if not suggestions:
@@ -344,7 +348,8 @@ def batch(
 
         for doc_id, doc_suggestions in suggestions.items():
             eligible_tags = [
-                (tag_name, conf) for tag_name, conf in doc_suggestions[:max_tags]
+                (tag_name, conf)
+                for tag_name, conf in doc_suggestions[:max_tags]
                 if conf >= confidence
             ]
             if eligible_tags:
@@ -370,7 +375,7 @@ def batch(
                 doc = get_document(str(doc_id))
                 if not doc:
                     continue
-                title = truncate_title(doc['title'])
+                title = truncate_title(doc["title"])
 
                 console.print(f"  [dim]#{doc_id}[/dim] {title}")
                 for tag_name, conf in tag_list:
@@ -378,15 +383,21 @@ def batch(
                 console.print()
 
             if len(eligible_docs) > sample_size:
-                console.print(f"[dim]... and {len(eligible_docs) - sample_size} more documents[/dim]\n")  # noqa: E501
+                console.print(
+                    f"[dim]... and {len(eligible_docs) - sample_size} more documents[/dim]\n"
+                )  # noqa: E501
 
         if dry_run:
             console.print("[yellow]🔍 DRY RUN MODE - No changes will be made[/yellow]")
-            console.print(f"Would apply {total_tags_to_apply} tags to {len(eligible_docs)} documents")  # noqa: E501
+            console.print(
+                f"Would apply {total_tags_to_apply} tags to {len(eligible_docs)} documents"
+            )  # noqa: E501
             console.print("\n[dim]Run with --execute to apply tags[/dim]")
         else:
-            # Confirm
-            if not typer.confirm(f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"):  # noqa: E501
+            # Confirm (skip when stdin is not a TTY)
+            if not is_non_interactive() and not typer.confirm(
+                f"\n🏷️  Apply {total_tags_to_apply} tags to {len(eligible_docs)} documents?"
+            ):  # noqa: E501
                 console.print("[red]Batch tagging cancelled[/red]")
                 return
 
@@ -397,15 +408,13 @@ def batch(
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
-                console=console
+                console=console,
             ) as progress:
                 task = progress.add_task("Applying tags...", total=len(eligible_docs))
 
                 for doc_id, _tag_list in eligible_docs:
                     applied = tagger.auto_tag_document(
-                        doc_id,
-                        confidence_threshold=confidence,
-                        max_tags=max_tags
+                        doc_id, confidence_threshold=confidence, max_tags=max_tags
                     )
                     if applied:
                         applied_count += len(applied)

@@ -119,7 +119,9 @@ class TestSaveCommand:
     @patch("emdx.commands.core.apply_tags")
     @patch("emdx.commands.core.create_document")
     @patch("emdx.commands.core.detect_project")
-    def test_save_with_title_and_project(self, mock_detect, mock_create, mock_tags, mock_display, tmp_path):  # noqa: E501
+    def test_save_with_title_and_project(
+        self, mock_detect, mock_create, mock_tags, mock_display, tmp_path
+    ):  # noqa: E501
         """Save with explicit --title and --project."""
         f = tmp_path / "note.md"
         f.write_text("content")
@@ -128,11 +130,18 @@ class TestSaveCommand:
         mock_create.return_value = 1
         mock_tags.return_value = []
 
-        result = runner.invoke(app, [
-            "save", "--file", str(f),
-            "--title", "Custom Title",
-            "--project", "my-project",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "save",
+                "--file",
+                str(f),
+                "--title",
+                "Custom Title",
+                "--project",
+                "my-project",
+            ],
+        )
         assert result.exit_code == 0
         args = mock_create.call_args
         assert args[0][0] == "Custom Title"
@@ -150,9 +159,16 @@ class TestSaveCommand:
         mock_create.return_value = 5
         mock_tags.return_value = ["python", "testing"]
 
-        result = runner.invoke(app, [
-            "save", "--file", str(f), "--tags", "python,testing",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "save",
+                "--file",
+                str(f),
+                "--tags",
+                "python,testing",
+            ],
+        )
         assert result.exit_code == 0
         mock_tags.assert_called_once_with(5, "python,testing")
 
@@ -170,7 +186,6 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-
     def test_find_basic(self, mock_search, mock_get_tags):
         """Basic search returns results."""
         mock_search.return_value = [
@@ -189,7 +204,6 @@ class TestFindCommand:
         assert result.exit_code == 0
         assert "Found Doc" in _out(result)
 
-
     def test_find_no_args(self):
         """Find with no search terms and no tags should error."""
         result = runner.invoke(app, ["find"])
@@ -197,7 +211,6 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-
     def test_find_no_results(self, mock_search, mock_get_tags):
         """Search with no results shows appropriate message."""
         mock_search.return_value = []
@@ -209,7 +222,6 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-
     def test_find_ids_only(self, mock_search, mock_get_tags):
         """--ids-only outputs just IDs."""
         mock_search.return_value = [
@@ -230,7 +242,6 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_documents")
-
     def test_find_json_output(self, mock_search, mock_get_tags):
         """--json outputs JSON array."""
         mock_search.return_value = [
@@ -252,7 +263,6 @@ class TestFindCommand:
 
     @patch("emdx.commands.core.get_tags_for_documents")
     @patch("emdx.commands.core.search_by_tags")
-
     def test_find_by_tags(self, mock_search_tags, mock_get_tags):
         """Find with --tags does tag-based search."""
         mock_search_tags.return_value = [
@@ -279,7 +289,6 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-
     def test_view_by_id(self, mock_get_doc, mock_get_tags):
         """View a document by numeric ID."""
         mock_get_doc.return_value = {
@@ -297,7 +306,6 @@ class TestViewCommand:
         assert "My Doc" in _out(result)
 
     @patch("emdx.commands.core.get_document")
-
     def test_view_not_found(self, mock_get_doc):
         """View nonexistent document shows error."""
         mock_get_doc.return_value = None
@@ -308,7 +316,6 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-
     def test_view_raw(self, mock_get_doc, mock_get_tags):
         """View with --raw shows raw content."""
         mock_get_doc.return_value = {
@@ -327,7 +334,6 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-
     def test_view_no_header(self, mock_get_doc, mock_get_tags):
         """View with --no-header hides header."""
         mock_get_doc.return_value = {
@@ -348,7 +354,6 @@ class TestViewCommand:
 
     @patch("emdx.commands.core.get_document_tags")
     @patch("emdx.commands.core.get_document")
-
     def test_view_json(self, mock_get_doc, mock_get_tags):
         """View with --json outputs valid JSON."""
         mock_get_doc.return_value = {
@@ -387,7 +392,6 @@ class TestEditCommand:
 
     @patch("emdx.commands.core.update_document")
     @patch("emdx.commands.core.get_document")
-
     def test_edit_title_only(self, mock_get_doc, mock_update):
         """Edit with --title updates title without opening editor."""
         mock_get_doc.return_value = {
@@ -405,7 +409,6 @@ class TestEditCommand:
         mock_update.assert_called_once_with(1, "New Title", "content")
 
     @patch("emdx.commands.core.get_document")
-
     def test_edit_doc_not_found(self, mock_get_doc):
         """Edit nonexistent document shows error."""
         mock_get_doc.return_value = None
@@ -416,7 +419,6 @@ class TestEditCommand:
 
     @patch("emdx.commands.core.update_document")
     @patch("emdx.commands.core.get_document")
-
     def test_edit_title_failure(self, mock_get_doc, mock_update):
         """Edit that fails to update shows error."""
         mock_get_doc.return_value = {
@@ -446,7 +448,6 @@ class TestDeleteCommand:
 
     @patch("emdx.commands.core.delete_document")
     @patch("emdx.commands.core.get_document")
-
     def test_delete_soft(self, mock_get_doc, mock_delete):
         """Soft delete with --force skips confirmation."""
         mock_get_doc.return_value = {
@@ -466,7 +467,6 @@ class TestDeleteCommand:
 
     @patch("emdx.commands.core.delete_document")
     @patch("emdx.commands.core.get_document")
-
     def test_delete_hard_force(self, mock_get_doc, mock_delete):
         """Hard delete with --force --hard."""
         mock_get_doc.return_value = {
@@ -484,7 +484,6 @@ class TestDeleteCommand:
         mock_delete.assert_called_once_with("1", hard_delete=True)
 
     @patch("emdx.commands.core.get_document")
-
     def test_delete_not_found(self, mock_get_doc):
         """Deleting a non-existent document shows error."""
         mock_get_doc.return_value = None
@@ -495,7 +494,6 @@ class TestDeleteCommand:
         assert "not found" in out.lower() or "No valid" in out
 
     @patch("emdx.commands.core.get_document")
-
     def test_delete_dry_run(self, mock_get_doc):
         """--dry-run shows what would be deleted without deleting."""
         mock_get_doc.return_value = {
@@ -512,14 +510,25 @@ class TestDeleteCommand:
 
     @patch("emdx.commands.core.delete_document")
     @patch("emdx.commands.core.get_document")
-
     def test_delete_multiple(self, mock_get_doc, mock_delete):
         """Delete multiple documents at once."""
 
         def side_effect(identifier):
             docs = {
-                "1": {"id": 1, "title": "Doc 1", "project": None, "created_at": datetime(2024, 1, 1), "access_count": 0},  # noqa: E501
-                "2": {"id": 2, "title": "Doc 2", "project": None, "created_at": datetime(2024, 1, 2), "access_count": 0},  # noqa: E501
+                "1": {
+                    "id": 1,
+                    "title": "Doc 1",
+                    "project": None,
+                    "created_at": datetime(2024, 1, 1),
+                    "access_count": 0,
+                },  # noqa: E501
+                "2": {
+                    "id": 2,
+                    "title": "Doc 2",
+                    "project": None,
+                    "created_at": datetime(2024, 1, 2),
+                    "access_count": 0,
+                },  # noqa: E501
             }
             return docs.get(identifier)
 
@@ -534,6 +543,47 @@ class TestDeleteCommand:
         """Delete with no ID should fail."""
         result = runner.invoke(app, ["delete"])
         assert result.exit_code != 0
+
+    @patch("emdx.commands.core.delete_document")
+    @patch("emdx.commands.core.get_document")
+    @patch("emdx.commands.core.is_non_interactive", return_value=True)
+    def test_delete_auto_confirms_when_non_tty(self, mock_isatty, mock_get_doc, mock_delete):
+        """Delete skips confirmation when stdin is not a TTY (agent mode)."""
+        mock_get_doc.return_value = {
+            "id": 1,
+            "title": "Agent Delete",
+            "project": "p",
+            "created_at": datetime(2024, 1, 1),
+            "access_count": 0,
+        }
+        mock_delete.return_value = True
+
+        # No --force flag, but should still proceed without prompting
+        result = runner.invoke(app, ["delete", "1"])
+        out = _out(result)
+        assert result.exit_code == 0
+        assert "Moved" in out or "trash" in out
+        mock_delete.assert_called_once_with("1", hard_delete=False)
+
+    @patch("emdx.commands.core.delete_document")
+    @patch("emdx.commands.core.get_document")
+    @patch("emdx.commands.core.is_non_interactive", return_value=True)
+    def test_delete_hard_auto_confirms_when_non_tty(self, mock_isatty, mock_get_doc, mock_delete):
+        """Hard delete skips confirmation when stdin is not a TTY (agent mode)."""
+        mock_get_doc.return_value = {
+            "id": 1,
+            "title": "Agent Hard Delete",
+            "project": None,
+            "created_at": datetime(2024, 1, 1),
+            "access_count": 0,
+        }
+        mock_delete.return_value = True
+
+        # No --force flag, --hard, should still proceed without prompting
+        result = runner.invoke(app, ["delete", "1", "--hard"])
+        assert result.exit_code == 0
+        assert "Permanently deleted" in _out(result)
+        mock_delete.assert_called_once_with("1", hard_delete=True)
 
 
 # ---------------------------------------------------------------------------
@@ -623,7 +673,8 @@ class TestRestoreCommand:
         ]
         mock_restore.return_value = True
 
-        result = runner.invoke(main_app, ["trash", "restore", "--all"], input="y\n")
+        with patch("emdx.commands.trash.is_non_interactive", return_value=False):
+            result = runner.invoke(main_app, ["trash", "restore", "--all"], input="y\n")
         assert result.exit_code == 0
         assert "Restored 2" in _out(result)
 
@@ -647,11 +698,11 @@ class TestPurgeCommand:
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_purge_with_force(self, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
-        mock_list_deleted.return_value = [{"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}]  # noqa: E501
+        mock_list_deleted.return_value = [
+            {"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}
+        ]  # noqa: E501
         mock_purge.return_value = 1
 
         result = runner.invoke(main_app, ["trash", "purge", "--force"])
         assert result.exit_code == 0
         assert "Permanently deleted" in _out(result)
-
-

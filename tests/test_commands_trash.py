@@ -138,7 +138,8 @@ class TestTrashPurge:
         assert "Permanently deleted 1 document" in _out(result)
 
     @patch("emdx.commands.trash.list_deleted_documents")
-    def test_purge_cancelled(self, mock_list):
+    @patch("emdx.commands.trash.is_non_interactive", return_value=False)
+    def test_purge_cancelled(self, mock_interactive, mock_list):
         mock_list.return_value = [{"id": 1, "deleted_at": datetime(2026, 1, 1)}]
         result = runner.invoke(app, ["purge"], input="n\n")
         assert result.exit_code == 0

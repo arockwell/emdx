@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "emdx"
-version = "0.19.0"
+version = "0.20.0"
 description = "Send agents. Save everything. Track what's next."
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
@@ -100,6 +100,11 @@ module = [
     "watchdog.*",
 ]
 ignore_missing_imports = true
+
+# Tests use mock-heavy patterns where type annotations add noise, not safety
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
 
 # click doesn't ship complete type stubs — suppress type errors in lazy loader
 [[tool.mypy.overrides]]

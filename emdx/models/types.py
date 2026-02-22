@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, TypedDict
 
-TaskStatus = Literal['open', 'active', 'blocked', 'done', 'failed']
+TaskStatus = Literal["open", "active", "blocked", "done", "failed", "wontdo"]
 
 
 class TaskDict(TypedDict):

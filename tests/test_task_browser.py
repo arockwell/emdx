@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable, RichLog, Static
+from textual.widgets import DataTable, Input, RichLog, Static
 
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
 from emdx.ui.task_view import TaskView, _format_time_ago, _task_label
@@ -798,3 +798,790 @@ class TestPureFunctions:
         task = make_task(status="weird")
         label = _task_label(task)
         assert "?" in label
+
+
+# ===================================================================
+# H. Filter Bar
+# ===================================================================
+
+
+class TestFilterBar:
+    """Tests for the live filter bar (/ to show, Escape to hide)."""
+
+    @pytest.mark.asyncio
+    async def test_slash_shows_filter_input(self, mock_task_data: MockDict) -> None:
+        """Pressing / shows the filter input and focuses it."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            assert filter_input.display is False
+
+            await pilot.press("slash")
+            await pilot.pause()
+            assert filter_input.display is True
+            assert filter_input.has_focus
+
+    @pytest.mark.asyncio
+    async def test_escape_hides_filter_input(self, mock_task_data: MockDict) -> None:
+        """Pressing Escape clears and hides the filter input."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            assert filter_input.display is True
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert filter_input.display is False
+            assert filter_input.value == ""
+
+    @pytest.mark.asyncio
+    async def test_filter_by_title(self, mock_task_data: MockDict) -> None:
+        """Typing a filter narrows tasks by title."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Fix authentication bug", status="open"),
+            make_task(id=2, title="Add logging", status="open"),
+            make_task(id=3, title="Update docs", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
+
+            await pilot.press("slash")
+            await pilot.pause()
+            # Type "auth" into the filter
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "auth"
+            await pilot.pause(0.3)  # Wait for debounce
+
+            # Should have fewer rows
+            assert table.row_count < initial_count
+            # The matching task should still be visible
+            titles = _table_cell_texts(table, "title")
+            assert any("auth" in t.lower() for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_filter_by_epic_key(self, mock_task_data: MockDict) -> None:
+        """Filter matches against epic_key."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open", epic_key="AUTH"),
+            make_task(id=2, title="Task B", status="open", epic_key="TUI"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "AUTH"
+            await pilot.pause(0.3)
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            assert len(task_titles) == 1
+            assert "Task A" in task_titles[0]
+
+    @pytest.mark.asyncio
+    async def test_filter_by_description(self, mock_task_data: MockDict) -> None:
+        """Filter matches against description text."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Task A",
+                status="open",
+                description="Implement OAuth flow",
+            ),
+            make_task(
+                id=2,
+                title="Task B",
+                status="open",
+                description="Write unit tests",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "OAuth"
+            await pilot.pause(0.3)
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            assert len(task_titles) == 1
+            assert "Task A" in task_titles[0]
+
+    @pytest.mark.asyncio
+    async def test_filter_by_tags(self, mock_task_data: MockDict) -> None:
+        """Filter matches against tags."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open", tags="security,auth"),
+            make_task(id=2, title="Task B", status="open", tags="frontend,css"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "security"
+            await pilot.pause(0.3)
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            assert len(task_titles) == 1
+            assert "Task A" in task_titles[0]
+
+    @pytest.mark.asyncio
+    async def test_filter_no_matches(self, mock_task_data: MockDict) -> None:
+        """Filter with no matches shows 'no matches' in status bar."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "zzzznotfound"
+            await pilot.pause(0.3)
+
+            bar = app.query_one("#task-status-bar", Static)
+            assert "no matches" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_filter_status_bar_shows_count(self, mock_task_data: MockDict) -> None:
+        """Status bar shows filter: N/M when filter is active."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Fix bug", status="open"),
+            make_task(id=2, title="Add feature", status="open"),
+            make_task(id=3, title="Fix typo", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "Fix"
+            await pilot.pause(0.3)
+
+            bar = app.query_one("#task-status-bar", Static)
+            bar_text = str(bar.content)
+            assert "filter:" in bar_text
+            assert "2/3" in bar_text
+
+    @pytest.mark.asyncio
+    async def test_vim_keys_dont_trigger_while_filtering(self, mock_task_data: MockDict) -> None:
+        """Vim keys (j, k, d, a, b, r) don't trigger actions while filter is focused."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open"),
+            make_task(id=2, title="Task B", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            assert filter_input.has_focus
+
+            # Type vim keys — they should go into the input, not trigger actions
+            await pilot.press("j")
+            await pilot.press("k")
+            await pilot.press("d")
+            await pilot.press("a")
+            await pilot.press("b")
+            await pilot.press("r")
+            await pilot.pause()
+
+            # The input should contain the typed characters
+            assert filter_input.value == "jkdabr"
+
+    @pytest.mark.asyncio
+    async def test_escape_restores_all_tasks(self, mock_task_data: MockDict) -> None:
+        """Pressing Escape after filtering restores all tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open"),
+            make_task(id=2, title="Task B", status="open"),
+            make_task(id=3, title="Task C", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
+
+            # Filter down
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "Task A"
+            await pilot.pause(0.3)
+            assert table.row_count < initial_count
+
+            # Escape to clear
+            await pilot.press("escape")
+            await pilot.pause()
+            assert table.row_count == initial_count
+
+    @pytest.mark.asyncio
+    async def test_filter_case_insensitive(self, mock_task_data: MockDict) -> None:
+        """Filter matching is case-insensitive."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Fix Authentication Bug", status="open"),
+            make_task(id=2, title="Add logging", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "authentication"
+            await pilot.pause(0.3)
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            assert len(task_titles) == 1
+            assert "Authentication" in task_titles[0]
+
+    @pytest.mark.asyncio
+    async def test_help_bar_shows_filter_hint(self, mock_task_data: MockDict) -> None:
+        """TaskBrowser help bar includes the / filter hint."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        class HelpBarApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = HelpBarApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-help-bar", Static)
+            bar_text = str(bar.content)
+            assert "filter" in bar_text
+
+
+# ===================================================================
+# I. Status Filter Keys
+# ===================================================================
+
+
+class TestStatusFilter:
+    """Tests for quick status filter keys (o/i/x/f/*)."""
+
+    @pytest.mark.asyncio
+    async def test_o_filters_to_open_only(self, mock_task_data: MockDict) -> None:
+        """Pressing o shows only open/ready tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+            make_task(id=3, title="Done task", status="done"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
+
+            await pilot.press("o")
+            await pilot.pause()
+
+            assert table.row_count < initial_count
+            titles = _table_cell_texts(table, "title")
+            assert any("READY" in t for t in titles)
+            assert not any("ACTIVE" in t for t in titles)
+            assert not any("DONE" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_i_filters_to_active_only(self, mock_task_data: MockDict) -> None:
+        """Pressing i shows only active tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+            make_task(id=3, title="Done task", status="done"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("i")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("ACTIVE" in t for t in titles)
+            assert not any("READY" in t for t in titles)
+            assert not any("DONE" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_x_filters_to_blocked_only(self, mock_task_data: MockDict) -> None:
+        """Pressing x shows only blocked tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Blocked task", status="blocked"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("x")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("BLOCKED" in t for t in titles)
+            assert not any("READY" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_f_filters_to_done_and_failed(self, mock_task_data: MockDict) -> None:
+        """Pressing f shows done and failed tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Done task", status="done"),
+            make_task(id=3, title="Failed task", status="failed"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("f")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("DONE" in t for t in titles)
+            assert any("FAILED" in t for t in titles)
+            assert not any("READY" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_asterisk_clears_status_filter(self, mock_task_data: MockDict) -> None:
+        """Pressing * clears the status filter, showing all tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+            make_task(id=3, title="Done task", status="done"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
+
+            # Filter down
+            await pilot.press("o")
+            await pilot.pause()
+            assert table.row_count < initial_count
+
+            # Clear with *
+            await pilot.press("asterisk")
+            await pilot.pause()
+            assert table.row_count == initial_count
+
+    @pytest.mark.asyncio
+    async def test_toggle_same_key_clears_filter(self, mock_task_data: MockDict) -> None:
+        """Pressing the same status filter key again clears it."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
+
+            await pilot.press("o")
+            await pilot.pause()
+            assert table.row_count < initial_count
+
+            # Press o again to clear
+            await pilot.press("o")
+            await pilot.pause()
+            assert table.row_count == initial_count
+
+    @pytest.mark.asyncio
+    async def test_status_filter_shows_label_in_status_bar(self, mock_task_data: MockDict) -> None:
+        """Status bar shows the active status filter label."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("o")
+            await pilot.pause()
+
+            bar = app.query_one("#task-status-bar", Static)
+            assert "READY" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_status_filter_composes_with_text_filter(self, mock_task_data: MockDict) -> None:
+        """Status filter and text filter work together."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Fix auth bug", status="open"),
+            make_task(id=2, title="Fix deploy bug", status="open"),
+            make_task(id=3, title="Fix auth regression", status="done"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Filter to open only
+            await pilot.press("o")
+            await pilot.pause()
+
+            # Add text filter for "auth"
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+            filter_input.value = "auth"
+            await pilot.pause(0.3)
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            # Only "Fix auth bug" (open + matches "auth")
+            assert len(task_titles) == 1
+            assert "auth" in task_titles[0].lower()
+
+    @pytest.mark.asyncio
+    async def test_status_keys_blocked_in_filter_input(self, mock_task_data: MockDict) -> None:
+        """Status filter keys don't trigger while typing in filter input."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task A", status="open"),
+            make_task(id=2, title="Task B", status="active"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+
+            await pilot.press("o")
+            await pilot.press("i")
+            await pilot.press("x")
+            await pilot.press("f")
+            await pilot.pause()
+
+            # Keys went into the input, not triggering status filter
+            assert filter_input.value == "oixf"
+
+    @pytest.mark.asyncio
+    async def test_status_filter_no_matches(self, mock_task_data: MockDict) -> None:
+        """Status filter with no matching tasks shows 'no matches'."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Filter to active — but there are none
+            await pilot.press("i")
+            await pilot.pause()
+
+            bar = app.query_one("#task-status-bar", Static)
+            assert "no matches" in str(bar.content)
+
+
+# ===================================================================
+# J. Epic Grouping Toggle
+# ===================================================================
+
+
+class TestEpicGrouping:
+    """Tests for the g key epic/status grouping toggle."""
+
+    @pytest.mark.asyncio
+    async def test_g_toggles_to_epic_grouping(self, mock_task_data: MockDict) -> None:
+        """Pressing g switches from status grouping to epic grouping."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Auth task", status="open", epic_key="AUTH"),
+            make_task(id=2, title="TUI task", status="open", epic_key="TUI"),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(epic_key="AUTH"),
+            make_epic(epic_key="TUI"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            # Default: grouped by status — should have READY header
+            assert any("READY" in t for t in titles)
+
+            await pilot.press("g")
+            await pilot.pause()
+
+            titles = _table_cell_texts(table, "title")
+            # Now grouped by epic — should have AUTH and TUI headers
+            assert any("AUTH" in t for t in titles)
+            assert any("TUI" in t for t in titles)
+            # Should NOT have status headers
+            assert not any("READY" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_g_toggles_back_to_status(self, mock_task_data: MockDict) -> None:
+        """Pressing g twice returns to status grouping."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Auth task", status="open", epic_key="AUTH"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("READY" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_epic_grouping_shows_ungrouped(self, mock_task_data: MockDict) -> None:
+        """Tasks without an epic appear under UNGROUPED."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Epic task", status="open", epic_key="AUTH"),
+            make_task(id=2, title="Loose task", status="open", epic_key=None),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("UNGROUPED" in t for t in titles)
+            assert any("AUTH" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_epic_grouping_shows_progress(self, mock_task_data: MockDict) -> None:
+        """Epic headers show done/total progress when epic info is available."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task", status="open", epic_key="AUTH"),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(epic_key="AUTH", child_count=10, children_done=7),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("7/10 done" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_epic_grouping_status_bar_indicator(self, mock_task_data: MockDict) -> None:
+        """Status bar shows 'by epic' when epic grouping is active."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            bar = app.query_one("#task-status-bar", Static)
+            assert "by epic" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_epic_grouping_composes_with_filters(self, mock_task_data: MockDict) -> None:
+        """Epic grouping works together with status and text filters."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Fix auth", status="open", epic_key="AUTH"),
+            make_task(id=2, title="Fix deploy", status="open", epic_key="AUTH"),
+            make_task(id=3, title="Fix TUI", status="active", epic_key="TUI"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Switch to epic grouping
+            await pilot.press("g")
+            await pilot.pause()
+            # Filter to open only
+            await pilot.press("o")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            # AUTH tasks are open, TUI task is active — TUI should be gone
+            assert any("AUTH" in t for t in titles)
+            assert not any("TUI" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_g_blocked_in_filter_input(self, mock_task_data: MockDict) -> None:
+        """Pressing g in the filter input types 'g' instead of toggling."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+
+            await pilot.press("g")
+            await pilot.pause()
+
+            assert filter_input.value == "g"
+
+    @pytest.mark.asyncio
+    async def test_help_bar_shows_group_hint(self, mock_task_data: MockDict) -> None:
+        """Help bar includes the g group hint."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        class HelpBarApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = HelpBarApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-help-bar", Static)
+            assert "group" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_epic_grouping_hides_all_done_epics(self, mock_task_data: MockDict) -> None:
+        """Epics where all tasks are done/failed are hidden in epic grouping."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Active work", status="open", epic_key="LIVE"),
+            make_task(id=2, title="Old stuff", status="done", epic_key="DEAD"),
+            make_task(id=3, title="Also old", status="failed", epic_key="DEAD"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("LIVE" in t for t in titles)
+            assert not any("DEAD" in t for t in titles)
+
+
+# ===================================================================
+# K. Won't Do Status
+# ===================================================================
+
+
+class TestWontdoStatus:
+    """Tests for the wontdo status display and keybinding."""
+
+    @pytest.mark.asyncio
+    async def test_wontdo_icon_and_color(self, mock_task_data: MockDict) -> None:
+        """Wontdo tasks show the ⊘ icon with dim styling."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Skipped task", status="wontdo"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            icons = _table_cell_texts(table, "icon")
+            task_icons = [i for i in icons if i.strip()]
+            assert any("⊘" in i for i in task_icons)
+
+    @pytest.mark.asyncio
+    async def test_w_key_marks_task_wontdo(self, mock_task_data: MockDict) -> None:
+        """Pressing w marks the selected task as wontdo."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Skip this", status="open"),
+            make_task(id=2, title="Another", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Move past header to first task row, then back
+            await pilot.press("j")
+            await pilot.pause()
+            await pilot.press("j")
+            await pilot.pause()
+            await pilot.press("k")
+            await pilot.pause()
+
+            with patch(f"{_MOCK_BASE}.update_task") as m_update:
+                await pilot.press("w")
+                await pilot.pause()
+                m_update.assert_called_once_with(1, status="wontdo")
+
+    @pytest.mark.asyncio
+    async def test_f_filter_includes_wontdo(self, mock_task_data: MockDict) -> None:
+        """Pressing f shows wontdo tasks alongside done and failed."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Done task", status="done"),
+            make_task(id=3, title="Wontdo task", status="wontdo"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("f")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("DONE" in t for t in titles)
+            assert any("WON'T DO" in t for t in titles)
+            assert not any("READY" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_wontdo_hidden_in_epic_grouping(self, mock_task_data: MockDict) -> None:
+        """Epics where all tasks are wontdo are hidden in epic grouping."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Active work", status="open", epic_key="LIVE"),
+            make_task(id=2, title="Skipped", status="wontdo", epic_key="SKIP"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("LIVE" in t for t in titles)
+            assert not any("SKIP" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_w_blocked_in_filter_input(self, mock_task_data: MockDict) -> None:
+        """Pressing w in the filter input types 'w' instead of marking wontdo."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+
+            await pilot.press("w")
+            await pilot.pause()
+
+            assert filter_input.value == "w"

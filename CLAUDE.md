@@ -135,19 +135,32 @@ when the delegate launcher sets env vars (`EMDX_AUTO_SAVE=1`, `EMDX_TASK_ID`).
 | `EMDX_EXECUTION_ID` | delegate | session-end.sh | Execution record to update |
 
 ### Session Start Protocol
+
+**Human sessions:** `prime.sh` hook runs automatically on session start, injecting KB context.
+You can also run manually:
 ```bash
 emdx prime    # Get current work context (ready tasks, in-progress, recent docs)
 emdx status   # Quick overview
 ```
 
-**Note:** With hooks active, `emdx prime` runs automatically on session start.
+**Delegate sessions:** `prime.sh` runs automatically with task-specific context via `EMDX_TASK_ID`
+and `EMDX_DOC_ID` env vars. No manual priming needed.
 
 ### Mandatory Behaviors
 
+#### For Human Sessions (interactive Claude Code)
+
 1. **Check ready tasks** before starting work: `emdx task ready`
-2. **Save significant outputs** to emdx: `emdx save "findings" --title "Title" --tags "analysis,active"`
+2. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
 3. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
 4. **Never end session** without updating task status and creating tasks for remaining work
+
+#### For Delegate Sessions (emdx delegate sub-agents)
+
+1. **Focus exclusively on your assigned task** — do NOT check ready tasks or pick up other work
+2. **Do NOT manually save output** — the `save-output.sh` hook handles this automatically
+3. **Do NOT manually update task status** — the `session-end.sh` hook handles this automatically
+4. **Do NOT sub-delegate** — no recursive `emdx delegate` calls
 
 ### CRITICAL: Use `emdx delegate` Instead of Task Tool Sub-Agents
 
