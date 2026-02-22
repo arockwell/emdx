@@ -1,7 +1,7 @@
-"""Activity data loading — flat list of documents and agent executions.
+"""Activity data loading — flat list of documents, agent executions, and tasks.
 
-No groups, no hierarchy. Just loads recent documents (excluding superseded)
-and agent executions, sorted by timestamp.
+Loads recent documents (excluding superseded), agent executions, and tasks,
+then deduplicates and sorts into three tiers: running, tasks, recent history.
 """
 
 import logging
@@ -13,6 +13,7 @@ from .activity_items import (
     ActivityItem,
     AgentExecutionItem,
     DocumentItem,
+    TaskItem,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,35 +26,84 @@ except ImportError:
     doc_svc = None  # type: ignore[assignment]
     HAS_DOCS = False
 
+# Tier boundaries for section headers
+TIER_RUNNING = 0
+TIER_TASKS = 1
+TIER_RECENT = 2
+
 
 class ActivityDataLoader:
     """Loads activity data from DB and returns typed ActivityItem instances."""
 
     async def load_all(self, zombies_cleaned: bool = True) -> list[ActivityItem]:
-        """Load all activity items, sorted.
+        """Load all activity items, deduplicate, and sort into three tiers.
+
+        Tier 1 (top): Running executions — sorted by start time desc
+        Tier 2: Ready/active tasks — sorted by priority then created_at
+        Tier 3: Recent history (completed tasks, documents, completed executions)
+                — sorted by timestamp desc
 
         Returns:
-            Sorted list of documents and agent executions.
+            Sorted list of activity items with tier metadata.
         """
-        items: list[ActivityItem] = []
-
+        docs: list[ActivityItem] = []
         if HAS_DOCS:
-            items.extend(await self._load_documents())
+            docs = await self._load_documents()
 
-        items.extend(await self._load_agent_executions())
+        executions = await self._load_agent_executions()
+        tasks = await self._load_tasks()
 
-        # Sort: running items first (pinned), then by timestamp descending
-        def sort_key(item: ActivityItem) -> tuple[int, float]:
-            is_running = (
-                item.item_type == "agent_execution" and item.status == "running"
-            )
+        # Deduplicate: task with execution_id -> skip if exec already loaded
+        exec_ids = {item.item_id for item in executions if item.item_type == "agent_execution"}
+        # Deduplicate: task with output_doc_id -> remove the document
+        task_output_doc_ids = set()
+        deduped_tasks: list[ActivityItem] = []
+        for item in tasks:
+            if isinstance(item, TaskItem) and item.task_data:
+                eid = item.task_data.get("execution_id")
+                if eid and eid in exec_ids:
+                    continue
+                odid = item.task_data.get("output_doc_id")
+                if odid:
+                    task_output_doc_ids.add(odid)
+            deduped_tasks.append(item)
+
+        # Remove documents that are superseded by tasks
+        deduped_docs = [item for item in docs if item.doc_id not in task_output_doc_ids]
+
+        # Combine all items
+        all_items = deduped_docs + executions + deduped_tasks
+
+        # Three-tier sort
+        def sort_key(item: ActivityItem) -> tuple[int, float, float]:
+            # Tier 1: Running executions
+            if item.item_type == "agent_execution" and item.status == "running":
+                return (
+                    TIER_RUNNING,
+                    0,
+                    -item.timestamp.timestamp(),
+                )
+
+            # Tier 2: Ready/active tasks
+            if item.item_type == "task" and item.status in ("open", "active"):
+                priority = 3.0
+                if isinstance(item, TaskItem) and item.task_data:
+                    priority = float(item.task_data.get("priority") or 3)
+                return (
+                    TIER_TASKS,
+                    priority,
+                    -item.timestamp.timestamp(),
+                )
+
+            # Tier 3: Everything else (recent history)
             return (
-                0 if is_running else 1,
-                -item.timestamp.timestamp() if item.timestamp else 0,
+                TIER_RECENT,
+                0,
+                -item.timestamp.timestamp(),
             )
 
-        items.sort(key=sort_key)
-        return items
+        all_items.sort(key=sort_key)
+        return all_items
 
     async def _load_documents(self) -> list[ActivityItem]:
         """Load recent documents (top-level only, superseded are hidden)."""
@@ -152,5 +202,53 @@ class ActivityDataLoader:
 
         except Exception as e:
             logger.error(f"Error loading agent executions: {e}", exc_info=True)
+
+        return items
+
+    async def _load_tasks(self) -> list[ActivityItem]:
+        """Load ready, active, and recently completed tasks."""
+        items: list[ActivityItem] = []
+        try:
+            from emdx.models.tasks import (
+                get_recent_completed_tasks,
+                list_tasks,
+            )
+
+            # Ready + active tasks
+            open_active = list_tasks(
+                status=["open", "active"],
+                limit=50,
+            )
+            # Recently completed tasks (for the history tier)
+            recent_done = get_recent_completed_tasks(limit=20)
+
+            all_tasks = open_active + recent_done
+
+            for task in all_tasks:
+                task_id = task["id"]
+                title = task["title"]
+                status = task["status"]
+                created_at = task.get("created_at")
+                updated_at = task.get("updated_at")
+
+                # Use updated_at if available, fall back to created_at
+                ts_str = updated_at or created_at
+                timestamp = parse_datetime(ts_str) or datetime.now()
+
+                if len(title) > 50:
+                    title = title[:47] + "..."
+
+                item = TaskItem(
+                    item_id=task_id,
+                    title=title,
+                    timestamp=timestamp,
+                    status=status,
+                    doc_id=task.get("output_doc_id"),
+                    task_data=task,
+                )
+                items.append(item)
+
+        except Exception as e:
+            logger.error(f"Error loading tasks: {e}", exc_info=True)
 
         return items

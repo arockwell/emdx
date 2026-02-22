@@ -4,11 +4,16 @@ Simple dataclasses for documents and agent executions shown in the
 flat activity table. No hierarchy, no expand/collapse.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from emdx.ui.types import AgentExecutionDict
+
+if TYPE_CHECKING:
+    from emdx.models.types import TaskDict
 
 
 @dataclass
@@ -72,10 +77,7 @@ class DocumentItem(ActivityItem):
             title = doc.get("title", "Untitled")
 
             content_stripped = content.lstrip()
-            if not (
-                content_stripped.startswith(f"# {title}")
-                or content_stripped.startswith("# ")
-            ):
+            if not (content_stripped.startswith(f"# {title}") or content_stripped.startswith("# ")):
                 content = f"# {title}\n\n{content}"
 
             return content, f"📄 #{self.doc_id}"
@@ -144,3 +146,95 @@ class AgentExecutionItem(ActivityItem):
                     pass
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
+
+
+# Task status icons (plain text, no emoji)
+TASK_STATUS_ICONS = {
+    "done": "v",
+    "active": ">",
+    "open": ".",
+    "failed": "x",
+    "blocked": "-",
+}
+
+
+@dataclass
+class TaskItem(ActivityItem):
+    """A task in the activity stream."""
+
+    task_data: TaskDict | None = None
+
+    @property
+    def item_type(self) -> str:
+        return "task"
+
+    @property
+    def type_icon(self) -> str:
+        return TASK_STATUS_ICONS.get(self.status, "?")
+
+    @property
+    def status_icon(self) -> str:
+        return TASK_STATUS_ICONS.get(self.status, "?")
+
+    def get_context_lines(self) -> list[str]:
+        """Return status, epic, and category info."""
+        lines: list[str] = []
+        if not self.task_data:
+            return lines
+        lines.append(f"Status: {self.status}")
+        epic_key = self.task_data.get("epic_key")
+        if epic_key:
+            epic_seq = self.task_data.get("epic_seq")
+            if epic_seq:
+                lines.append(f"Epic: {epic_key}-{epic_seq}")
+            else:
+                lines.append(f"Epic: {epic_key}")
+        priority = self.task_data.get("priority")
+        if priority is not None:
+            lines.append(f"Priority: {priority}")
+        return lines
+
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
+        """Show task description and dependencies in preview."""
+        parts: list[str] = []
+
+        if self.task_data:
+            parts.append(f"# {self.task_data['title']}")
+            parts.append("")
+
+            # Context info
+            context = self.get_context_lines()
+            if context:
+                parts.append("  ".join(context))
+                parts.append("")
+
+            # Description
+            desc = self.task_data.get("description")
+            if desc:
+                parts.append(desc)
+                parts.append("")
+
+            # Dependencies
+            try:
+                from emdx.models.tasks import get_dependencies, get_dependents
+
+                deps = get_dependencies(self.task_data["id"])
+                if deps:
+                    parts.append("**Depends on:**")
+                    for dep in deps:
+                        icon = TASK_STATUS_ICONS.get(dep["status"], "?")
+                        parts.append(f"  {icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]")
+                    parts.append("")
+
+                dependents = get_dependents(self.task_data["id"])
+                if dependents:
+                    parts.append("**Blocks:**")
+                    for dep in dependents:
+                        icon = TASK_STATUS_ICONS.get(dep["status"], "?")
+                        parts.append(f"  {icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]")
+            except Exception:
+                pass
+
+        content = "\n".join(parts)
+        task_id = self.task_data["id"] if self.task_data else self.item_id
+        return content, f"{self.type_icon} Task #{task_id}"
