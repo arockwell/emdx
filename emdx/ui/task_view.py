@@ -456,7 +456,7 @@ class TaskView(Widget):
                 self._render_task_row(table, task)
 
     def _render_groups_by_epic(self, table: "DataTable[str | Text]") -> None:
-        """Render tasks grouped by epic with hierarchical indentation."""
+        """Render tasks grouped by epic with tree connectors."""
         # Collect all filtered tasks into epic groups
         tasks_by_epic: dict[str, list[TaskDict]] = defaultdict(list)
         for status in STATUS_ORDER:
@@ -492,32 +492,11 @@ class TaskView(Widget):
                 )
             first_group = False
 
-            # Render epic task as a selectable header row with progress
+            # Render epic task row (uses 📋 icon and #id badge via _render_task_row)
             if epic_key and epic_tasks:
-                epic_task = epic_tasks[0]
-                epic_data = self._epics.get(epic_task["id"])
-                if epic_data:
-                    done = epic_data.get("children_done", 0)
-                    total = epic_data.get("child_count", 0)
-                    progress = f" ({done}/{total})"
-                else:
-                    progress = ""
-                row_key = self._row_key_for_task(epic_task)
-                self._row_key_to_task[row_key] = epic_task
-                title = _strip_epic_prefix(
-                    epic_task["title"],
-                    epic_task.get("epic_key"),
-                    epic_task.get("epic_seq"),
-                )
-                table.add_row(
-                    Text("▸", style="cyan"),
-                    Text(epic_key, style="bold cyan"),
-                    Text(f"{title}{progress}", style="bold cyan"),
-                    Text(""),
-                    key=row_key,
-                )
+                self._render_task_row(table, epic_tasks[0])
             elif epic_key:
-                # No epic task record — find any epic with this key
+                # No epic task record — non-selectable header
                 epic_data = next(
                     (e for e in self._epics.values() if e.get("epic_key") == epic_key),
                     None,
@@ -544,9 +523,11 @@ class TaskView(Widget):
                     key=f"{HEADER_PREFIX}epic:none",
                 )
 
-            # Render child tasks indented
-            for task in child_tasks:
-                self._render_task_row(table, task, indent=True)
+            # Render child tasks with tree connectors
+            for i, task in enumerate(child_tasks):
+                is_last = i == len(child_tasks) - 1
+                connector = "└─" if is_last else "├─"
+                self._render_task_row(table, task, tree_prefix=connector)
 
     def _select_row_by_key(self, key: str) -> None:
         """Move cursor to a row by its key string."""
