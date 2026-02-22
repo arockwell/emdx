@@ -412,12 +412,9 @@ class TaskView(Widget):
         finished = {"done", "failed", "wontdo"}
         first_group = True
         for epic_key in epic_keys:
-            tasks = tasks_by_epic[epic_key]
+            # Hide finished tasks in epic grouping
+            tasks = [t for t in tasks_by_epic[epic_key] if t["status"] not in finished]
             if not tasks:
-                continue
-
-            # Hide epic groups where all tasks are done/failed
-            if all(t["status"] in finished for t in tasks):
                 continue
 
             if not first_group:
