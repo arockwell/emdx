@@ -1483,3 +1483,105 @@ class TestEpicGrouping:
             titles = _table_cell_texts(table, "title")
             assert any("LIVE" in t for t in titles)
             assert not any("DEAD" in t for t in titles)
+
+
+# ===================================================================
+# K. Won't Do Status
+# ===================================================================
+
+
+class TestWontdoStatus:
+    """Tests for the wontdo status display and keybinding."""
+
+    @pytest.mark.asyncio
+    async def test_wontdo_icon_and_color(self, mock_task_data: MockDict) -> None:
+        """Wontdo tasks show the ⊘ icon with dim styling."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Skipped task", status="wontdo"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            icons = _table_cell_texts(table, "icon")
+            task_icons = [i for i in icons if i.strip()]
+            assert any("⊘" in i for i in task_icons)
+
+    @pytest.mark.asyncio
+    async def test_w_key_marks_task_wontdo(self, mock_task_data: MockDict) -> None:
+        """Pressing w marks the selected task as wontdo."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Skip this", status="open"),
+            make_task(id=2, title="Another", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Move past header to first task row, then back
+            await pilot.press("j")
+            await pilot.pause()
+            await pilot.press("j")
+            await pilot.pause()
+            await pilot.press("k")
+            await pilot.pause()
+
+            with patch(f"{_MOCK_BASE}.update_task") as m_update:
+                await pilot.press("w")
+                await pilot.pause()
+                m_update.assert_called_once_with(1, status="wontdo")
+
+    @pytest.mark.asyncio
+    async def test_f_filter_includes_wontdo(self, mock_task_data: MockDict) -> None:
+        """Pressing f shows wontdo tasks alongside done and failed."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Done task", status="done"),
+            make_task(id=3, title="Wontdo task", status="wontdo"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("f")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("DONE" in t for t in titles)
+            assert any("WON'T DO" in t for t in titles)
+            assert not any("READY" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_wontdo_hidden_in_epic_grouping(self, mock_task_data: MockDict) -> None:
+        """Epics where all tasks are wontdo are hidden in epic grouping."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Active work", status="open", epic_key="LIVE"),
+            make_task(id=2, title="Skipped", status="wontdo", epic_key="SKIP"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("LIVE" in t for t in titles)
+            assert not any("SKIP" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_w_blocked_in_filter_input(self, mock_task_data: MockDict) -> None:
+        """Pressing w in the filter input types 'w' instead of marking wontdo."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Task", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("slash")
+            await pilot.pause()
+            filter_input = app.query_one("#task-filter-input", Input)
+
+            await pilot.press("w")
+            await pilot.pause()
+
+            assert filter_input.value == "w"

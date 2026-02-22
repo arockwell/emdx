@@ -30,13 +30,14 @@ from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
 logger = logging.getLogger(__name__)
 
 # Status display order and icons
-STATUS_ORDER = ["open", "active", "blocked", "done", "failed"]
+STATUS_ORDER = ["open", "active", "blocked", "done", "failed", "wontdo"]
 STATUS_ICONS = {
     "open": "○",
     "active": "●",
     "blocked": "⚠",
     "done": "✓",
     "failed": "✗",
+    "wontdo": "⊘",
 }
 STATUS_LABELS = {
     "open": "READY",
@@ -44,6 +45,7 @@ STATUS_LABELS = {
     "blocked": "BLOCKED",
     "done": "DONE",
     "failed": "FAILED",
+    "wontdo": "WON'T DO",
 }
 STATUS_COLORS = {
     "open": "",
@@ -51,6 +53,7 @@ STATUS_COLORS = {
     "blocked": "yellow",
     "done": "dim",
     "failed": "red",
+    "wontdo": "dim",
 }
 
 # Row key prefix for section headers
@@ -147,6 +150,7 @@ class TaskView(Widget):
         ("d", "mark_done", "Mark Done"),
         ("a", "mark_active", "Mark Active"),
         ("b", "mark_blocked", "Mark Blocked"),
+        ("w", "mark_wontdo", "Won't Do"),
         ("slash", "show_filter", "Filter"),
         ("escape", "clear_filter", "Clear Filter"),
     ]
@@ -213,7 +217,7 @@ class TaskView(Widget):
         "o": {"open"},
         "i": {"active"},
         "x": {"blocked"},
-        "f": {"done", "failed"},
+        "f": {"done", "failed", "wontdo"},
     }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -405,7 +409,7 @@ class TaskView(Widget):
             key=lambda k: (k == "", k),
         )
 
-        finished = {"done", "failed"}
+        finished = {"done", "failed", "wontdo"}
         first_group = True
         for epic_key in epic_keys:
             tasks = tasks_by_epic[epic_key]
@@ -474,6 +478,8 @@ class TaskView(Widget):
             parts.append(f"[dim]{counts['done']} done[/dim]")
         if counts["failed"]:
             parts.append(f"[red]{counts['failed']} failed[/red]")
+        if counts["wontdo"]:
+            parts.append(f"[dim]{counts['wontdo']} wontdo[/dim]")
 
         if not any(counts.values()):
             if self._filter_text or self._status_filter:
@@ -561,6 +567,7 @@ class TaskView(Widget):
                     "d",
                     "a",
                     "b",
+                    "w",
                     "g",
                     "slash",
                     "1",
@@ -809,3 +816,7 @@ class TaskView(Widget):
     async def action_mark_blocked(self) -> None:
         """Mark selected task as blocked."""
         await self._set_task_status("blocked")
+
+    async def action_mark_wontdo(self) -> None:
+        """Mark selected task as won't do."""
+        await self._set_task_status("wontdo")

@@ -20,7 +20,7 @@ from emdx.models.types import (
 )
 
 # Valid status values
-STATUSES = ("open", "active", "blocked", "done", "failed")
+STATUSES = ("open", "active", "blocked", "done", "failed", "wontdo")
 
 
 def create_task(
@@ -270,6 +270,7 @@ def list_tasks(
                     WHEN 'open' THEN 2
                     WHEN 'failed' THEN 3
                     WHEN 'done' THEN 4
+                    WHEN 'wontdo' THEN 5
                 END,
                 priority,
                 created_at DESC
@@ -326,7 +327,7 @@ def update_task(task_id: int, **kwargs: Any) -> bool:
         sets.append(f"{key} = ?")
         params.append(value)
         # Set completed_at when status becomes done
-        if key == "status" and value == "done":
+        if key == "status" and value in ("done", "wontdo"):
             sets.append("completed_at = CURRENT_TIMESTAMP")
 
     sets.append("updated_at = CURRENT_TIMESTAMP")
@@ -405,7 +406,7 @@ def get_ready_tasks(
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps d
                 JOIN tasks dep ON d.depends_on = dep.id
-                WHERE d.task_id = t.id AND dep.status != 'done'
+                WHERE d.task_id = t.id AND dep.status NOT IN ('done', 'wontdo')
             )
             ORDER BY t.priority, t.created_at
         """,
