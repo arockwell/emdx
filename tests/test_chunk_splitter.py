@@ -1,11 +1,9 @@
 """Tests for the chunk splitter utility."""
 
-
 from emdx.utils.chunk_splitter import (
     MAX_CHUNK_CHARS,
     MIN_CHUNK_CHARS,
     Chunk,
-    estimate_tokens,
     split_into_chunks,
 )
 
@@ -13,13 +11,13 @@ from emdx.utils.chunk_splitter import (
 class TestSplitIntoChunks:
     """Tests for split_into_chunks function."""
 
-    def test_empty_document_returns_empty_list(self):
+    def test_empty_document_returns_empty_list(self) -> None:
         """Empty content returns no chunks."""
         assert split_into_chunks("") == []
         assert split_into_chunks("   ") == []
         assert split_into_chunks("\n\n") == []
 
-    def test_short_document_single_chunk(self):
+    def test_short_document_single_chunk(self) -> None:
         """Documents shorter than MIN_CHUNK_CHARS become one chunk."""
         content = "This is a short document."
         chunks = split_into_chunks(content, "Title")
@@ -27,14 +25,14 @@ class TestSplitIntoChunks:
         assert chunks[0].heading_path == "Title"
         assert "short document" in chunks[0].text
 
-    def test_short_document_without_title(self):
+    def test_short_document_without_title(self) -> None:
         """Short document without title uses 'Document' as heading."""
         content = "Short content here."
         chunks = split_into_chunks(content)
         assert len(chunks) == 1
         assert chunks[0].heading_path == "Document"
 
-    def test_splits_on_markdown_headings(self):
+    def test_splits_on_markdown_headings(self) -> None:
         """Content with headings is split at heading boundaries."""
         # Each section needs to be at least MIN_CHUNK_CHARS to avoid being merged
         intro_text = "This is the introduction section. " * 15  # ~500 chars
@@ -59,7 +57,7 @@ class TestSplitIntoChunks:
         assert any("Introduction" in hp for hp in heading_paths)
         assert any("Methods" in hp for hp in heading_paths)
 
-    def test_heading_hierarchy_preserved(self):
+    def test_heading_hierarchy_preserved(self) -> None:
         """Nested headings create proper heading paths."""
         content = """
 ## Main Section
@@ -82,7 +80,7 @@ Deep content here.
             # Should include parent headings in path
             assert "Main Section" in deep_chunks[0].heading_path
 
-    def test_respects_max_chunk_size(self):
+    def test_respects_max_chunk_size(self) -> None:
         """Large chunks are split to respect MAX_CHUNK_CHARS."""
         # Create content that exceeds max chunk size
         large_paragraph = "This is a sentence. " * 200  # ~4000 chars
@@ -94,7 +92,7 @@ Deep content here.
         for chunk in chunks:
             assert len(chunk.text) <= MAX_CHUNK_CHARS + 50  # Small tolerance
 
-    def test_merges_small_chunks(self):
+    def test_merges_small_chunks(self) -> None:
         """Very small adjacent chunks are merged together."""
         content = """
 ## A
@@ -115,7 +113,7 @@ Tiny.
         # than the number of headings if they're all tiny
         assert len(chunks) <= 3
 
-    def test_chunk_indices_sequential(self):
+    def test_chunk_indices_sequential(self) -> None:
         """Chunk indices are sequential starting from 0."""
         content = """
 ## One
@@ -136,7 +134,7 @@ Third section.
         for i, idx in enumerate(indices):
             assert idx == i
 
-    def test_line_numbers_tracked(self):
+    def test_line_numbers_tracked(self) -> None:
         """Chunks track their start and end line numbers."""
         content = """## Section
 
@@ -154,8 +152,8 @@ Line 5 content.
 class TestChunkDataclass:
     """Tests for the Chunk dataclass."""
 
-    def test_display_heading_with_path(self):
-        """display_heading formats heading path with § prefix."""
+    def test_display_heading_with_path(self) -> None:
+        """display_heading formats heading path with section prefix."""
         chunk = Chunk(
             index=0,
             heading_path="Methods > Data Collection",
@@ -165,7 +163,7 @@ class TestChunkDataclass:
         )
         assert chunk.display_heading == '§"Methods > Data Collection"'
 
-    def test_display_heading_empty_path(self):
+    def test_display_heading_empty_path(self) -> None:
         """display_heading returns empty string for empty path."""
         chunk = Chunk(
             index=0,
@@ -177,32 +175,10 @@ class TestChunkDataclass:
         assert chunk.display_heading == ""
 
 
-class TestEstimateTokens:
-    """Tests for token estimation."""
-
-    def test_estimate_tokens_basic(self):
-        """Token estimation works for typical text."""
-        # ~4 chars per token
-        text = "This is a test sentence."  # 24 chars
-        tokens = estimate_tokens(text)
-        assert tokens == 6  # 24 // 4
-
-    def test_estimate_tokens_empty(self):
-        """Empty string estimates 0 tokens."""
-        assert estimate_tokens("") == 0
-
-    def test_estimate_tokens_long_text(self):
-        """Longer text gives proportionally more tokens."""
-        short = "Hi"  # 2 chars -> 0 tokens
-        long = "Hello world!" * 100  # 1200 chars -> 300 tokens
-
-        assert estimate_tokens(short) < estimate_tokens(long)
-
-
 class TestTokenLimits:
     """Tests for token/character limit behavior."""
 
-    def test_constants_defined(self):
+    def test_constants_defined(self) -> None:
         """Token limit constants are properly defined."""
         assert MIN_CHUNK_CHARS > 0
         assert MAX_CHUNK_CHARS > MIN_CHUNK_CHARS
@@ -211,7 +187,7 @@ class TestTokenLimits:
         # Max should be around 2000 chars (500 tokens * 4 chars/token)
         assert MAX_CHUNK_CHARS >= 1500
 
-    def test_very_large_document_handled(self):
+    def test_very_large_document_handled(self) -> None:
         """Very large documents don't cause infinite loops or crashes."""
         # Create a large document with repeated content
         section = "## Section {i}\n\nParagraph content. " * 20
