@@ -217,6 +217,29 @@ class DocumentMerger:
             for doc in documents
         }
 
+    def _merge_content(
+        self, content1: str, content2: str, title1: str, title2: str
+    ) -> str:
+        """Intelligently merge two document contents."""
+        if not content1:
+            return content2
+        if not content2:
+            return content1
+        if content1 == content2:
+            return content1
+        if content1 in content2:
+            return content2
+        if content2 in content1:
+            return content1
+
+        merged = [content1, "\n\n---\n"]
+        if title1 != title2:
+            merged.append(f"\n_Merged from: {title2}_\n")
+        else:
+            merged.append("\n_Additional content from duplicate:_\n")
+        merged.append("\n" + content2)
+        return "".join(merged)
+
     def _calculate_similarity(self, text1: str, text2: str) -> float:
         """Calculate similarity between two texts using SequenceMatcher."""
         if not text1 or not text2:
