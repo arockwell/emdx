@@ -9,10 +9,8 @@ from ..database.connection import db_connection
 from ..models.executions import (
     Execution,
     get_running_executions,
-    get_stale_executions,
-    update_execution_status,
 )
-from ..services.types import ExecutionAction, ExecutionMetrics, ProcessHealthStatus
+from ..services.types import ExecutionMetrics, ProcessHealthStatus
 
 logger = logging.getLogger(__name__)
 
@@ -81,87 +79,6 @@ class ExecutionMonitor:
 
         return health
 
-    def cleanup_stuck_executions(self, dry_run: bool = True) -> list[ExecutionAction]:
-        """Find and clean up stuck executions.
-
-        Args:
-            dry_run: If True, only report what would be done
-
-        Returns:
-            List of actions taken/would be taken
-        """
-        actions: list[ExecutionAction] = []
-
-        # Get all running executions
-        running = get_running_executions()
-
-        for execution in running:
-            health = self.check_process_health(execution)
-
-            # Determine if execution should be marked as failed
-            should_fail = False
-            fail_reason = None
-
-            if health["is_zombie"]:
-                should_fail = True
-                fail_reason = "zombie_process"
-            elif not health["process_exists"] and execution.pid:
-                should_fail = True
-                fail_reason = "process_died"
-            elif health["is_stale"] and not health["is_running"]:
-                should_fail = True
-                fail_reason = "stale_execution"
-
-            if should_fail:
-                action: ExecutionAction = {
-                    "execution_id": execution.id,
-                    "doc_title": execution.doc_title,
-                    "action": "mark_failed",
-                    "reason": fail_reason,
-                    "details": health["reason"],
-                }
-
-                if not dry_run:
-                    # Mark as failed with appropriate exit code
-                    exit_code = {
-                        "zombie_process": -2,
-                        "process_died": -3,
-                        "stale_execution": -4,
-                    }.get(fail_reason or "", -1)
-
-                    update_execution_status(execution.id, "failed", exit_code)
-                    action["completed"] = True
-                else:
-                    action["completed"] = False
-
-                actions.append(action)
-
-        # Also check for stale executions using heartbeat
-        stale = get_stale_executions(self.stale_timeout)
-
-        for execution in stale:
-            # Skip if already processed
-            if any(a["execution_id"] == execution.id for a in actions):
-                continue
-
-            stale_action: ExecutionAction = {
-                "execution_id": execution.id,
-                "doc_title": execution.doc_title,
-                "action": "mark_failed",
-                "reason": "no_heartbeat",
-                "details": f"No heartbeat for {self.stale_timeout / 60} minutes",
-            }
-
-            if not dry_run:
-                update_execution_status(execution.id, "failed", -5)  # -5 for heartbeat timeout
-                stale_action["completed"] = True
-            else:
-                stale_action["completed"] = False
-
-            actions.append(stale_action)
-
-        return actions
-
     def get_execution_metrics(self) -> ExecutionMetrics:
         """Get metrics about executions.
 
@@ -219,52 +136,3 @@ class ExecutionMonitor:
                 "failure_rate_percent": round(failure_rate, 2),
                 "metrics_timestamp": datetime.now(timezone.utc).isoformat(),
             }
-
-    def kill_zombie_processes(self, dry_run: bool = True) -> list[ExecutionAction]:
-        """Kill zombie execution processes.
-
-        Args:
-            dry_run: If True, only report what would be done
-
-        Returns:
-            List of actions taken/would be taken
-        """
-        actions: list[ExecutionAction] = []
-        running = get_running_executions()
-
-        for execution in running:
-            if not execution.pid:
-                continue
-
-            try:
-                proc = psutil.Process(execution.pid)
-
-                # Check if it's a zombie
-                if proc.status() == psutil.STATUS_ZOMBIE:
-                    action: ExecutionAction = {
-                        "execution_id": execution.id,
-                        "pid": execution.pid,
-                        "action": "kill_zombie",
-                        "doc_title": execution.doc_title,
-                    }
-
-                    if not dry_run:
-                        try:
-                            proc.kill()
-                            action["completed"] = True
-                        except Exception as e:
-                            action["completed"] = False
-                            action["error"] = str(e)
-                    else:
-                        action["completed"] = False
-
-                    actions.append(action)
-
-            except psutil.NoSuchProcess:
-                # Process already gone - expected during cleanup
-                logger.debug("Process %s already terminated during cleanup", execution.pid)
-            except psutil.AccessDenied:
-                # Can't access process
-                logger.debug("Access denied to process %s during cleanup", execution.pid)
-
-        return actions

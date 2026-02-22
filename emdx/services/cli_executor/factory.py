@@ -49,25 +49,3 @@ def get_cli_executor(cli_tool: Union[str, CliTool] | None = None) -> CliExecutor
         raise ValueError(f"No executor registered for CLI tool: {cli_tool}") from None
 
     return executor_class()
-
-
-def get_available_cli_tools() -> list[str]:
-    """Get list of available CLI tools.
-
-    Returns:
-        List of CLI tool names that have executors registered
-    """
-    return [tool.value for tool in _EXECUTORS.keys()]
-
-
-def detect_available_cli() -> CliTool | None:
-    """Detect which CLI tools are available on the system.
-
-    Returns:
-        The first available CliTool, or None if none found
-    """
-    for tool in _EXECUTORS:
-        executor = _EXECUTORS[tool]()
-        if executor.get_binary_path() is not None:
-            return tool
-    return None
