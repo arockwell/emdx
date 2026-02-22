@@ -6,7 +6,6 @@ No hierarchy, no groups — just a scannable list sorted by time.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from textual.app import ComposeResult
@@ -28,7 +27,6 @@ logger = logging.getLogger(__name__)
 
 try:
     from emdx.services import document_service as doc_db
-    from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
     HAS_DOCS = True
 except ImportError:
@@ -92,19 +90,6 @@ def format_time_ago(dt: datetime) -> str:
 ActivityItem = ActivityItemBase
 
 
-class AgentLogSubscriber(LogStreamSubscriber):
-    """Forwards log content to the activity view."""
-
-    def __init__(self, view: "ActivityView"):
-        self.view = view
-
-    def on_log_content(self, new_content: str) -> None:
-        self.view._handle_log_content(new_content)
-
-    def on_log_error(self, error: Exception) -> None:
-        logger.error(f"Log stream error: {error}")
-
-
 class ActivityView(HelpMixin, Widget):
     """Activity View - Mission Control for EMDX."""
 
@@ -126,6 +111,9 @@ class ActivityView(HelpMixin, Widget):
         ("r", "refresh", "Refresh"),
         ("i", "create_gist", "New Gist"),
         ("x", "dismiss_execution", "Kill/Dismiss"),
+        ("d", "mark_done", "Mark Done"),
+        ("a", "mark_active", "Mark Active"),
+        ("b", "mark_blocked", "Mark Blocked"),
         ("tab", "focus_next", "Next Pane"),
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
@@ -213,11 +201,6 @@ class ActivityView(HelpMixin, Widget):
         display: none;
     }
 
-    #preview-log {
-        height: 1fr;
-        display: none;
-    }
-
     .notification {
         height: 1;
         background: $success;
@@ -242,9 +225,6 @@ class ActivityView(HelpMixin, Widget):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.activity_items: list[ActivityItem] = []
-        self.log_stream: LogStream | None = None
-        self.log_subscriber = AgentLogSubscriber(self)
-        self.streaming_item_id: int | None = None
         self._fullscreen = False
         self._last_preview_key: tuple[str, int, str] | None = None
         self._preview_raw_content: str = ""
@@ -304,12 +284,6 @@ class ActivityView(HelpMixin, Widget):
                     highlight=True,
                     auto_scroll=False,
                 )
-                yield RichLog(
-                    id="preview-log",
-                    highlight=True,
-                    markup=True,
-                    wrap=True,
-                )
 
     async def on_mount(self) -> None:
         """Initialize the view."""
@@ -341,9 +315,7 @@ class ActivityView(HelpMixin, Widget):
         """Update the status bar with current stats."""
         status_bar = self.query_one("#status-bar", Static)
 
-        active = len(
-            [item for item in self.activity_items if item.status == "running"]
-        )
+        active = len([item for item in self.activity_items if item.status == "running"])
 
         today = datetime.now().date()
         docs_today = len(
@@ -358,9 +330,7 @@ class ActivityView(HelpMixin, Widget):
             (
                 item.cost
                 for item in self.activity_items
-                if item.timestamp
-                and item.timestamp.date() == today
-                and item.cost
+                if item.timestamp and item.timestamp.date() == today and item.cost
             ),
             0.0,
         )
@@ -369,9 +339,7 @@ class ActivityView(HelpMixin, Widget):
             [
                 item
                 for item in self.activity_items
-                if item.status == "failed"
-                and item.timestamp
-                and item.timestamp.date() == today
+                if item.status == "failed" and item.timestamp and item.timestamp.date() == today
             ]
         )
 
@@ -454,9 +422,7 @@ class ActivityView(HelpMixin, Widget):
     def action_toggle_copy_mode(self) -> None:
         """Toggle between rendered preview and selectable copy mode."""
         try:
-            preview_scroll = self.query_one(
-                "#preview-scroll", ScrollableContainer
-            )
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
             copy_log = self.query_one("#preview-copy", Log)
         except Exception:
             return
@@ -474,10 +440,7 @@ class ActivityView(HelpMixin, Widget):
         """Update the preview pane with selected item."""
         try:
             preview = self.query_one("#preview-content", RichLog)
-            preview_scroll = self.query_one(
-                "#preview-scroll", ScrollableContainer
-            )
-            preview_log = self.query_one("#preview-log", RichLog)
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
             header = self.query_one("#preview-header", Static)
         except Exception as e:
             logger.debug(f"Preview widgets not ready: {e}")
@@ -485,7 +448,6 @@ class ActivityView(HelpMixin, Widget):
 
         def show_markdown() -> None:
             copy_log = self.query_one("#preview-copy", Log)
-            preview_log.display = False
             if self._copy_mode:
                 preview_scroll.display = False
                 copy_log.display = True
@@ -505,22 +467,10 @@ class ActivityView(HelpMixin, Widget):
 
         current_key = (item.item_type, item.item_id, item.status)
 
-        if (
-            not force
-            and item.status != "running"
-            and self._last_preview_key == current_key
-        ):
+        if not force and item.status != "running" and self._last_preview_key == current_key:
             return
 
         self._last_preview_key = current_key
-
-        # Stop any existing stream
-        self._stop_stream()
-
-        # For running agent executions, show live log
-        if item.status == "running" and item.item_type == "agent_execution":
-            await self._show_live_log(item)
-            return
 
         # For documents, show content
         if item.doc_id and HAS_DOCS:
@@ -530,16 +480,13 @@ class ActivityView(HelpMixin, Widget):
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
                     content_stripped = content.lstrip()
-                    has_title_header = (
-                        content_stripped.startswith(f"# {title}")
-                        or content_stripped.startswith("# ")
-                    )
+                    has_title_header = content_stripped.startswith(
+                        f"# {title}"
+                    ) or content_stripped.startswith("# ")
                     if has_title_header:
                         self._render_markdown_preview(content)
                     else:
-                        self._render_markdown_preview(
-                            f"# {title}\n\n{content}"
-                        )
+                        self._render_markdown_preview(f"# {title}\n\n{content}")
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return
@@ -555,8 +502,8 @@ class ActivityView(HelpMixin, Widget):
             except Exception as e:
                 logger.error(f"Error loading document: {e}")
 
-        # For agent executions without doc_id
-        if item.item_type == "agent_execution":
+        # For agent executions without doc_id, or tasks
+        if item.item_type in ("agent_execution", "task"):
             content, header_text = await item.get_preview_content(doc_db)
             if content:
                 self._render_markdown_preview(content)
@@ -583,20 +530,14 @@ class ActivityView(HelpMixin, Widget):
         item = self._get_selected_item()
         if item is None:
             context_header.update("DETAILS")
-            context_content.write(
-                "[dim]Select an item to see details[/dim]"
-            )
+            context_content.write("[dim]Select an item to see details[/dim]")
             return
 
         if item.doc_id:
-            await self._show_document_context(
-                item, context_content, context_header
-            )
+            await self._show_document_context(item, context_content, context_header)
         else:
             context_header.update("DETAILS")
-            context_content.write(
-                f"[dim]{item.item_type}: {item.title}[/dim]"
-            )
+            context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
 
     async def _show_document_context(
         self, item: ActivityItem, content: RichLog, header: Static
@@ -627,9 +568,7 @@ class ActivityView(HelpMixin, Widget):
             if doc.get("created_at"):
                 created_dt = parse_datetime(doc["created_at"])
                 if created_dt:
-                    meta_line1.append(
-                        f"[dim]{format_time_ago(created_dt)}[/dim]"
-                    )
+                    meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
             if meta_line1:
                 content.write(" · ".join(meta_line1))
 
@@ -647,111 +586,6 @@ class ActivityView(HelpMixin, Widget):
 
         except Exception as e:
             logger.error(f"Error showing document context: {e}")
-
-    async def _show_live_log(self, item: ActivityItem) -> None:
-        """Show live log for running agent execution."""
-        try:
-            preview_scroll = self.query_one(
-                "#preview-scroll", ScrollableContainer
-            )
-            preview_log = self.query_one("#preview-log", RichLog)
-            header = self.query_one("#preview-header", Static)
-        except Exception as e:
-            logger.debug(f"Preview widgets not ready for live log: {e}")
-            return
-
-        preview_scroll.display = False
-        try:
-            self.query_one("#preview-copy", Log).display = False
-        except Exception:
-            pass
-        preview_log.display = True
-        preview_log.clear()
-
-        header.update(f"[green]● LIVE[/green] {item.title}")
-
-        try:
-            log_path = None
-
-            if item.item_type == "agent_execution":
-                log_file = getattr(item, "log_file", None)
-                if log_file:
-                    log_path = Path(log_file)
-
-            if not log_path:
-                preview_log.write("[yellow]⏳ Waiting for log...[/yellow]")
-                preview_log.write(
-                    f"[dim]item_type={item.item_type}[/dim]"
-                )
-                return
-
-            if not log_path.exists():
-                preview_log.write(
-                    f"[yellow]⏳ Log file pending: {log_path}[/yellow]"
-                )
-                return
-
-            preview_log.write(
-                f"[green]● Streaming from: {log_path.name}[/green]"
-            )
-            self.log_stream = LogStream(log_path)
-            self.streaming_item_id = item.item_id
-
-            initial = self.log_stream.get_initial_content()
-            if initial:
-                from emdx.ui.live_log_writer import LiveLogWriter
-
-                LiveLogWriter(preview_log, auto_scroll=True)
-                from emdx.utils.stream_json_parser import (
-                    parse_and_format_live_logs,
-                )
-
-                formatted = parse_and_format_live_logs(initial)
-                formatted = [
-                    ln
-                    for ln in formatted
-                    if "__RAW_RESULT_JSON__:" not in ln
-                ]
-                for line in formatted[-50:]:
-                    preview_log.write(line)
-                preview_log.scroll_end(animate=False)
-
-            self.log_stream.subscribe(self.log_subscriber)
-
-        except Exception as e:
-            logger.error(
-                f"Error setting up live log: {e}", exc_info=True
-            )
-            preview_log.write(f"[red]Error: {e}[/red]")
-
-    def _handle_log_content(self, content: str) -> None:
-        """Handle new log content from stream."""
-        content = "\n".join(
-            ln
-            for ln in content.split("\n")
-            if not ln.startswith("__RAW_RESULT_JSON__:")
-        )
-        if not content.strip():
-            return
-
-        def update_ui() -> None:
-            try:
-                from emdx.ui.live_log_writer import LiveLogWriter
-
-                preview_log = self.query_one("#preview-log", RichLog)
-                writer = LiveLogWriter(preview_log, auto_scroll=True)
-                writer.write(content)
-            except Exception as e:
-                logger.error(f"Error handling log content: {e}")
-
-        self.app.call_from_thread(update_ui)
-
-    def _stop_stream(self) -> None:
-        """Stop any active log stream."""
-        if self.log_stream:
-            self.log_stream.unsubscribe(self.log_subscriber)
-            self.log_stream = None
-        self.streaming_item_id = None
 
     def _hide_notification(self) -> None:
         """Hide the notification bar."""
@@ -775,9 +609,7 @@ class ActivityView(HelpMixin, Widget):
         if self._refresh_in_progress:
             return
         self._refresh_in_progress = True
-        self.run_worker(
-            self._refresh_data(), exclusive=True, group="refresh"
-        )
+        self.run_worker(self._refresh_data(), exclusive=True, group="refresh")
 
     async def _refresh_data(self) -> None:
         """Periodic refresh of data."""
@@ -834,15 +666,9 @@ class ActivityView(HelpMixin, Widget):
         await self._update_preview(force=True)
         await self._update_context_panel()
 
-    def on_activity_table_double_clicked(
-        self, event: ActivityTable.DoubleClicked
-    ) -> None:
+    def on_activity_table_double_clicked(self, event: ActivityTable.DoubleClicked) -> None:
         """Handle double-click on table row — open fullscreen."""
         self.action_fullscreen()
-
-    def on_unmount(self) -> None:
-        """Cleanup on unmount."""
-        self._stop_stream()
 
     # Gist/quick document creation
 
@@ -854,15 +680,11 @@ class ActivityView(HelpMixin, Widget):
             return
 
         if not item.doc_id:
-            self._show_notification(
-                "Select a document to gist", is_error=True
-            )
+            self._show_notification("Select a document to gist", is_error=True)
             return
 
         if not HAS_DOCS or not doc_db:
-            self._show_notification(
-                "Documents not available", is_error=True
-            )
+            self._show_notification("Documents not available", is_error=True)
             return
 
         try:
@@ -900,15 +722,11 @@ class ActivityView(HelpMixin, Widget):
             return
 
         if item.item_type != "agent_execution":
-            self._show_notification(
-                "Can only dismiss executions", is_error=True
-            )
+            # x is a no-op for tasks and documents
             return
 
         if item.status != "running":
-            self._show_notification(
-                "Execution is not running", is_error=True
-            )
+            self._show_notification("Execution is not running", is_error=True)
             return
 
         try:
@@ -919,9 +737,7 @@ class ActivityView(HelpMixin, Widget):
 
             execution = get_execution(item.item_id)
             if not execution:
-                self._show_notification(
-                    f"Execution #{item.item_id} not found", is_error=True
-                )
+                self._show_notification(f"Execution #{item.item_id} not found", is_error=True)
                 return
 
             if execution.pid:
@@ -934,18 +750,51 @@ class ActivityView(HelpMixin, Widget):
                     pass
 
             update_execution_status(item.item_id, "failed", exit_code=-6)
-            self._show_notification(
-                f"Dismissed execution #{item.item_id}"
-            )
+            self._show_notification(f"Dismissed execution #{item.item_id}")
             await self._refresh_data()
 
         except Exception as e:
             logger.error(f"Error dismissing execution: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
 
-    def _show_notification(
-        self, message: str, is_error: bool = False
-    ) -> None:
+    # Task status actions
+
+    async def _set_task_status(self, new_status: str) -> None:
+        """Change status of the selected task and refresh."""
+        item = self._get_selected_item()
+        if item is None:
+            self._show_notification("No item selected", is_error=True)
+            return
+
+        if item.item_type != "task":
+            return
+
+        if item.status == new_status:
+            return
+
+        try:
+            from emdx.models.tasks import update_task
+
+            update_task(item.item_id, status=new_status)
+            self._show_notification(f"Task #{item.item_id} → {new_status}")
+            await self._refresh_data()
+        except Exception as e:
+            logger.error(f"Failed to update task: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
+
+    async def action_mark_done(self) -> None:
+        """Mark selected task as done."""
+        await self._set_task_status("done")
+
+    async def action_mark_active(self) -> None:
+        """Mark selected task as active."""
+        await self._set_task_status("active")
+
+    async def action_mark_blocked(self) -> None:
+        """Mark selected task as blocked."""
+        await self._set_task_status("blocked")
+
+    def _show_notification(self, message: str, is_error: bool = False) -> None:
         """Show a notification message."""
         self.notification_is_error = is_error
         self.notification_text = message
@@ -978,7 +827,5 @@ class ActivityView(HelpMixin, Widget):
                 self._show_notification(f"Showing: {title[:40]}")
                 return True
 
-        self._show_notification(
-            f"Document #{doc_id} not found", is_error=True
-        )
+        self._show_notification(f"Document #{doc_id} not found", is_error=True)
         return False
