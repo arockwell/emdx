@@ -10,10 +10,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.timer import Timer
 from textual.widget import Widget
-from textual.widgets import DataTable, RichLog, Static
+from textual.widgets import DataTable, Input, RichLog, Static
 
 from emdx.models.tasks import (
     get_dependencies,
@@ -145,6 +147,8 @@ class TaskView(Widget):
         ("d", "mark_done", "Mark Done"),
         ("a", "mark_active", "Mark Active"),
         ("b", "mark_blocked", "Mark Blocked"),
+        ("slash", "show_filter", "Filter"),
+        ("escape", "clear_filter", "Clear Filter"),
     ]
 
     DEFAULT_CSS = """
@@ -157,6 +161,13 @@ class TaskView(Widget):
         height: 1;
         background: $boost;
         padding: 0 1;
+    }
+
+    #task-filter-input {
+        height: 3;
+        padding: 0 1;
+        border-bottom: solid $primary;
+        display: none;
     }
 
     #task-main {
@@ -203,9 +214,12 @@ class TaskView(Widget):
         self._tasks_by_status: dict[str, list[TaskDict]] = defaultdict(list)
         self._row_key_to_task: dict[str, TaskDict] = {}
         self._epics: dict[str | None, EpicTaskDict] = {}
+        self._filter_text: str = ""
+        self._debounce_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
+        yield Input(placeholder="Filter tasks...", id="task-filter-input")
         with Horizontal(id="task-main"):
             with Vertical(id="task-list-panel"):
                 yield Static("TASKS", id="task-list-header")
@@ -253,10 +267,11 @@ class TaskView(Widget):
             logger.error(f"Failed to load epics: {e}")
             self._epics = {}
 
-        # Group by status
+        # Group by status (respecting active filter)
         self._tasks_by_status = defaultdict(list)
         for task in self._tasks:
-            self._tasks_by_status[task["status"]].append(task)
+            if not self._filter_text or self._task_matches_filter(task, self._filter_text):
+                self._tasks_by_status[task["status"]].append(task)
 
         self._render_task_table(restore_row=restore_row)
         self._update_status_bar()
@@ -387,9 +402,106 @@ class TaskView(Widget):
             parts.append(f"[red]{counts['failed']} failed[/red]")
 
         if not any(counts.values()):
-            parts.append("[dim]no tasks[/dim]")
+            if self._filter_text:
+                parts.append("[yellow]no matches[/yellow]")
+            else:
+                parts.append("[dim]no tasks[/dim]")
+
+        # Show filter count when active
+        if self._filter_text:
+            matched = sum(counts.values())
+            total = len(self._tasks)
+            parts.append(f"[cyan]filter: {matched}/{total}[/cyan]")
 
         status_bar.update(" · ".join(parts))
+
+    # ------------------------------------------------------------------
+    # Filter logic
+    # ------------------------------------------------------------------
+
+    def _task_matches_filter(self, task: TaskDict, query: str) -> bool:
+        """Check if a task matches the filter query (case-insensitive substring)."""
+        q = query.lower()
+        fields = [
+            task.get("title") or "",
+            task.get("epic_key") or "",
+            task.get("description") or "",
+            task.get("tags") or "",
+        ]
+        return any(q in f.lower() for f in fields)
+
+    def _apply_filter(self) -> None:
+        """Re-group tasks through the active filter and re-render."""
+        self._tasks_by_status = defaultdict(list)
+        for task in self._tasks:
+            if not self._filter_text or self._task_matches_filter(task, self._filter_text):
+                self._tasks_by_status[task["status"]].append(task)
+        self._render_task_table()
+        self._update_status_bar()
+
+    def action_show_filter(self) -> None:
+        """Show and focus the filter input."""
+        filter_input = self.query_one("#task-filter-input", Input)
+        filter_input.display = True
+        filter_input.focus()
+
+    def action_clear_filter(self) -> None:
+        """Clear filter, hide input, refocus table."""
+        filter_input = self.query_one("#task-filter-input", Input)
+        if not filter_input.display:
+            return
+        filter_input.value = ""
+        filter_input.display = False
+        self._filter_text = ""
+        self._apply_filter()
+        table = self.query_one("#task-table", DataTable)
+        table.focus()
+
+    def on_key(self, event: events.Key) -> None:
+        """Block vim keys when filter input has focus."""
+        try:
+            filter_input = self.query_one("#task-filter-input", Input)
+            if filter_input.has_focus:
+                vim_keys = {
+                    "j",
+                    "k",
+                    "r",
+                    "d",
+                    "a",
+                    "b",
+                    "tab",
+                    "shift+tab",
+                    "slash",
+                    "1",
+                    "2",
+                    "3",
+                }
+                if event.key in vim_keys:
+                    return
+        except Exception:
+            pass
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle filter input changes with debouncing."""
+        if event.input.id != "task-filter-input":
+            return
+
+        query = event.value
+
+        # Cancel pending filter
+        if self._debounce_timer:
+            try:
+                self._debounce_timer.stop()
+            except Exception:
+                pass
+            self._debounce_timer = None
+
+        def do_filter() -> None:
+            self._debounce_timer = None
+            self._filter_text = query
+            self._apply_filter()
+
+        self._debounce_timer = self.set_timer(0.2, do_filter)
 
     def _get_selected_task(self) -> TaskDict | None:
         """Get the currently highlighted task."""
