@@ -132,6 +132,22 @@ class DocumentLinkDetail(TypedDict):
     method: str
 
 
+class WikiRunRow(TypedDict):
+    """Row from the wiki_runs table."""
+
+    id: int
+    started_at: str | None
+    completed_at: str | None
+    topics_attempted: int
+    articles_generated: int
+    articles_skipped: int
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cost_usd: float
+    model: str
+    dry_run: int
+
+
 class DatabaseStats(TypedDict, total=False):
     """Statistics returned by get_stats."""
 

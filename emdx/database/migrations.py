@@ -2593,6 +2593,31 @@ def migration_045_add_wiki_tables(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_046_add_wiki_runs(conn: sqlite3.Connection) -> None:
+    """Add wiki_runs table for tracking wiki generation runs."""
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS wiki_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            topics_attempted INTEGER DEFAULT 0,
+            articles_generated INTEGER DEFAULT 0,
+            articles_skipped INTEGER DEFAULT 0,
+            total_input_tokens INTEGER DEFAULT 0,
+            total_output_tokens INTEGER DEFAULT 0,
+            total_cost_usd REAL DEFAULT 0.0,
+            model TEXT DEFAULT '',
+            dry_run BOOLEAN DEFAULT FALSE
+        )
+        """
+    )
+
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[int, str, Callable]] = [
     (0, "Create documents table", migration_000_create_documents_table),
@@ -2641,6 +2666,7 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (43, "Add document links table", migration_043_add_document_links),
     (44, "Add document entities table", migration_044_add_document_entities),
     (45, "Add wiki system tables", migration_045_add_wiki_tables),
+    (46, "Add wiki runs tracking", migration_046_add_wiki_runs),
 ]
 
 

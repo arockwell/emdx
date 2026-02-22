@@ -1642,7 +1642,11 @@ def wiki_generate(
     import time as _time
 
     from ..services.wiki_clustering_service import get_topics as _get_topics
-    from ..services.wiki_synthesis_service import generate_article
+    from ..services.wiki_synthesis_service import (
+        complete_wiki_run,
+        create_wiki_run,
+        generate_article,
+    )
 
     if not all_topics and topic_id is None:
         console.print("[red]Provide a topic ID or use --all[/red]")
@@ -1656,17 +1660,23 @@ def wiki_generate(
         topics_data = _get_topics()
         topic_list = [cast(int, t["id"]) for t in topics_data]
 
+    # Create a run record
+    run_model = model or "claude-sonnet-4-5-20250929"
+    run_id = create_wiki_run(model=run_model, dry_run=dry_run)
+
     generated = 0
     skipped = 0
     total_input = 0
     total_output = 0
     total_cost = 0.0
+    topics_attempted = 0
     batch_start = _time.time()
 
     for i, tid in enumerate(topic_list):
         if generated >= limit:
             break
 
+        topics_attempted += 1
         label = f"[{i + 1}/{len(topic_list)}]"
         console.print(f"  {label} topic {tid}...", end=" ")
         start = _time.time()
@@ -1698,13 +1708,25 @@ def wiki_generate(
         total_output += result.output_tokens
         total_cost += result.cost_usd
 
+    # Update run record with results
+    complete_wiki_run(
+        run_id,
+        topics_attempted=topics_attempted,
+        articles_generated=generated,
+        articles_skipped=skipped,
+        total_input_tokens=total_input,
+        total_output_tokens=total_output,
+        total_cost_usd=total_cost,
+    )
+
     total_elapsed = _time.time() - batch_start
     action = "Estimated" if dry_run else "Generated"
     console.print(
         f"\n[bold]{action} {generated} article(s)[/bold] "
         f"(skipped {skipped}) in {total_elapsed:.1f}s\n"
         f"  Total tokens: {total_input:,} in / {total_output:,} out\n"
-        f"  Total cost:   ${total_cost:.4f}"
+        f"  Total cost:   ${total_cost:.4f}\n"
+        f"  Run ID:       {run_id}"
     )
 
     if dry_run:
@@ -1836,6 +1858,58 @@ def wiki_list(
             f"${row[7]:.4f}",
             status,
             str(row[10])[:10] if row[10] else "",
+        )
+
+    console.print(table)
+
+
+@wiki_app.command(name="runs")
+def wiki_runs_command(
+    limit: int = typer.Option(10, "--limit", "-l", help="Max runs to show"),
+) -> None:
+    """List recent wiki generation runs.
+
+    Examples:
+        emdx maintain wiki runs              # Recent runs
+        emdx maintain wiki runs -l 20        # More history
+    """
+    from rich.table import Table
+
+    from ..services.wiki_synthesis_service import list_wiki_runs
+
+    runs = list_wiki_runs(limit=limit)
+
+    if not runs:
+        console.print("[dim]No wiki generation runs found[/dim]")
+        return
+
+    table = Table(title="Wiki Generation Runs", box=box.SIMPLE)
+    table.add_column("ID", style="dim", width=4)
+    table.add_column("Date", style="cyan")
+    table.add_column("Articles", justify="right")
+    table.add_column("Skipped", justify="right", style="dim")
+    table.add_column("Tokens (in/out)", justify="right")
+    table.add_column("Cost", justify="right")
+    table.add_column("Model", style="dim")
+    table.add_column("Type")
+
+    for run in runs:
+        started = str(run["started_at"])[:16] if run["started_at"] else ""
+        run_type = "[yellow]dry-run[/yellow]" if run["dry_run"] else "[green]live[/green]"
+        model_short = str(run["model"])
+        if "-" in model_short:
+            parts = model_short.split("-")
+            model_short = "-".join(parts[1:3]) if len(parts) > 2 else parts[-1]
+        tokens = f"{run['total_input_tokens']:,}/{run['total_output_tokens']:,}"
+        table.add_row(
+            str(run["id"]),
+            started,
+            str(run["articles_generated"]),
+            str(run["articles_skipped"]),
+            tokens,
+            f"${run['total_cost_usd']:.4f}",
+            model_short[:20],
+            run_type,
         )
 
     console.print(table)
