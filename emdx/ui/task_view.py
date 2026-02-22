@@ -469,8 +469,6 @@ class TaskView(Widget):
                     "d",
                     "a",
                     "b",
-                    "tab",
-                    "shift+tab",
                     "slash",
                     "1",
                     "2",
@@ -636,22 +634,22 @@ class TaskView(Widget):
         """Reload tasks from database."""
         await self._load_tasks()
 
-    def _toggle_pane_focus(self) -> None:
-        """Toggle focus between list and detail panes."""
+    def _toggle_filter_focus(self) -> None:
+        """Toggle focus between filter input and task table."""
+        filter_input = self.query_one("#task-filter-input", Input)
         table = self.query_one("#task-table", DataTable)
-        detail_log = self.query_one("#task-detail-log", RichLog)
-        if table.has_focus:
-            detail_log.focus()
+        if filter_input.display and not filter_input.has_focus:
+            filter_input.focus()
         else:
             table.focus()
 
     def action_focus_next(self) -> None:
-        """Toggle focus between panes."""
-        self._toggle_pane_focus()
+        """Toggle focus between filter and table."""
+        self._toggle_filter_focus()
 
     def action_focus_prev(self) -> None:
-        """Toggle focus between panes."""
-        self._toggle_pane_focus()
+        """Toggle focus between filter and table."""
+        self._toggle_filter_focus()
 
     # Status mutation actions
 
