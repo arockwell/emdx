@@ -1484,6 +1484,29 @@ class TestEpicGrouping:
             assert any("LIVE" in t for t in titles)
             assert not any("DEAD" in t for t in titles)
 
+    @pytest.mark.asyncio
+    async def test_epic_grouping_hides_done_tasks_in_mixed_group(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Done tasks within an epic that has open tasks are hidden."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open work", status="open", epic_key="MIX"),
+            make_task(id=2, title="Finished work", status="done", epic_key="MIX"),
+            make_task(id=3, title="Failed work", status="failed", epic_key="MIX"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("g")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("MIX" in t for t in titles)
+            assert any("Open work" in t for t in titles)
+            assert not any("Finished work" in t for t in titles)
+            assert not any("Failed work" in t for t in titles)
+
 
 # ===================================================================
 # K. Won't Do Status
