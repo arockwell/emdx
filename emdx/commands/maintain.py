@@ -1100,6 +1100,7 @@ def maintain_callback(
         cleanup      Clean up execution resources (branches, processes)
         cleanup-dirs Clean up temporary directories
         analyze      Analyze knowledge base health and patterns
+        stale        Knowledge decay and staleness tracking
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -1916,6 +1917,11 @@ def wiki_runs_command(
 
 
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
+
+# Register stale as a subcommand group of maintain
+from emdx.commands.stale import app as stale_app  # noqa: E402
+
+app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
 
 
 if __name__ == "__main__":
