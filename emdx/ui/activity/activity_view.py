@@ -130,6 +130,9 @@ class ActivityView(HelpMixin, Widget):
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
         ("c", "toggle_copy_mode", "Copy Mode"),
+        ("R", "toggle_running", "Toggle Running"),
+        ("T", "toggle_tasks", "Toggle Tasks"),
+        ("D", "toggle_docs", "Toggle Docs"),
     ]
 
     DEFAULT_CSS = """
@@ -252,6 +255,10 @@ class ActivityView(HelpMixin, Widget):
         self._zombies_cleaned = False
         self._refresh_in_progress = False
         self._data_loader = ActivityDataLoader()
+        # Section visibility toggles (all visible by default)
+        self._show_running = True
+        self._show_tasks = True
+        self._show_docs = True
 
     def _get_selected_item(self) -> ActivityItem | None:
         """Get the currently selected ActivityItem from the table."""
@@ -260,6 +267,24 @@ class ActivityView(HelpMixin, Widget):
             return table.get_selected_item()
         except Exception:
             return None
+
+    def _filter_by_visibility(
+        self,
+        items: list[ActivityItem],
+    ) -> list[ActivityItem]:
+        """Filter items based on section visibility toggles."""
+        from .activity_data import TIER_RECENT, TIER_RUNNING, TIER_TASKS
+        from .activity_table import _get_tier
+
+        visible_tiers: set[int] = set()
+        if self._show_running:
+            visible_tiers.add(TIER_RUNNING)
+        if self._show_tasks:
+            visible_tiers.add(TIER_TASKS)
+        if self._show_docs:
+            visible_tiers.add(TIER_RECENT)
+
+        return [item for item in items if _get_tier(item) in visible_tiers]
 
     def compose(self) -> ComposeResult:
         # Status bar
@@ -328,9 +353,9 @@ class ActivityView(HelpMixin, Widget):
         )
         self._zombies_cleaned = True
 
-        # Populate table
+        # Populate table (filtered by section visibility)
         table = self.query_one("#activity-table", ActivityTable)
-        table.populate(self.activity_items)
+        table.populate(self._filter_by_visibility(self.activity_items))
 
         await self._update_status_bar()
         if update_preview:
@@ -341,9 +366,7 @@ class ActivityView(HelpMixin, Widget):
         """Update the status bar with current stats."""
         status_bar = self.query_one("#status-bar", Static)
 
-        active = len(
-            [item for item in self.activity_items if item.status == "running"]
-        )
+        active = len([item for item in self.activity_items if item.status == "running"])
 
         today = datetime.now().date()
         docs_today = len(
@@ -358,9 +381,7 @@ class ActivityView(HelpMixin, Widget):
             (
                 item.cost
                 for item in self.activity_items
-                if item.timestamp
-                and item.timestamp.date() == today
-                and item.cost
+                if item.timestamp and item.timestamp.date() == today and item.cost
             ),
             0.0,
         )
@@ -369,9 +390,7 @@ class ActivityView(HelpMixin, Widget):
             [
                 item
                 for item in self.activity_items
-                if item.status == "failed"
-                and item.timestamp
-                and item.timestamp.date() == today
+                if item.status == "failed" and item.timestamp and item.timestamp.date() == today
             ]
         )
 
@@ -395,6 +414,13 @@ class ActivityView(HelpMixin, Widget):
             parts.append(f"[red]⚠️ {errors}[/red]")
 
         parts.append(f"[dim]{spark}[/dim]")
+
+        # Section visibility indicators
+        r_label = "R" if self._show_running else "[dim]R[/dim]"
+        t_label = "T" if self._show_tasks else "[dim]T[/dim]"
+        d_label = "D" if self._show_docs else "[dim]D[/dim]"
+        parts.append(f"{r_label}{t_label}{d_label}")
+
         parts.append(datetime.now().strftime("%H:%M"))
         parts.append(f"[dim]{theme_indicator}[/dim]")
 
@@ -454,9 +480,7 @@ class ActivityView(HelpMixin, Widget):
     def action_toggle_copy_mode(self) -> None:
         """Toggle between rendered preview and selectable copy mode."""
         try:
-            preview_scroll = self.query_one(
-                "#preview-scroll", ScrollableContainer
-            )
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
             copy_log = self.query_one("#preview-copy", Log)
         except Exception:
             return
@@ -474,9 +498,7 @@ class ActivityView(HelpMixin, Widget):
         """Update the preview pane with selected item."""
         try:
             preview = self.query_one("#preview-content", RichLog)
-            preview_scroll = self.query_one(
-                "#preview-scroll", ScrollableContainer
-            )
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
             preview_log = self.query_one("#preview-log", RichLog)
             header = self.query_one("#preview-header", Static)
         except Exception as e:
@@ -505,11 +527,7 @@ class ActivityView(HelpMixin, Widget):
 
         current_key = (item.item_type, item.item_id, item.status)
 
-        if (
-            not force
-            and item.status != "running"
-            and self._last_preview_key == current_key
-        ):
+        if not force and item.status != "running" and self._last_preview_key == current_key:
             return
 
         self._last_preview_key = current_key
@@ -530,16 +548,13 @@ class ActivityView(HelpMixin, Widget):
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
                     content_stripped = content.lstrip()
-                    has_title_header = (
-                        content_stripped.startswith(f"# {title}")
-                        or content_stripped.startswith("# ")
-                    )
+                    has_title_header = content_stripped.startswith(
+                        f"# {title}"
+                    ) or content_stripped.startswith("# ")
                     if has_title_header:
                         self._render_markdown_preview(content)
                     else:
-                        self._render_markdown_preview(
-                            f"# {title}\n\n{content}"
-                        )
+                        self._render_markdown_preview(f"# {title}\n\n{content}")
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return
@@ -583,20 +598,14 @@ class ActivityView(HelpMixin, Widget):
         item = self._get_selected_item()
         if item is None:
             context_header.update("DETAILS")
-            context_content.write(
-                "[dim]Select an item to see details[/dim]"
-            )
+            context_content.write("[dim]Select an item to see details[/dim]")
             return
 
         if item.doc_id:
-            await self._show_document_context(
-                item, context_content, context_header
-            )
+            await self._show_document_context(item, context_content, context_header)
         else:
             context_header.update("DETAILS")
-            context_content.write(
-                f"[dim]{item.item_type}: {item.title}[/dim]"
-            )
+            context_content.write(f"[dim]{item.item_type}: {item.title}[/dim]")
 
     async def _show_document_context(
         self, item: ActivityItem, content: RichLog, header: Static
@@ -627,9 +636,7 @@ class ActivityView(HelpMixin, Widget):
             if doc.get("created_at"):
                 created_dt = parse_datetime(doc["created_at"])
                 if created_dt:
-                    meta_line1.append(
-                        f"[dim]{format_time_ago(created_dt)}[/dim]"
-                    )
+                    meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
             if meta_line1:
                 content.write(" · ".join(meta_line1))
 
@@ -651,9 +658,7 @@ class ActivityView(HelpMixin, Widget):
     async def _show_live_log(self, item: ActivityItem) -> None:
         """Show live log for running agent execution."""
         try:
-            preview_scroll = self.query_one(
-                "#preview-scroll", ScrollableContainer
-            )
+            preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
             preview_log = self.query_one("#preview-log", RichLog)
             header = self.query_one("#preview-header", Static)
         except Exception as e:
@@ -680,20 +685,14 @@ class ActivityView(HelpMixin, Widget):
 
             if not log_path:
                 preview_log.write("[yellow]⏳ Waiting for log...[/yellow]")
-                preview_log.write(
-                    f"[dim]item_type={item.item_type}[/dim]"
-                )
+                preview_log.write(f"[dim]item_type={item.item_type}[/dim]")
                 return
 
             if not log_path.exists():
-                preview_log.write(
-                    f"[yellow]⏳ Log file pending: {log_path}[/yellow]"
-                )
+                preview_log.write(f"[yellow]⏳ Log file pending: {log_path}[/yellow]")
                 return
 
-            preview_log.write(
-                f"[green]● Streaming from: {log_path.name}[/green]"
-            )
+            preview_log.write(f"[green]● Streaming from: {log_path.name}[/green]")
             self.log_stream = LogStream(log_path)
             self.streaming_item_id = item.item_id
 
@@ -707,11 +706,7 @@ class ActivityView(HelpMixin, Widget):
                 )
 
                 formatted = parse_and_format_live_logs(initial)
-                formatted = [
-                    ln
-                    for ln in formatted
-                    if "__RAW_RESULT_JSON__:" not in ln
-                ]
+                formatted = [ln for ln in formatted if "__RAW_RESULT_JSON__:" not in ln]
                 for line in formatted[-50:]:
                     preview_log.write(line)
                 preview_log.scroll_end(animate=False)
@@ -719,17 +714,13 @@ class ActivityView(HelpMixin, Widget):
             self.log_stream.subscribe(self.log_subscriber)
 
         except Exception as e:
-            logger.error(
-                f"Error setting up live log: {e}", exc_info=True
-            )
+            logger.error(f"Error setting up live log: {e}", exc_info=True)
             preview_log.write(f"[red]Error: {e}[/red]")
 
     def _handle_log_content(self, content: str) -> None:
         """Handle new log content from stream."""
         content = "\n".join(
-            ln
-            for ln in content.split("\n")
-            if not ln.startswith("__RAW_RESULT_JSON__:")
+            ln for ln in content.split("\n") if not ln.startswith("__RAW_RESULT_JSON__:")
         )
         if not content.strip():
             return
@@ -775,9 +766,7 @@ class ActivityView(HelpMixin, Widget):
         if self._refresh_in_progress:
             return
         self._refresh_in_progress = True
-        self.run_worker(
-            self._refresh_data(), exclusive=True, group="refresh"
-        )
+        self.run_worker(self._refresh_data(), exclusive=True, group="refresh")
 
     async def _refresh_data(self) -> None:
         """Periodic refresh of data."""
@@ -788,7 +777,7 @@ class ActivityView(HelpMixin, Widget):
             self._zombies_cleaned = True
 
             table = self.query_one("#activity-table", ActivityTable)
-            table.refresh_items(self.activity_items)
+            table.refresh_items(self._filter_by_visibility(self.activity_items))
 
             await self._update_status_bar()
         finally:
@@ -827,6 +816,27 @@ class ActivityView(HelpMixin, Widget):
         """Focus previous pane."""
         pass
 
+    async def action_toggle_running(self) -> None:
+        """Toggle visibility of the RUNNING section."""
+        self._show_running = not self._show_running
+        await self._apply_visibility()
+
+    async def action_toggle_tasks(self) -> None:
+        """Toggle visibility of the TASKS section."""
+        self._show_tasks = not self._show_tasks
+        await self._apply_visibility()
+
+    async def action_toggle_docs(self) -> None:
+        """Toggle visibility of the RECENT/docs section."""
+        self._show_docs = not self._show_docs
+        await self._apply_visibility()
+
+    async def _apply_visibility(self) -> None:
+        """Re-filter and repopulate after a visibility toggle."""
+        table = self.query_one("#activity-table", ActivityTable)
+        table.populate(self._filter_by_visibility(self.activity_items))
+        await self._update_status_bar()
+
     async def on_activity_table_item_highlighted(
         self, event: ActivityTable.ItemHighlighted
     ) -> None:
@@ -834,9 +844,7 @@ class ActivityView(HelpMixin, Widget):
         await self._update_preview(force=True)
         await self._update_context_panel()
 
-    def on_activity_table_double_clicked(
-        self, event: ActivityTable.DoubleClicked
-    ) -> None:
+    def on_activity_table_double_clicked(self, event: ActivityTable.DoubleClicked) -> None:
         """Handle double-click on table row — open fullscreen."""
         self.action_fullscreen()
 
@@ -854,15 +862,11 @@ class ActivityView(HelpMixin, Widget):
             return
 
         if not item.doc_id:
-            self._show_notification(
-                "Select a document to gist", is_error=True
-            )
+            self._show_notification("Select a document to gist", is_error=True)
             return
 
         if not HAS_DOCS or not doc_db:
-            self._show_notification(
-                "Documents not available", is_error=True
-            )
+            self._show_notification("Documents not available", is_error=True)
             return
 
         try:
@@ -900,15 +904,11 @@ class ActivityView(HelpMixin, Widget):
             return
 
         if item.item_type != "agent_execution":
-            self._show_notification(
-                "Can only dismiss executions", is_error=True
-            )
+            self._show_notification("Can only dismiss executions", is_error=True)
             return
 
         if item.status != "running":
-            self._show_notification(
-                "Execution is not running", is_error=True
-            )
+            self._show_notification("Execution is not running", is_error=True)
             return
 
         try:
@@ -919,9 +919,7 @@ class ActivityView(HelpMixin, Widget):
 
             execution = get_execution(item.item_id)
             if not execution:
-                self._show_notification(
-                    f"Execution #{item.item_id} not found", is_error=True
-                )
+                self._show_notification(f"Execution #{item.item_id} not found", is_error=True)
                 return
 
             if execution.pid:
@@ -934,18 +932,14 @@ class ActivityView(HelpMixin, Widget):
                     pass
 
             update_execution_status(item.item_id, "failed", exit_code=-6)
-            self._show_notification(
-                f"Dismissed execution #{item.item_id}"
-            )
+            self._show_notification(f"Dismissed execution #{item.item_id}")
             await self._refresh_data()
 
         except Exception as e:
             logger.error(f"Error dismissing execution: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
 
-    def _show_notification(
-        self, message: str, is_error: bool = False
-    ) -> None:
+    def _show_notification(self, message: str, is_error: bool = False) -> None:
         """Show a notification message."""
         self.notification_is_error = is_error
         self.notification_text = message
@@ -978,7 +972,5 @@ class ActivityView(HelpMixin, Widget):
                 self._show_notification(f"Showing: {title[:40]}")
                 return True
 
-        self._show_notification(
-            f"Document #{doc_id} not found", is_error=True
-        )
+        self._show_notification(f"Document #{doc_id} not found", is_error=True)
         return False

@@ -17,6 +17,7 @@ from emdx.ui.activity.activity_data import (
 )
 from emdx.ui.activity.activity_items import (
     TASK_STATUS_ICONS,
+    ActivityItem,
     AgentExecutionItem,
     DocumentItem,
     TaskItem,
@@ -360,3 +361,110 @@ class TestDeduplication:
         task_items = [i for i in items if i.item_type == "task"]
         assert task_items[0].item_id == 2  # high priority first
         assert task_items[1].item_id == 1
+
+
+# ---------------------------------------------------------------------------
+# Section visibility toggle tests
+# ---------------------------------------------------------------------------
+
+
+class TestSectionVisibility:
+    """Tests for _filter_by_visibility in ActivityView."""
+
+    def _make_mixed_items(self) -> list[ActivityItem]:
+        """Create a mixed list with items in all three tiers."""
+        return [
+            make_exec_item(id=1, status="running"),  # RUNNING tier
+            make_task_item(id=10, status="open"),  # TASKS tier
+            make_task_item(id=11, status="active"),  # TASKS tier
+            make_doc_item(id=100),  # RECENT tier
+            make_task_item(id=12, status="done"),  # RECENT tier
+        ]
+
+    def test_all_visible_by_default(self) -> None:
+        """All sections visible returns all items."""
+        from emdx.ui.activity.activity_view import ActivityView
+
+        view = ActivityView.__new__(ActivityView)
+        view._show_running = True
+        view._show_tasks = True
+        view._show_docs = True
+
+        items = self._make_mixed_items()
+        filtered = view._filter_by_visibility(items)
+        assert len(filtered) == 5
+
+    def test_hide_running(self) -> None:
+        """Hiding RUNNING removes running executions."""
+        from emdx.ui.activity.activity_view import ActivityView
+
+        view = ActivityView.__new__(ActivityView)
+        view._show_running = False
+        view._show_tasks = True
+        view._show_docs = True
+
+        items = self._make_mixed_items()
+        filtered = view._filter_by_visibility(items)
+        assert len(filtered) == 4
+        assert all(
+            not (i.item_type == "agent_execution" and i.status == "running") for i in filtered
+        )
+
+    def test_hide_tasks(self) -> None:
+        """Hiding TASKS removes open/active tasks."""
+        from emdx.ui.activity.activity_view import ActivityView
+
+        view = ActivityView.__new__(ActivityView)
+        view._show_running = True
+        view._show_tasks = False
+        view._show_docs = True
+
+        items = self._make_mixed_items()
+        filtered = view._filter_by_visibility(items)
+        # Should remove 2 task-tier items (open + active), keep done task (RECENT)
+        assert len(filtered) == 3
+        types = [(i.item_type, i.status) for i in filtered]
+        assert ("task", "open") not in types
+        assert ("task", "active") not in types
+
+    def test_hide_docs(self) -> None:
+        """Hiding RECENT removes documents and completed items."""
+        from emdx.ui.activity.activity_view import ActivityView
+
+        view = ActivityView.__new__(ActivityView)
+        view._show_running = True
+        view._show_tasks = True
+        view._show_docs = False
+
+        items = self._make_mixed_items()
+        filtered = view._filter_by_visibility(items)
+        # Should remove doc and done task (both in RECENT tier)
+        assert len(filtered) == 3
+        assert all(i.item_type != "document" for i in filtered)
+
+    def test_hide_all(self) -> None:
+        """Hiding all sections returns empty list."""
+        from emdx.ui.activity.activity_view import ActivityView
+
+        view = ActivityView.__new__(ActivityView)
+        view._show_running = False
+        view._show_tasks = False
+        view._show_docs = False
+
+        items = self._make_mixed_items()
+        filtered = view._filter_by_visibility(items)
+        assert len(filtered) == 0
+
+    def test_only_tasks_visible(self) -> None:
+        """Showing only TASKS isolates the task queue."""
+        from emdx.ui.activity.activity_view import ActivityView
+
+        view = ActivityView.__new__(ActivityView)
+        view._show_running = False
+        view._show_tasks = True
+        view._show_docs = False
+
+        items = self._make_mixed_items()
+        filtered = view._filter_by_visibility(items)
+        assert len(filtered) == 2
+        assert all(i.item_type == "task" and i.status in ("open", "active") for i in filtered)
