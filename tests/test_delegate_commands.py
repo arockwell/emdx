@@ -9,7 +9,6 @@ Tests cover:
 - Error handling and edge cases
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -21,55 +20,17 @@ from emdx.commands.delegate import (
     _extract_pr_url,
     _load_doc_context,
     _make_branch_instruction,
-    _make_output_file_id,
-    _make_output_file_path,
     _make_pr_instruction,
     _resolve_task,
     _run_parallel,
     _run_single,
-    _save_output_fallback,
     delegate,
 )
-from emdx.services.unified_executor import ExecutionResult
 from emdx.utils.git import generate_delegate_branch_name, slugify_for_branch
 
 # =============================================================================
 # Fixtures
 # =============================================================================
-
-
-@pytest.fixture
-def mock_executor_success():
-    """Create a mock UnifiedExecutor that returns success."""
-    with patch("emdx.commands.delegate.UnifiedExecutor") as mock_cls:
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=1,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=42,
-            output_content="Test output content",
-            tokens_used=1000,
-            cost_usd=0.05,
-            execution_time_ms=5000,
-        )
-        mock_cls.return_value = mock_executor
-        yield mock_executor
-
-
-@pytest.fixture
-def mock_executor_failure():
-    """Create a mock UnifiedExecutor that returns failure."""
-    with patch("emdx.commands.delegate.UnifiedExecutor") as mock_cls:
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=False,
-            execution_id=1,
-            log_file=Path("/tmp/test.log"),
-            error_message="Task execution failed",
-        )
-        mock_cls.return_value = mock_executor
-        yield mock_executor
 
 
 @pytest.fixture
@@ -86,14 +47,16 @@ def mock_get_document():
 
 @pytest.fixture
 def mock_task_helpers():
-    """Mock task creation and update helpers."""
+    """Mock task creation, update, and execution helpers."""
     with (
         patch("emdx.commands.delegate._safe_create_task") as mock_create,
         patch("emdx.commands.delegate._safe_update_task") as mock_update,
-        patch("emdx.commands.delegate._safe_update_execution") as mock_update_exec,
+        patch("emdx.commands.delegate._safe_create_execution") as mock_create_exec,
+        patch("emdx.commands.delegate._safe_update_execution_status") as mock_update_exec,
     ):
         mock_create.return_value = 1
-        yield mock_create, mock_update, mock_update_exec
+        mock_create_exec.return_value = 100
+        yield mock_create, mock_update, mock_create_exec, mock_update_exec
 
 
 @pytest.fixture
@@ -105,6 +68,24 @@ def mock_worktree():
     ):
         mock_create.return_value = ("/tmp/worktree-123", "worktree-123")
         yield mock_create, mock_cleanup
+
+
+def _mock_subprocess_success(doc_id: int = 42) -> MagicMock:
+    """Create a mock subprocess.run result for a successful delegate."""
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = f"Task completed. Output saved as doc #{doc_id}."
+    mock_result.stderr = ""
+    return mock_result
+
+
+def _mock_subprocess_failure(error: str = "Task failed") -> MagicMock:
+    """Create a mock subprocess.run result for a failed delegate."""
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stdout = ""
+    mock_result.stderr = error
+    return mock_result
 
 
 # =============================================================================
@@ -280,28 +261,29 @@ class TestLoadDocContext:
 
 
 class TestRunSingle:
-    """Tests for _run_single — runs a single task via UnifiedExecutor."""
+    """Tests for _run_single — runs a single task via subprocess + hooks."""
 
     @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._safe_update_execution")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate.subprocess")
     def test_successful_single_task(
-        self, mock_executor_cls, mock_create, mock_update, mock_update_exec, mock_print
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
     ):
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=42,
-            tokens_used=1000,
-            cost_usd=0.05,
-            execution_time_ms=5000,
-        )
-        mock_executor_cls.return_value = mock_executor
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
 
         result = _run_single(
             prompt="test task",
@@ -317,19 +299,20 @@ class TestRunSingle:
         mock_update.assert_called()
         mock_print.assert_called_once_with(42)
 
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_failed_single_task(self, mock_executor_cls, mock_create, mock_update):
+    @patch("emdx.commands.delegate.subprocess")
+    def test_failed_single_task(
+        self, mock_subprocess, mock_create, mock_update, mock_create_exec, mock_update_exec,
+        mock_read_batch,
+    ):
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=False,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            error_message="Task failed",
-        )
-        mock_executor_cls.return_value = mock_executor
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_failure("Task failed")
+        mock_read_batch.return_value = None
 
         result = _run_single(
             prompt="failing task",
@@ -341,27 +324,33 @@ class TestRunSingle:
 
         assert result.doc_id is None
         assert result.task_id == 1
+        assert not result.success
         # Check task was updated with failed status
         mock_update.assert_called()
         calls = mock_update.call_args_list
         assert any("failed" in str(c) for c in calls)
 
     @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate.subprocess")
     def test_single_task_with_pr_flag(
-        self, mock_executor_cls, mock_create, mock_update, mock_print
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
     ):
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=42,
-        )
-        mock_executor_cls.return_value = mock_executor
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="fix bug",
@@ -372,31 +361,33 @@ class TestRunSingle:
             pr=True,
         )
 
-        # Verify PR instruction was included in the config
-        call_args = mock_executor.execute.call_args
-        config = call_args[0][0]
-        assert (
-            "pull request" in config.output_instruction.lower()
-            or "gh pr create" in config.output_instruction
-        )
+        # Verify PR instruction was included in the prompt piped to subprocess
+        call_args = mock_subprocess.run.call_args
+        prompt_input = call_args[1]["input"]
+        assert "pull request" in prompt_input.lower() or "gh pr create" in prompt_input
 
     @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate.subprocess")
     def test_single_task_with_pr_draft_true(
-        self, mock_executor_cls, mock_create, mock_update, mock_print
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
     ):
-        """Test that pr=True with draft=True includes --draft flag."""
+        """Test that pr=True with draft=True includes --draft flag in prompt."""
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=42,
-        )
-        mock_executor_cls.return_value = mock_executor
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="fix bug",
@@ -408,27 +399,32 @@ class TestRunSingle:
             draft=True,
         )
 
-        call_args = mock_executor.execute.call_args
-        config = call_args[0][0]
-        assert "--draft" in config.output_instruction
+        call_args = mock_subprocess.run.call_args
+        prompt_input = call_args[1]["input"]
+        assert "--draft" in prompt_input
 
     @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate.subprocess")
     def test_single_task_with_pr_draft_false(
-        self, mock_executor_cls, mock_create, mock_update, mock_print
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
     ):
         """Test that pr=True with draft=False omits --draft flag."""
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=42,
-        )
-        mock_executor_cls.return_value = mock_executor
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="fix bug",
@@ -440,27 +436,32 @@ class TestRunSingle:
             draft=False,
         )
 
-        call_args = mock_executor.execute.call_args
-        config = call_args[0][0]
-        assert "--draft" not in config.output_instruction
-        assert "gh pr create" in config.output_instruction
+        call_args = mock_subprocess.run.call_args
+        prompt_input = call_args[1]["input"]
+        assert "--draft" not in prompt_input
+        assert "gh pr create" in prompt_input
 
     @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
+    @patch("emdx.commands.delegate.subprocess")
     def test_single_task_with_working_dir(
-        self, mock_executor_cls, mock_create, mock_update, mock_print
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
     ):
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=42,
-        )
-        mock_executor_cls.return_value = mock_executor
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="test task",
@@ -471,10 +472,9 @@ class TestRunSingle:
             working_dir="/custom/path",
         )
 
-        # Verify working_dir was passed to ExecutionConfig
-        call_args = mock_executor.execute.call_args
-        config = call_args[0][0]
-        assert config.working_dir == "/custom/path"
+        # Verify working_dir was passed to subprocess.run
+        call_args = mock_subprocess.run.call_args
+        assert call_args[1]["cwd"] == "/custom/path"
 
 
 # =============================================================================
@@ -485,26 +485,17 @@ class TestRunSingle:
 class TestRunParallel:
     """Tests for _run_parallel — runs multiple tasks in parallel."""
 
+    @patch("emdx.commands.delegate._run_single")
     @patch("emdx.commands.delegate._print_doc_content")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_parallel_tasks_success(self, mock_executor_cls, mock_create, mock_update, mock_print):
+    def test_parallel_tasks_success(self, mock_create, mock_update, mock_print, mock_run_single):
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        # Each call returns a different doc_id
-        mock_executor.execute.side_effect = [
-            ExecutionResult(
-                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30
-            ),  # noqa: E501
+        mock_run_single.side_effect = [
+            SingleResult(doc_id=10, task_id=1),
+            SingleResult(doc_id=20, task_id=2),
+            SingleResult(doc_id=30, task_id=3),
         ]
-        mock_executor_cls.return_value = mock_executor
 
         doc_ids = _run_parallel(
             tasks=["task1", "task2", "task3"],
@@ -519,33 +510,23 @@ class TestRunParallel:
         assert len(doc_ids) == 3
         assert set(doc_ids) == {10, 20, 30}
 
+    @patch("emdx.commands.delegate._run_single")
     @patch("emdx.commands.delegate.get_document")
     @patch("emdx.commands.delegate._print_doc_content")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
     def test_parallel_with_synthesize(
-        self, mock_executor_cls, mock_create, mock_update, mock_print, mock_get_doc
+        self, mock_create, mock_update, mock_print, mock_get_doc, mock_run_single
     ):
         mock_create.return_value = 1
         mock_get_doc.return_value = {"id": 10, "title": "Test", "content": "Content"}
-        mock_executor = MagicMock()
         # 3 tasks + 1 synthesis
-        mock_executor.execute.side_effect = [
-            ExecutionResult(
-                success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=2, log_file=Path("/tmp/2.log"), output_doc_id=20
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=3, log_file=Path("/tmp/3.log"), output_doc_id=30
-            ),  # noqa: E501
-            ExecutionResult(
-                success=True, execution_id=4, log_file=Path("/tmp/4.log"), output_doc_id=99
-            ),  # synthesis  # noqa: E501
+        mock_run_single.side_effect = [
+            SingleResult(doc_id=10, task_id=1),
+            SingleResult(doc_id=20, task_id=2),
+            SingleResult(doc_id=30, task_id=3),
+            SingleResult(doc_id=99, task_id=4),  # synthesis
         ]
-        mock_executor_cls.return_value = mock_executor
 
         doc_ids = _run_parallel(
             tasks=["task1", "task2", "task3"],
@@ -561,16 +542,14 @@ class TestRunParallel:
         assert 99 in doc_ids
         assert len(doc_ids) == 4
 
+    @patch("emdx.commands.delegate._run_single")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_parallel_all_failures_exits(self, mock_executor_cls, mock_create, mock_update):
+    def test_parallel_all_failures_exits(self, mock_create, mock_update, mock_run_single):
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=False, execution_id=1, log_file=Path("/tmp/1.log"), error_message="Failed"
+        mock_run_single.return_value = SingleResult(
+            task_id=1, success=False, error_message="Failed"
         )
-        mock_executor_cls.return_value = mock_executor
 
         with pytest.raises(typer.Exit):
             _run_parallel(
@@ -583,28 +562,24 @@ class TestRunParallel:
                 quiet=True,
             )
 
+    @patch("emdx.commands.delegate._run_single")
     @patch("emdx.utils.git.cleanup_worktree")
     @patch("emdx.utils.git.create_worktree")
     @patch("emdx.commands.delegate._print_doc_content")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
     def test_parallel_with_worktree(
         self,
-        mock_executor_cls,
         mock_create,
         mock_update,
         mock_print,
         mock_create_worktree,
         mock_cleanup_worktree,
+        mock_run_single,
     ):
         mock_create.return_value = 1
         mock_create_worktree.return_value = ("/tmp/wt", "branch")
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True, execution_id=1, log_file=Path("/tmp/1.log"), output_doc_id=10
-        )
-        mock_executor_cls.return_value = mock_executor
+        mock_run_single.return_value = SingleResult(doc_id=10, task_id=1)
 
         _run_parallel(
             tasks=["task1", "task2"],
@@ -1254,174 +1229,35 @@ class TestErrorHandling:
 
 
 # =============================================================================
-# Tests for output file helpers (kink 1 — file-based output fallback)
+# Tests for hooks integration (batch file doc ID collection)
 # =============================================================================
 
 
-class TestOutputFileId:
-    """Tests for _make_output_file_id — generates traceable IDs for output files."""
+class TestRunSingleHooksIntegration:
+    """Tests for _run_single hooks integration (batch file doc ID)."""
 
-    def test_uses_worktree_basename(self):
-        """When working_dir is a worktree path, extract its basename."""
-        result = _make_output_file_id("/Users/alex/dev/worktrees/emdx-worktree-123-456-789", seq=1)
-        assert result == "emdx-worktree-123-456-789"
-
-    def test_falls_back_to_pid_seq_timestamp(self):
-        """When working_dir is not a worktree path, use pid-seq-timestamp."""
-        result = _make_output_file_id("/some/regular/path", seq=5)
-        parts = result.split("-")
-        assert len(parts) == 3
-        # First part is PID (int), second is seq, third is timestamp
-        assert parts[1] == "5"
-
-    def test_none_working_dir(self):
-        """When working_dir is None, use pid-seq-timestamp."""
-        result = _make_output_file_id(None, seq=0)
-        parts = result.split("-")
-        assert len(parts) == 3
-        assert parts[1] == "0"
-
-
-class TestMakeOutputFilePath:
-    """Tests for _make_output_file_path — builds /tmp path for output file."""
-
-    def test_path_in_tmp(self):
-        path = _make_output_file_path("emdx-worktree-123-456-789")
-        assert str(path).startswith("/tmp/")
-        assert "emdx-delegate-" in str(path)
-
-    def test_md_extension(self):
-        path = _make_output_file_path("test-id")
-        assert str(path).endswith(".md")
-
-    def test_contains_file_id(self):
-        path = _make_output_file_path("my-unique-id")
-        assert "my-unique-id" in str(path)
-
-
-class TestSaveOutputFallback:
-    """Tests for _save_output_fallback — three-tier fallback save."""
-
-    @patch("emdx.commands.delegate.save_document")
-    def test_prefers_file_over_content(self, mock_save, tmp_path):
-        """File content takes priority over output_content."""
-        output_file = tmp_path / "output.md"
-        output_file.write_text("file content")
-        mock_save.return_value = 42
-
-        doc_id = _save_output_fallback(
-            output_file=output_file,
-            output_content="captured content",
-            title="Test",
-            tags=["test"],
-        )
-
-        assert doc_id == 42
-        mock_save.assert_called_once()
-        call_kwargs = mock_save.call_args[1]
-        assert call_kwargs["content"] == "file content"
-
-    @patch("emdx.commands.delegate.save_document")
-    def test_falls_back_to_content(self, mock_save, tmp_path):
-        """When file doesn't exist, falls back to output_content."""
-        output_file = tmp_path / "nonexistent.md"
-        mock_save.return_value = 43
-
-        doc_id = _save_output_fallback(
-            output_file=output_file,
-            output_content="captured content",
-            title="Test",
-            tags=["test"],
-        )
-
-        assert doc_id == 43
-        call_kwargs = mock_save.call_args[1]
-        assert call_kwargs["content"] == "captured content"
-
-    def test_returns_none_when_nothing_available(self, tmp_path):
-        """When no file and no content, returns None without saving."""
-        output_file = tmp_path / "nonexistent.md"
-
-        doc_id = _save_output_fallback(
-            output_file=output_file,
-            output_content=None,
-            title="Test",
-            tags=["test"],
-        )
-
-        assert doc_id is None
-
-    def test_returns_none_for_empty_content(self, tmp_path):
-        """Whitespace-only content is treated as empty."""
-        output_file = tmp_path / "nonexistent.md"
-
-        doc_id = _save_output_fallback(
-            output_file=output_file,
-            output_content="   \n  ",
-            title="Test",
-            tags=["test"],
-        )
-
-        assert doc_id is None
-
-    @patch("emdx.commands.delegate.save_document")
-    def test_skips_empty_file(self, mock_save, tmp_path):
-        """Empty file is skipped, falls back to content."""
-        output_file = tmp_path / "empty.md"
-        output_file.write_text("")
-        mock_save.return_value = 44
-
-        doc_id = _save_output_fallback(
-            output_file=output_file,
-            output_content="fallback content",
-            title="Test",
-            tags=["test"],
-        )
-
-        assert doc_id == 44
-        call_kwargs = mock_save.call_args[1]
-        assert call_kwargs["content"] == "fallback content"
-
-    @patch("emdx.commands.delegate.save_document")
-    def test_handles_save_failure(self, mock_save, tmp_path):
-        """When save_document raises, returns None gracefully."""
-        output_file = tmp_path / "output.md"
-        output_file.write_text("good content")
-        mock_save.side_effect = Exception("DB error")
-
-        doc_id = _save_output_fallback(
-            output_file=output_file,
-            output_content=None,
-            title="Test",
-            tags=["test"],
-        )
-
-        assert doc_id is None
-
-
-class TestRunSingleFallback:
-    """Tests for _run_single fallback integration."""
-
-    @patch("emdx.commands.delegate._save_output_fallback")
     @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_fallback_called_when_no_doc_id(
-        self, mock_executor_cls, mock_create, mock_update, mock_print, mock_fallback
+    @patch("emdx.commands.delegate.subprocess")
+    def test_doc_id_from_batch_file(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
     ):
-        """When executor returns no doc_id, fallback is attempted."""
+        """When hook writes doc ID to batch file, _run_single picks it up."""
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=None,
-            output_content="some captured output",
-        )
-        mock_executor_cls.return_value = mock_executor
-        mock_fallback.return_value = 99
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = 99
 
         result = _run_single(
             prompt="test task",
@@ -1431,57 +1267,28 @@ class TestRunSingleFallback:
             quiet=False,
         )
 
-        mock_fallback.assert_called_once()
         assert result.doc_id == 99
 
-    @patch("emdx.commands.delegate._save_output_fallback")
-    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_fallback_not_called_when_doc_id_present(
-        self, mock_executor_cls, mock_create, mock_update, mock_print, mock_fallback
+    @patch("emdx.commands.delegate.subprocess")
+    def test_no_doc_id_when_hook_didnt_save(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
     ):
-        """When executor returns a doc_id, fallback is NOT called."""
+        """When hook doesn't write to batch file, doc_id is None."""
         mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=42,
-        )
-        mock_executor_cls.return_value = mock_executor
-
-        result = _run_single(
-            prompt="test task",
-            tags=[],
-            title=None,
-            model=None,
-            quiet=False,
-        )
-
-        mock_fallback.assert_not_called()
-        assert result.doc_id == 42
-
-    @patch("emdx.commands.delegate._save_output_fallback")
-    @patch("emdx.commands.delegate._safe_update_task")
-    @patch("emdx.commands.delegate._safe_create_task")
-    @patch("emdx.commands.delegate.UnifiedExecutor")
-    def test_fallback_returns_none_still_fails(
-        self, mock_executor_cls, mock_create, mock_update, mock_fallback
-    ):
-        """When fallback also returns None, doc_id stays None."""
-        mock_create.return_value = 1
-        mock_executor = MagicMock()
-        mock_executor.execute.return_value = ExecutionResult(
-            success=True,
-            execution_id=100,
-            log_file=Path("/tmp/test.log"),
-            output_doc_id=None,
-        )
-        mock_executor_cls.return_value = mock_executor
-        mock_fallback.return_value = None
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success()
+        mock_read_batch.return_value = None
 
         result = _run_single(
             prompt="test task",
