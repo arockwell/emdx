@@ -102,6 +102,12 @@ emdx find --ask "What's our caching strategy?"
 
 # Context retrieval for piping to claude (replaces old `emdx ai context`)
 emdx find --context "How does auth work?" | claude
+
+# Show only wiki articles
+emdx find "authentication" --wiki
+
+# Show all document types (user docs + wiki articles)
+emdx find "auth" --all-types
 ```
 
 **Options:**
@@ -125,6 +131,8 @@ emdx find --context "How does auth work?" | claude
 - `--similar INTEGER` - Find documents similar to this doc ID
 - `--ask` - Answer the query using RAG (retrieves context + LLM)
 - `--context` - Output retrieved context as plain text (for piping to claude)
+- `--wiki` - Show only wiki articles (`doc_type='wiki'`)
+- `--all-types` - Show all document types (user, wiki, etc.)
 
 ### **emdx view**
 View document content.
@@ -386,28 +394,158 @@ Show execution statistics.
 emdx delegate stats
 ```
 
+---
+
 ## 🧹 **Maintenance Commands**
 
 ### **emdx maintain**
 System maintenance, cleanup, embedding index, and document linking.
 
 #### **emdx maintain cleanup**
+Clean up system resources used by delegate executions (branches, processes, stuck DB records).
+
 ```bash
 # Show what cleanup would do (dry run)
-emdx maintain cleanup
+emdx maintain cleanup --all
 
 # Actually perform cleanup
-emdx maintain cleanup --execute
+emdx maintain cleanup --all --execute
 
-# Clean up executions only
+# Clean old execution branches only
+emdx maintain cleanup --branches --execute
+
+# Force delete unmerged branches too
+emdx maintain cleanup --branches --force --execute
+
+# Kill zombie processes
+emdx maintain cleanup --processes --execute
+
+# Clean stuck execution records
 emdx maintain cleanup --executions --execute
 
-# Clean up orphaned files
-emdx maintain cleanup --files --execute
-
-# Full system cleanup
-emdx maintain cleanup --all --execute
+# Custom age threshold for branches (default: 7 days)
+emdx maintain cleanup --branches --age 14 --execute
 ```
+
+**Options:**
+- `--branches, -b` - Clean up old execution branches
+- `--processes, -p` - Clean up zombie processes
+- `--executions, -e` - Clean up stuck execution records
+- `--all, -a` - Clean up everything
+- `--execute / --dry-run` - Execute actions (default: dry run)
+- `--force, -f` - Force delete unmerged branches
+- `--age INTEGER` - Only clean branches older than N days (default: 7)
+- `--max-runtime INTEGER` - Max process runtime in hours before considering stuck (default: 2)
+- `--timeout INTEGER` - Minutes after which to consider execution stale (default: 30)
+
+#### **emdx maintain cleanup-dirs**
+Clean up temporary execution directories in `/tmp`.
+
+```bash
+# Show what would be cleaned (dry run)
+emdx maintain cleanup-dirs
+
+# Actually clean directories
+emdx maintain cleanup-dirs --execute
+
+# Clean dirs older than 48 hours (default: 24)
+emdx maintain cleanup-dirs --age 48 --execute
+```
+
+**Options:**
+- `--execute / --dry-run` - Execute actions (default: dry run)
+- `--age INTEGER` - Clean directories older than N hours (default: 24)
+
+#### **emdx maintain analyze**
+Read-only analysis of your knowledge base — discover patterns, issues, and improvement opportunities.
+
+```bash
+# Show health overview with recommendations
+emdx maintain analyze
+
+# Detailed health metrics
+emdx maintain analyze --health
+
+# Find duplicate documents
+emdx maintain analyze --duplicates
+
+# Find similar documents (candidates for merging)
+emdx maintain analyze --similar
+
+# Find empty documents
+emdx maintain analyze --empty
+
+# Analyze tag coverage and patterns
+emdx maintain analyze --tags
+
+# Show project-level analysis
+emdx maintain analyze --projects
+
+# Run all analyses
+emdx maintain analyze --all
+
+# Filter by project
+emdx maintain analyze --project myapp
+
+# Output as JSON
+emdx maintain analyze --json
+```
+
+**Options:**
+- `--health, -h` - Show detailed health metrics
+- `--duplicates, -d` - Find duplicate documents
+- `--similar, -s` - Find similar documents for merging
+- `--empty, -e` - Find empty documents
+- `--tags, -t` - Analyze tag coverage and patterns
+- `--projects, -p` - Show project-level analysis
+- `--all, -a` - Run all analyses
+- `--project TEXT` - Filter by specific project
+- `--json` - Output results as JSON
+
+#### **emdx maintain wikify**
+Create title-match links between documents (auto-wikification). Scans document content for mentions of other documents' titles and creates links. No AI or embeddings required.
+
+```bash
+# Wikify a single document
+emdx maintain wikify 42
+
+# Backfill all documents
+emdx maintain wikify --all
+
+# Preview matches without creating links
+emdx maintain wikify 42 --dry-run
+emdx maintain wikify --all --dry-run
+```
+
+**Options:**
+- `--all` - Wikify all documents
+- `--dry-run` - Show matches without creating links
+
+#### **emdx maintain entities**
+Extract entities (key concepts, technical terms, proper nouns) from markdown structure and cross-reference them across documents to create links. No AI required.
+
+```bash
+# Extract entities + create links for one document
+emdx maintain entities 42
+
+# Backfill all documents
+emdx maintain entities --all
+
+# Extract only, no cross-linking
+emdx maintain entities 42 --no-wikify
+
+# Clean noisy entities and re-extract with current filters
+emdx maintain entities --cleanup
+
+# Clear entity-match links before regenerating
+emdx maintain entities --all --rebuild
+```
+
+**Options:**
+- `--all` - Extract entities for all documents
+- `--wikify / --no-wikify` - Also create entity-match links (default: wikify)
+- `--rebuild` - Clear entity-match links before regenerating
+- `--cleanup` - Remove noisy entities and re-extract with current filters
 
 #### **emdx maintain compact**
 AI-powered document synthesis to reduce knowledge base sprawl (moved from top-level `compact`).
@@ -488,6 +626,68 @@ Remove a link between two documents (moved from `emdx ai unlink`).
 
 ```bash
 emdx maintain unlink 42 57
+```
+
+#### **emdx maintain wiki**
+Auto-wiki generation system using Leiden community detection for topic clustering and AI for article generation.
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| `topics` | Discover topic clusters using Leiden community detection |
+| `status` | Show wiki generation status and statistics |
+| `generate` | Generate wiki articles from topic clusters |
+| `entities` | Browse entity index pages |
+| `list` | List generated wiki articles |
+| `runs` | List recent wiki generation runs |
+| `coverage` | Show which documents are NOT covered by any topic cluster |
+| `diff` | Show unified diff between previous and current article content |
+| `rate` | Rate a wiki article's quality (1-5 scale) |
+| `rename` | Rename a wiki topic (label, slug, and associated document title) |
+| `skip` | Skip a topic during wiki generation |
+| `unskip` | Reset a skipped topic back to active |
+| `pin` | Pin a topic so it always regenerates during wiki generation |
+| `unpin` | Reset a pinned topic back to active |
+
+```bash
+# Discover topic clusters
+emdx maintain wiki topics
+
+# Show wiki generation status
+emdx maintain wiki status
+
+# Generate wiki articles from clusters
+emdx maintain wiki generate
+
+# List generated wiki articles
+emdx maintain wiki list
+
+# Show which docs aren't covered by any topic
+emdx maintain wiki coverage
+
+# Show diff between previous and current article content
+emdx maintain wiki diff
+
+# Rate a wiki article (1-5 scale)
+emdx maintain wiki rate
+
+# Rename a topic
+emdx maintain wiki rename
+
+# Skip/unskip topics during generation
+emdx maintain wiki skip
+emdx maintain wiki unskip
+
+# Pin/unpin topics for forced regeneration
+emdx maintain wiki pin
+emdx maintain wiki unpin
+
+# Browse entity index pages
+emdx maintain wiki entities
+
+# List recent wiki generation runs
+emdx maintain wiki runs
 ```
 
 ## 📊 **Information Commands**
@@ -621,11 +821,10 @@ EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
 - `tag` (add, remove, list, rename, merge, batch) - Tag management
 - `briefing` - Activity summary
 - `gui`, `prime`, `status` - Interface and overview
-- `maintain` (cleanup, compact, index, link, unlink) - Maintenance
+- `maintain` (cleanup, compact, index, link, unlink, wikify, entities, analyze, wiki, stale) - Maintenance
 - `gist` - GitHub Gist integration
 - `exec` - Execution monitoring (read-only)
-- `task` (including `task epic`, `task cat`), `trash` - Organization commands
-- `stale` (list, touch) - Staleness tracking
+- `task` (including `task epic`, `task cat`, `task dep`, `task chain`, `task note`), `trash` - Organization commands
 
 **Error message:**
 When a disabled command is invoked, you'll see:
@@ -729,6 +928,18 @@ emdx delegate --doc 42
 emdx delegate --doc 42 "check for bugs" "review tests" "check docs"
 ```
 
+### Task Association
+
+Link a delegate execution to an existing task ID. This sets `EMDX_TASK_ID` so hooks can track the task lifecycle automatically.
+
+```bash
+# Associate with an existing task
+emdx delegate --task 42 "implement the feature"
+
+# Combine with other options
+emdx delegate --task 42 --pr "fix the bug from this task"
+```
+
 ### PR Creation
 
 Instruct the agent to create a PR after making code changes. `--pr` automatically creates an isolated git worktree.
@@ -767,6 +978,7 @@ emdx delegate --worktree --pr "fix X"
 | `--opus` | | Shortcut for `--model opus` |
 | `--quiet` | `-q` | Suppress metadata on stderr |
 | `--doc` | `-d` | Document ID to use as input context |
+| `--task` | | Existing task ID to associate with this delegate (sets `EMDX_TASK_ID`) |
 | `--pr` | | Instruct agent to create a PR (implies `--worktree`) |
 | `--branch` | | Commit and push to origin branch (implies `--worktree`, no PR) |
 | `--draft` / `--no-draft` | | Create PR as draft (default: `--no-draft`) |
@@ -936,6 +1148,66 @@ emdx task log 1
 # Add entry to task log
 emdx task log 1 "Started implementation"
 ```
+
+### Progress Notes
+
+Log a progress note on a task without changing its status. Shorthand for `emdx task log <id> "message"`.
+
+```bash
+emdx task note 42 "Root cause is in auth middleware"
+emdx task note TOOL-12 "Tried approach X, didn't work — switching to Y"
+```
+
+### Dependencies (`emdx task dep`)
+
+Manage task dependencies to control execution order. A task with unresolved dependencies is considered blocked and won't appear in `emdx task ready`.
+
+#### **emdx task dep add**
+
+```bash
+# Task 5 depends on task 3 (task 5 is blocked until task 3 is done)
+emdx task dep add 5 3
+
+# Works with display IDs
+emdx task dep add FEAT-5 3
+```
+
+#### **emdx task dep rm**
+
+```bash
+# Remove a dependency
+emdx task dep rm 5 3
+emdx task dep rm FEAT-5 3
+```
+
+#### **emdx task dep list**
+
+```bash
+# Show what a task depends on and what depends on it
+emdx task dep list 5
+emdx task dep list FEAT-5
+
+# Output as JSON
+emdx task dep list 5 --json
+```
+
+**Options:**
+- `--json` - Output as JSON
+
+### Dependency Chain (`emdx task chain`)
+
+Show the full dependency chain for a task. Traces upward through blockers and downward through dependents to show the complete dependency graph.
+
+```bash
+emdx task chain 5
+emdx task chain FEAT-5
+
+# Output as JSON
+emdx task chain 5 --json
+```
+
+**Options:**
+- `--json` - Output as JSON
 
 ### Deleting Tasks
 
