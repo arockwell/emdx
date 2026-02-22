@@ -40,8 +40,10 @@ Instrumentation to understand what the wiki pipeline is doing:
 - **Step-level timing** (#788) — each article records how long clustering, retrieval, and synthesis took.
 - **Quality ratings** (#789) — rate articles 1–5 to track which topics need attention.
 
-#### MkDocs wiki export (#807)
-`emdx wiki export mkdocs` dumps all wiki articles and entity pages into a directory structure ready for MkDocs. Generates `mkdocs.yml` with a nav tree built from topic clusters. `emdx wiki export build` runs `mkdocs build` and `emdx wiki export deploy` pushes to GitHub Pages.
+#### MkDocs wiki export (#807, #815)
+`emdx wiki export` dumps all wiki articles and entity pages into a directory structure ready for MkDocs. Generates `mkdocs.yml` with a nav tree built from topic clusters, and can build or deploy to GitHub Pages.
+
+New in #815: `--remote` deploys to a separate repo's gh-pages (so your work wiki doesn't push to your source repo). `--init-repo` bootstraps the output dir as a git repo — combine with `--github-repo` to create a private GitHub repo in one shot. `--site-url` and `--repo-url` configure the generated `mkdocs.yml` for custom domains and edit links.
 
 #### TUI epic/task display improvements (#799)
 The task browser now shows the relationship between epics and their child tasks visually:
@@ -52,8 +54,8 @@ The task browser now shows the relationship between epics and their child tasks 
 - **`e` key** to filter the view to a single epic, `*` to clear all filters.
 - Consistent visual treatment across both status grouping (default) and epic grouping (`g` key) modes.
 
-#### Two-pane QA with source panel (#806)
-The QA screen gained a right-side source panel. When an answer references a KB document, clicking or navigating to the reference shows the source content alongside the answer. Answers stream token-by-token for real-time feedback (#785).
+#### Two-pane QA with source panel (#806, #808)
+The QA screen gained a right-side source panel. When an answer references a KB document, clicking or navigating to the reference shows the source content alongside the answer. Document references are clickable — selecting one loads the source document into the panel (#808). Answers stream token-by-token for real-time feedback (#785).
 
 ### 🔧 Improvements
 
@@ -68,6 +70,12 @@ The QA screen gained a right-side source panel. When an answer references a KB d
 #### CLI cleanup (#781, #782)
 - **Removed recipe feature** (#782) — the experiment didn't stick; recipes were removed entirely to reduce surface area.
 - **Folded `stale` into `maintain`** (#781) — `emdx maintain stale` replaces the top-level `stale` command, continuing the consolidation from v0.19.
+
+#### Wiki topic auto-retitling (#814)
+When an article is generated, its H1 heading is often a better title than the original cluster label. Topic titles now auto-update from the article's H1 on generation, keeping navigation and search in sync with the actual content.
+
+#### Dead code removal (#809, #811, #812, #813)
+Four cleanup PRs removed ~1,900 lines of dead code across `config/`, `models/`, `database/`, `services/`, and `utils/` — unused constants, orphaned functions, and vestigial services left behind by earlier refactors.
 
 #### Epic sequence numbers (#776)
 Epics now get `KEY-N` sequence numbers just like tasks. The first `FEAT` epic is `FEAT-1`, the second `FEAT-2`, etc.
