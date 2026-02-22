@@ -1399,6 +1399,9 @@ def entities_command(
     rebuild: bool = typer.Option(
         False, "--rebuild", help="Clear entity-match links before regenerating"
     ),
+    cleanup: bool = typer.Option(
+        False, "--cleanup", help="Remove noisy entities and re-extract with current filters"
+    ),
 ) -> None:
     """Extract entities from documents and create entity-match links.
 
@@ -1411,12 +1414,40 @@ def entities_command(
         emdx maintain entities 42              # Extract + link one document
         emdx maintain entities --all           # Backfill all documents
         emdx maintain entities 42 --no-wikify  # Extract only, no linking
+        emdx maintain entities --cleanup       # Clean noise + re-extract
     """
     from ..services.entity_service import (
+        cleanup_noisy_entities,
         entity_match_wikify,
         entity_wikify_all,
         extract_and_save_entities,
     )
+
+    if cleanup:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Cleaning noisy entities & re-extracting...", total=None)
+            deleted, re_extracted = cleanup_noisy_entities()
+            progress.update(task, completed=True)
+        console.print(
+            f"[green]Cleaned up entities, re-extracted for {re_extracted} documents[/green]"
+        )
+        if wikify:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Rebuilding entity-match links...", total=None)
+                total_entities, total_links, docs = entity_wikify_all(rebuild=True)
+                progress.update(task, completed=True)
+            console.print(
+                f"[green]Created {total_links} entity-match links across {docs} documents[/green]"
+            )
+        return
 
     if all_docs:
         if wikify:
