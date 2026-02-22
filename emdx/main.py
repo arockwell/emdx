@@ -240,6 +240,13 @@ def main(
 # Known subcommands of `emdx tag` — used for shorthand routing
 _TAG_SUBCOMMANDS = {"add", "remove", "list", "rename", "merge", "batch", "--help", "-h", "help"}
 
+# Agent-friendly command aliases — map common agent mistakes to correct commands
+# Format: "alias" → replacement argv tokens
+_COMMAND_ALIASES: dict[str, list[str]] = {
+    "search": ["find"],
+    "restore": ["trash", "restore"],
+}
+
 
 def run() -> None:
     """Entry point for the CLI.
@@ -252,6 +259,10 @@ def run() -> None:
     Supports `emdx tag 42 active` shorthand for `emdx tag add 42 active`:
         When `tag` is followed by something that is NOT a known subcommand
         (i.e. a doc ID or flag), insert `add` automatically.
+
+    Supports agent-friendly command aliases:
+        emdx search query   → emdx find query
+        emdx restore 42     → emdx trash restore 42
     """
     import sys
 
@@ -259,6 +270,9 @@ def run() -> None:
     # e.g., 'emdx save help' becomes 'emdx save --help'
     if len(sys.argv) >= 2 and sys.argv[-1] == "help":
         sys.argv[-1] = "--help"
+
+    # Agent-friendly aliases: `emdx search` → `emdx find`, etc.
+    _rewrite_command_aliases(sys.argv)
 
     # Shorthand: `emdx tag 42 active` → `emdx tag add 42 active`
     # When the first arg after `tag` is not a known subcommand, insert `add`.
@@ -289,6 +303,35 @@ def _rewrite_tag_shorthand(argv: list[str]) -> None:
         # Not a known subcommand — insert 'add' so `emdx tag 42 active`
         # becomes `emdx tag add 42 active`
         argv.insert(next_idx, "add")
+
+
+def _rewrite_command_aliases(argv: list[str]) -> None:
+    """Rewrite agent-friendly command aliases to their canonical forms.
+
+    Handles global flags (--verbose, --quiet, etc.) that may appear before the command.
+    Mutates argv in-place.
+
+    Aliases:
+        emdx search query    → emdx find query
+        emdx restore 42      → emdx trash restore 42
+    """
+    # Find the first positional argument (skip program name and global flags)
+    cmd_idx = None
+    for i in range(1, len(argv)):
+        token = argv[i]
+        if token.startswith("-"):
+            # Skip flags and their values (e.g., --db-url VALUE)
+            continue
+        cmd_idx = i
+        break
+
+    if cmd_idx is None:
+        return
+
+    command = argv[cmd_idx]
+    if command in _COMMAND_ALIASES:
+        replacement = _COMMAND_ALIASES[command]
+        argv[cmd_idx : cmd_idx + 1] = replacement
 
 
 if __name__ == "__main__":
