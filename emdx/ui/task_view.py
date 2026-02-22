@@ -226,7 +226,7 @@ class TaskView(Widget):
         self._tasks: list[TaskDict] = []
         self._tasks_by_status: dict[str, list[TaskDict]] = defaultdict(list)
         self._row_key_to_task: dict[str, TaskDict] = {}
-        self._epics: dict[str | None, EpicTaskDict] = {}
+        self._epics: dict[int, EpicTaskDict] = {}  # keyed by epic task ID
         self._filter_text: str = ""
         self._debounce_timer: Timer | None = None
         self._status_filter: set[str] | None = None  # None = show all
@@ -277,7 +277,7 @@ class TaskView(Widget):
         # Load epics for reference
         try:
             epics = list_epics()
-            self._epics = {e["epic_key"]: e for e in epics}
+            self._epics = {e["id"]: e for e in epics}
         except Exception as e:
             logger.error(f"Failed to load epics: {e}")
             self._epics = {}
@@ -364,8 +364,8 @@ class TaskView(Widget):
 
         # Show inline progress for epic tasks
         age_text = _format_time_short(task.get("created_at"))
-        if task.get("type") == "epic" and epic_key:
-            epic_data = self._epics.get(epic_key)
+        if task.get("type") == "epic":
+            epic_data = self._epics.get(task["id"])
             if epic_data:
                 done = epic_data.get("children_done", 0)
                 total = epic_data.get("child_count", 0)
@@ -451,7 +451,7 @@ class TaskView(Widget):
             # Render epic task as a selectable header row with progress
             if epic_key and epic_tasks:
                 epic_task = epic_tasks[0]
-                epic_data = self._epics.get(epic_key)
+                epic_data = self._epics.get(epic_task["id"])
                 if epic_data:
                     done = epic_data.get("children_done", 0)
                     total = epic_data.get("child_count", 0)
@@ -473,8 +473,11 @@ class TaskView(Widget):
                     key=row_key,
                 )
             elif epic_key:
-                # No epic task record, just a header
-                epic_data = self._epics.get(epic_key)
+                # No epic task record — find any epic with this key
+                epic_data = next(
+                    (e for e in self._epics.values() if e.get("epic_key") == epic_key),
+                    None,
+                )
                 if epic_data:
                     done = epic_data.get("children_done", 0)
                     total = epic_data.get("child_count", 0)
@@ -737,7 +740,8 @@ class TaskView(Widget):
         meta_parts.append(f"Status: [bold]{task['status']}[/bold]")
         meta_parts.append(f"Priority: {task['priority']}")
         if task.get("epic_key"):
-            epic = self._epics.get(task["epic_key"])
+            parent_id = task.get("parent_task_id")
+            epic = self._epics.get(parent_id) if parent_id else None
             if epic:
                 done = epic.get("children_done", 0)
                 total = epic.get("child_count", 0)
@@ -835,7 +839,7 @@ class TaskView(Widget):
 
         # Progress summary from cached epic data
         epic_key = task.get("epic_key")
-        epic_data = self._epics.get(epic_key) if epic_key else None
+        epic_data = self._epics.get(task["id"])
         if epic_data:
             done = epic_data.get("children_done", 0)
             total = epic_data.get("child_count", 0)
