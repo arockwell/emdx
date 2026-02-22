@@ -2926,6 +2926,81 @@ def wiki_include(
     print(f"Included #{doc_id} ({title}) in topic {topic_id}")
 
 
+@wiki_app.command(name="export")
+def wiki_export(
+    output_dir: Path = typer.Argument(..., help="Directory to write MkDocs site to"),
+    site_name: str = typer.Option(
+        "Knowledge Base Wiki", "--site-name", "-n", help="Site name for mkdocs.yml"
+    ),
+    build: bool = typer.Option(False, "--build", help="Run mkdocs build after export"),
+    deploy: bool = typer.Option(False, "--deploy", help="Run mkdocs gh-deploy after export"),
+) -> None:
+    """Export wiki articles as a MkDocs site.
+
+    Dumps all wiki articles and entity glossary pages as markdown files,
+    generates mkdocs.yml with Material theme, and optionally builds or
+    deploys to GitHub Pages.
+
+    Examples:
+        emdx maintain wiki export ./wiki-site
+        emdx maintain wiki export ./wiki-site --build
+        emdx maintain wiki export ./wiki-site --deploy
+        emdx maintain wiki export ./wiki-site -n "My Wiki"
+    """
+    from ..services.wiki_export_service import export_mkdocs
+
+    result = export_mkdocs(output_dir, site_name=site_name)
+
+    print(f"Exported to {result.output_dir}/")
+    print(f"  Articles:     {result.articles_exported}")
+    print(f"  Entity pages: {result.entity_pages_exported}")
+    print(f"  mkdocs.yml:   {'yes' if result.mkdocs_yml_generated else 'no'}")
+
+    if result.errors:
+        print(f"  Errors:       {len(result.errors)}")
+        for err in result.errors:
+            print(f"    - {err}")
+
+    if not build and not deploy:
+        print(f"\nTo preview: cd {output_dir} && mkdocs serve")
+        print(f"To build:   cd {output_dir} && mkdocs build")
+        print(f"To deploy:  cd {output_dir} && mkdocs gh-deploy")
+        return
+
+    # Check mkdocs is installed
+    import shutil
+
+    mkdocs_bin = shutil.which("mkdocs")
+    if not mkdocs_bin:
+        print("\nError: mkdocs not found. Install with: pip install mkdocs mkdocs-material")
+        raise typer.Exit(1)
+
+    if deploy:
+        print("\nRunning mkdocs gh-deploy...")
+        proc = subprocess.run(
+            ["mkdocs", "gh-deploy", "--force"],
+            cwd=str(output_dir),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            print(f"Error: mkdocs gh-deploy failed:\n{proc.stderr}")
+            raise typer.Exit(1)
+        print("Deployed to GitHub Pages")
+    elif build:
+        print("\nRunning mkdocs build...")
+        proc = subprocess.run(
+            ["mkdocs", "build"],
+            cwd=str(output_dir),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            print(f"Error: mkdocs build failed:\n{proc.stderr}")
+            raise typer.Exit(1)
+        print(f"Built to {output_dir}/site/")
+
+
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 
 # Register stale as a subcommand group of maintain
