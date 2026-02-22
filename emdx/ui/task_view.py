@@ -98,24 +98,6 @@ def _format_time_short(dt_str: str | None) -> str:
     return result.replace(" ago", "") if result else ""
 
 
-def _priority_str(priority: int) -> str:
-    """Return a short priority indicator."""
-    if priority <= 1:
-        return "!!!"
-    if priority <= 2:
-        return "!! "
-    return "   "
-
-
-def _priority_style(priority: int) -> str:
-    """Return a Rich style for a priority level."""
-    if priority <= 1:
-        return "bold red"
-    if priority <= 2:
-        return "yellow"
-    return "dim"
-
-
 def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -> str:
     """Strip the 'KEY-N: ' prefix from a title if it matches the epic."""
     if epic_key and epic_seq:
@@ -243,7 +225,6 @@ class TaskView(Widget):
     async def on_mount(self) -> None:
         """Load tasks on mount."""
         table = self.query_one("#task-table", DataTable)
-        table.add_column("pri", key="pri", width=3)
         table.add_column("icon", key="icon", width=2)
         table.add_column("epic", key="epic", width=7)
         table.add_column("title", key="title")
@@ -315,7 +296,6 @@ class TaskView(Widget):
                 table.add_row(
                     "",
                     "",
-                    "",
                     Text(""),
                     "",
                     key=f"{SEPARATOR_PREFIX}{status}",
@@ -325,7 +305,6 @@ class TaskView(Widget):
             # Section header row
             header_text = f"{label} ({len(tasks)})"
             table.add_row(
-                "",
                 "",
                 "",
                 Text(header_text, style="bold"),
@@ -338,7 +317,6 @@ class TaskView(Widget):
                 self._row_key_to_task[row_key] = task
                 color = STATUS_COLORS.get(task["status"], "")
                 icon = STATUS_ICONS.get(task["status"], "?")
-                priority = task.get("priority", 3) or 3
                 title = _strip_epic_prefix(
                     task["title"],
                     task.get("epic_key"),
@@ -360,7 +338,6 @@ class TaskView(Widget):
                 title_style = f"{color}" if color else ""
 
                 table.add_row(
-                    Text(_priority_str(priority), style=_priority_style(priority)),
                     Text(icon, style=color),
                     epic_text,
                     Text(title, style=title_style),
