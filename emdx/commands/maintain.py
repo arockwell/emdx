@@ -22,7 +22,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 
 from ..applications import MaintenanceApplication
-from ..utils.output import console
+from ..utils.output import console, is_non_interactive
 
 if TYPE_CHECKING:
     pass
@@ -155,16 +155,16 @@ def _interactive_wizard(dry_run: bool) -> None:
 
     # Check for duplicates (cheap - based on recommendations)
     if "duplicate" in str(all_recommendations).lower():
-        if Confirm.ask("Remove duplicate documents?"):
+        if is_non_interactive() or Confirm.ask("Remove duplicate documents?"):
             actions.append("clean")
 
     # Check for tagging issues (cheap - based on recommendations)
     if "tag" in str(all_recommendations).lower():
-        if Confirm.ask("Auto-tag untagged documents?"):
+        if is_non_interactive() or Confirm.ask("Auto-tag untagged documents?"):
             actions.append("tags")
 
     # Deduplicate similar documents - now fast with TF-IDF!
-    if Confirm.ask("Scan for duplicate documents?"):
+    if is_non_interactive() or Confirm.ask("Scan for duplicate documents?"):
         from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
         from emdx.services.similarity import SimilarityService
@@ -231,7 +231,8 @@ def _interactive_wizard(dry_run: bool) -> None:
                 if len(high_sim) > 5:
                     console.print(f"  [dim]  ...and {len(high_sim) - 5} more[/dim]")
 
-                if Confirm.ask(f"Auto-delete {len(high_sim)} obvious duplicates?"):
+                prompt = f"Auto-delete {len(high_sim)} obvious duplicates?"
+                if is_non_interactive() or Confirm.ask(prompt):
                     actions.append(("dedup_high", [p for p, _ in high_sim]))
 
             # Handle medium similarity (show and ask)
@@ -251,7 +252,7 @@ def _interactive_wizard(dry_run: bool) -> None:
     gc_preview = app.garbage_collect(dry_run=True)
     if gc_preview.items_processed > 0:
         console.print("\n[yellow]Database needs cleanup[/yellow]")
-        if Confirm.ask("Run garbage collection?"):
+        if is_non_interactive() or Confirm.ask("Run garbage collection?"):
             actions.append("gc")
 
     if not actions:
@@ -1151,9 +1152,10 @@ def index_embeddings(
         raise typer.Exit(1) from None
 
     if clear:
-        confirm = typer.confirm("This will delete all embeddings. Continue?")
-        if not confirm:
-            raise typer.Abort()
+        if not is_non_interactive():
+            confirm = typer.confirm("This will delete all embeddings. Continue?")
+            if not confirm:
+                raise typer.Abort()
         count = service.clear_index()
         console.print(f"[green]Cleared {count} embeddings[/green]")
         return

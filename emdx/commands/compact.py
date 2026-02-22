@@ -18,6 +18,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..database import db
+from ..utils.output import is_non_interactive
 
 console = Console()
 app = typer.Typer(help="Compact documents by AI-powered synthesis")
@@ -395,7 +396,7 @@ def compact(
         )
 
         # Confirm
-        if not yes and not dry_run:
+        if not yes and not dry_run and not is_non_interactive():
             if not typer.confirm("Proceed with synthesis?"):
                 console.print("[yellow]Cancelled[/yellow]")
                 raise typer.Exit(0)
@@ -476,7 +477,7 @@ def compact(
             f"  Estimated cost: ~${total_cost:.4f}"
         )
 
-        if not yes:
+        if not yes and not is_non_interactive():
             if not typer.confirm("Proceed with synthesis?"):
                 console.print("[yellow]Cancelled[/yellow]")
                 raise typer.Exit(0)

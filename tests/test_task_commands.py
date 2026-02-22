@@ -441,8 +441,9 @@ class TestTaskDelete:
         assert result.exit_code == 1
         assert "not found" in _out(result)
 
+    @patch("emdx.commands.tasks.is_non_interactive", return_value=False)
     @patch("emdx.commands.tasks.tasks")
-    def test_delete_with_confirmation(self, mock_tasks):
+    def test_delete_with_confirmation(self, mock_tasks, mock_interactive):
         mock_tasks.resolve_task_id.return_value = 3
         mock_tasks.get_task.return_value = {"id": 3, "title": "Confirm delete"}
         mock_tasks.delete_task.return_value = True
@@ -451,8 +452,9 @@ class TestTaskDelete:
         out = _out(result)
         assert "Deleted #3" in out
 
+    @patch("emdx.commands.tasks.is_non_interactive", return_value=False)
     @patch("emdx.commands.tasks.tasks")
-    def test_delete_cancelled(self, mock_tasks):
+    def test_delete_cancelled(self, mock_tasks, mock_interactive):
         mock_tasks.resolve_task_id.return_value = 4
         mock_tasks.get_task.return_value = {"id": 4, "title": "Cancel delete"}
         result = runner.invoke(app, ["delete", "4"], input="n\n")
