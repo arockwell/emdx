@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from emdx.models.types import TaskDict
 from emdx.ui.types import AgentExecutionDict
 
 
@@ -72,10 +73,7 @@ class DocumentItem(ActivityItem):
             title = doc.get("title", "Untitled")
 
             content_stripped = content.lstrip()
-            if not (
-                content_stripped.startswith(f"# {title}")
-                or content_stripped.startswith("# ")
-            ):
+            if not (content_stripped.startswith(f"# {title}") or content_stripped.startswith("# ")):
                 content = f"# {title}\n\n{content}"
 
             return content, f"📄 #{self.doc_id}"
@@ -144,3 +142,55 @@ class AgentExecutionItem(ActivityItem):
                     pass
 
         return f"[italic]{self.title}[/italic]", "PREVIEW"
+
+
+STATUS_ICONS = {
+    "open": "○",
+    "active": "●",
+    "blocked": "⚠",
+    "done": "✓",
+    "failed": "✗",
+}
+
+
+@dataclass
+class TaskItem(ActivityItem):
+    """A task in the activity stream."""
+
+    task: TaskDict = field(default_factory=dict)  # type: ignore[assignment]
+
+    @property
+    def item_type(self) -> str:
+        return "task"
+
+    @property
+    def type_icon(self) -> str:
+        return STATUS_ICONS.get(self.status, "○")
+
+    @property
+    def status_icon(self) -> str:
+        return STATUS_ICONS.get(self.status, "○")
+
+    async def get_preview_content(self, doc_db: Any) -> tuple[str, str]:
+        """Show task details in preview."""
+        lines = [f"# {self.title}", ""]
+
+        lines.append(f"**Status:** {self.status}")
+        priority = self.task.get("priority", 5)
+        lines.append(f"**Priority:** {priority}")
+
+        epic_key = self.task.get("epic_key")
+        if epic_key:
+            epic_seq = self.task.get("epic_seq")
+            badge = f"{epic_key}-{epic_seq}" if epic_seq else epic_key
+            lines.append(f"**Epic:** {badge}")
+
+        description = self.task.get("description")
+        if description:
+            lines.extend(["", "## Description", "", description])
+
+        error = self.task.get("error")
+        if error:
+            lines.extend(["", f"**Error:** {error}"])
+
+        return "\n".join(lines), f"📋 Task #{self.item_id}"
