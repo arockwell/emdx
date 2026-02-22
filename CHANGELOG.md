@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-02-22
+
+**The TUI release.** The activity screen became a unified dashboard — tasks, running delegates, and documents share a single tiered view with section jump navigation. The task browser gained live filtering, epic grouping, and status filter keys. Auto-wikify shipped all three layers, automatically linking documents by title matches, semantic similarity, and named entity extraction. Under the hood, Claude Code hooks replaced the delegate monolith's lifecycle management, and `emdx delegate` got structured JSON output for programmatic consumption.
+
+### 🚀 Major Features
+
+#### Unified activity dashboard (#759)
+The activity screen was rebuilt as a three-tier dashboard. Running executions sit at the top, active/open tasks in the middle, and completed documents at the bottom. Section headers (RUNNING / TASKS / DOCS) divide the tiers, and `shift+R`/`shift+T`/`shift+D` jump directly to each section, scrolling the header to the top of the screen. Tasks with matching execution or output document IDs are deduplicated so nothing shows up twice.
+
+#### Auto-wikify — three-layer document linking (#748, #749, #751)
+Documents now self-organize into a knowledge graph through three complementary strategies:
+
+- **Layer 1 — Title match** (#748): Scans document text for exact title mentions and creates links. Fast and precise.
+- **Layer 2 — Semantic similarity** (#749): Uses embedding similarity to surface non-obvious connections. Runs automatically on `emdx save` by default, configurable via `maintain.auto_link_on_save`.
+- **Layer 3 — Entity extraction** (#751): Extracts named entities (people, projects, tools) from documents and links those sharing entities. Adds entity-based metadata for richer graph traversal.
+
+#### Claude Code hooks (#746, #747)
+The delegate lifecycle shifted from a monolithic executor to three Claude Code hooks:
+
+- `prime.sh` (SessionStart) — injects KB context into every session automatically
+- `save-output.sh` (Stop) — auto-saves delegate output to the KB
+- `session-end.sh` (SessionEnd) — updates task status on completion
+
+Hooks are ambient — `prime.sh` runs for all sessions, the others only activate when delegate sets env vars. Human sessions are unaffected.
+
+#### Task browser TUI overhaul (#745, #755, #757)
+The task browser got three rounds of upgrades:
+
+- **Live filter bar** (#755): Type to filter tasks in real-time with `shift+/`, matching against title, status, and category.
+- **Epic grouping** (#757): `shift+G` toggles grouping tasks by epic. Status filter keys (`o`/`a`/`d`/`f`) cycle through task states.
+- **Foundation** (#745): Rich detail pane, dependency visualization, vim-style navigation, and direct task status actions.
+
+### 🔧 Improvements
+
+#### QA presenter extraction (#765)
+QA screen internals were refactored to separate the presenter (answer formatting, source rendering) from the screen widget, making the Q&A pipeline testable without mounting a full TUI.
+
+#### Structured delegate output (#761)
+`emdx delegate --json` outputs structured JSON with `task_id`, `doc_id`, `exit_code`, `duration`, and `execution_id`. Without `--json`, a clean summary line prints to stderr: `delegate: done task_id:42 doc_id:100 exit:0 duration:3m12s`. The `--help` output was reorganized into grouped panels (Git & PRs, Organization).
+
+#### Task management additions (#762, #763, #764)
+- **`wontdo` status** (#762): Discard tasks without marking them done — `emdx task wontdo 42`.
+- **`task priority`** (#763): Set task priority with `emdx task priority 42 1` and a new `/emdx:prioritize` skill for bulk triage.
+- **Display IDs** (#764): Task command output shows `KEY-N` prefixed IDs (e.g., `FEAT-12`) when a category is assigned.
+
+#### Context-aware prime (#750)
+`emdx prime` detects whether it's running in a delegate session (via `EMDX_TASK_ID`) or a human session and adjusts its output — delegates get focused task context, humans get the full ready-tasks overview.
+
+### 🐛 Bug Fixes
+
+- Auto-confirm destructive commands (`delete`, `restore`) when stdin is not a TTY, fixing delegate sessions that would hang waiting for confirmation (#754)
+- Strip `CLAUDECODE` env var from delegate subprocess environment so spawned `claude` processes don't inherit stale state (#747)
+- Strip ANSI codes from `emdx save` output before parsing doc ID, fixing delegate save failures in colored terminals (#747)
+- Remove priority indicator column from task browser that was taking space without adding value (#756)
+
+### 📖 Documentation
+
+- Restructured CLAUDE.md with separate human vs delegate session guidance (#752)
+- ActivityTable widget test suite — 22 pilot-based tests (#758)
+
+[0.20.0]: https://github.com/arockwell/emdx/compare/v0.19.0...v0.20.0
+
 ## [0.19.0] - 2026-02-21
 
 **The consolidation release.** EMDX's CLI surface shrank from ~30 commands to 19, folding related commands under unified namespaces (`briefing` absorbed `wrapup` and `activity`, `find` absorbed `recent`, `maintain` absorbed `compact` and `stale`). Task management gained dependency tracking — tasks can now block each other, and `chain` wires up sequential pipelines in one shot. Category-prefixed IDs (`FEAT-12`, `FIX-7`) work everywhere task IDs are accepted. The activity screen got a flat-table redesign, and EMDX shipped as a Claude Code skills plugin.
