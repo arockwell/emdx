@@ -184,6 +184,7 @@ class HybridSearchService:
         mode: str | None = None,
         extract: bool = False,
         project: str | None = None,
+        doc_type: str | None = "user",
     ) -> list[HybridSearchResult]:
         """Execute hybrid search combining keyword and semantic search.
 
@@ -193,6 +194,7 @@ class HybridSearchService:
             mode: "keyword", "semantic", or "hybrid" (auto-detect)
             extract: If True, include chunk-level text in results
             project: Filter by project name
+            doc_type: Filter by document type. 'user' (default), 'wiki', or None for all.
 
         Returns:
             List of HybridSearchResult sorted by combined score
@@ -200,17 +202,21 @@ class HybridSearchService:
         search_mode = self.determine_mode(mode)
 
         if search_mode == SearchMode.KEYWORD:
-            return self._search_keyword(query, limit, project)
+            return self._search_keyword(query, limit, project, doc_type=doc_type)
         elif search_mode == SearchMode.SEMANTIC:
-            return self._search_semantic(query, limit, project, extract)
+            return self._search_semantic(query, limit, project, extract, doc_type=doc_type)
         else:  # HYBRID
-            return self._search_hybrid(query, limit, project, extract)
+            return self._search_hybrid(query, limit, project, extract, doc_type=doc_type)
 
     def _search_keyword(
-        self, query: str, limit: int, project: str | None
+        self,
+        query: str,
+        limit: int,
+        project: str | None,
+        doc_type: str | None = "user",
     ) -> list[HybridSearchResult]:
         """Execute FTS5 keyword search only."""
-        docs = search_documents(query=query, project=project, limit=limit)
+        docs = search_documents(query=query, project=project, limit=limit, doc_type=doc_type)
 
         results = []
         for doc in docs:
@@ -244,6 +250,7 @@ class HybridSearchService:
         limit: int,
         project: str | None,
         extract: bool,
+        doc_type: str | None = "user",
     ) -> list[HybridSearchResult]:
         """Execute semantic search using chunks or documents."""
         if not self.embedding_service:
@@ -251,7 +258,7 @@ class HybridSearchService:
 
         # Prefer chunk search if available
         if self.has_chunk_index():
-            return self._search_chunks(query, limit, project, extract)
+            return self._search_chunks(query, limit, project, extract, doc_type=doc_type)
 
         # Fall back to document-level semantic search
         try:
@@ -263,6 +270,11 @@ class HybridSearchService:
         # Filter by project if specified
         if project:
             matches = [m for m in matches if m.project == project]
+
+        # Filter by doc_type if specified
+        if doc_type is not None:
+            allowed_ids = self._get_doc_ids_by_type([m.doc_id for m in matches], doc_type)
+            matches = [m for m in matches if m.doc_id in allowed_ids]
 
         results = []
         for match in matches:
@@ -288,6 +300,7 @@ class HybridSearchService:
         limit: int,
         project: str | None,
         extract: bool,
+        doc_type: str | None = "user",
     ) -> list[HybridSearchResult]:
         """Search at chunk level for more precise results."""
         if not self.embedding_service:
@@ -306,6 +319,11 @@ class HybridSearchService:
         # Filter by project
         if project:
             matches = [m for m in matches if m.project == project]
+
+        # Filter by doc_type
+        if doc_type is not None:
+            allowed_ids = self._get_doc_ids_by_type([m.doc_id for m in matches], doc_type)
+            matches = [m for m in matches if m.doc_id in allowed_ids]
 
         # Deduplicate by document, keeping highest-scoring chunk
         seen_docs: set[int] = set()
@@ -354,6 +372,7 @@ class HybridSearchService:
         limit: int,
         project: str | None,
         extract: bool,
+        doc_type: str | None = "user",
     ) -> list[HybridSearchResult]:
         """Combine keyword and semantic results with Reciprocal Rank Fusion.
 
@@ -366,8 +385,10 @@ class HybridSearchService:
         6. Return top results sorted by RRF score
         """
         # Run both searches — fetch extra candidates for better fusion
-        keyword_results = self._search_keyword(query, limit * 2, project)
-        semantic_results = self._search_semantic(query, limit * 2, project, extract)
+        keyword_results = self._search_keyword(query, limit * 2, project, doc_type=doc_type)
+        semantic_results = self._search_semantic(
+            query, limit * 2, project, extract, doc_type=doc_type
+        )
 
         # Build rank maps (1-based)
         keyword_ranks: dict[int, int] = {
@@ -449,6 +470,18 @@ class HybridSearchService:
                     r.score = r.score / max_rrf
 
         return merged[:limit]
+
+    def _get_doc_ids_by_type(self, doc_ids: list[int], doc_type: str) -> set[int]:
+        """Return the subset of doc_ids that match the given doc_type."""
+        if not doc_ids:
+            return set()
+        with db.get_connection() as conn:
+            placeholders = ",".join("?" * len(doc_ids))
+            cursor = conn.execute(
+                f"SELECT id FROM documents WHERE id IN ({placeholders}) AND doc_type = ?",
+                [*doc_ids, doc_type],
+            )
+            return {row[0] for row in cursor.fetchall()}
 
     def _populate_tags(self, results: list[HybridSearchResult]) -> None:
         """Fetch and populate tags for all results."""

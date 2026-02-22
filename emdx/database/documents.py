@@ -139,6 +139,7 @@ def list_documents(
     limit: int = 50,
     parent_id: int | None = None,
     offset: int = 0,
+    doc_type: str | None = "user",
 ) -> list[DocumentListItem]:
     """List documents with optional project and hierarchy filters.
 
@@ -150,6 +151,7 @@ def list_documents(
             - -1: All documents regardless of parent
             - int > 0: Only children of specific parent
         offset: Starting offset for pagination (must be non-negative)
+        doc_type: Filter by document type. 'user' (default), 'wiki', or None for all types.
 
     Returns:
         List of document dictionaries
@@ -166,6 +168,11 @@ def list_documents(
         # Build query with filters
         conditions = ["is_deleted = FALSE", "archived_at IS NULL"]
         params: list[str | int | None] = []
+
+        # doc_type filter
+        if doc_type is not None:
+            conditions.append("doc_type = ?")
+            params.append(doc_type)
 
         # Parent filter
         if parent_id is None:
@@ -365,18 +372,36 @@ def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> b
         return cursor.rowcount > 0
 
 
-def get_recent_documents(limit: int = 10) -> list[RecentDocumentItem]:
-    """Get recently accessed documents"""
+def get_recent_documents(
+    limit: int = 10,
+    doc_type: str | None = "user",
+) -> list[RecentDocumentItem]:
+    """Get recently accessed documents.
+
+    Args:
+        limit: Maximum number of documents to return.
+        doc_type: Filter by document type. 'user' (default), 'wiki', or None for all types.
+    """
     with db_connection.get_connection() as conn:
+        conditions = ["is_deleted = FALSE"]
+        params: list[str | int] = []
+
+        if doc_type is not None:
+            conditions.append("doc_type = ?")
+            params.append(doc_type)
+
+        where_clause = " AND ".join(conditions)
+        params.append(limit)
+
         cursor = conn.execute(
-            """
+            f"""
             SELECT id, title, project, accessed_at, access_count
             FROM documents
-            WHERE is_deleted = FALSE
+            WHERE {where_clause}
             ORDER BY accessed_at DESC
             LIMIT ?
         """,
-            (limit,),
+            params,
         )
 
         # Convert rows and parse datetime strings
