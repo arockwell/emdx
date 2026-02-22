@@ -27,10 +27,12 @@ With worktree isolation:
 """
 
 import os
+import random
 import re
 import subprocess
 import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -215,6 +217,62 @@ _PR_URL_RE = re.compile(r"https://github\.com/[^/]+/[^/]+/pull/\d+")
 
 # Regex to find pushed branch references in agent output
 _BRANCH_PUSH_RE = re.compile(r'(?:origin/|pushed to |branch [\'"`])([a-zA-Z0-9_./-]+)')
+
+# Retry configuration
+RETRY_BACKOFF_BASE = 2.0  # Initial backoff in seconds
+RETRY_BACKOFF_MAX = 60.0  # Maximum backoff in seconds
+RETRY_JITTER_MAX = 1.0  # Maximum jitter added to backoff
+
+# Patterns in stderr that indicate retryable transient failures
+_RETRYABLE_PATTERNS = [
+    "rate limit",
+    "429",
+    "too many requests",
+    "timeout",
+    "timed out",
+    "connection reset",
+    "connection refused",
+    "connection error",
+    "temporary failure",
+    "service unavailable",
+    "503",
+    "502",
+    "500",
+    "internal server error",
+    "overloaded",
+]
+
+
+def _is_retryable_failure(returncode: int, stderr: str) -> bool:
+    """Determine if a subprocess failure is retryable.
+
+    Retryable: rate limits (HTTP 429), transient server errors.
+    Non-retryable: validation errors, user abort (exit code 2), clean failures.
+
+    Note: TimeoutExpired is handled separately in the retry loop (always retryable).
+    """
+    # Exit code 2 typically means user abort / validation error — not retryable
+    if returncode == 2:
+        return False
+
+    # Check stderr for retryable patterns
+    stderr_lower = stderr.lower()
+    return any(pattern in stderr_lower for pattern in _RETRYABLE_PATTERNS)
+
+
+def _compute_backoff(attempt: int) -> float:
+    """Compute exponential backoff with jitter for retry attempt.
+
+    Args:
+        attempt: Zero-based attempt number (0 = first retry).
+
+    Returns:
+        Sleep duration in seconds.
+    """
+    exponential: float = RETRY_BACKOFF_BASE * (2**attempt)
+    backoff: float = min(exponential, RETRY_BACKOFF_MAX)
+    jitter: float = random.uniform(0, RETRY_JITTER_MAX)  # noqa: S311
+    return backoff + jitter
 
 
 def _make_pr_instruction(branch_name: str | None = None, draft: bool = False) -> str:
@@ -450,6 +508,7 @@ def _run_single(
     seq: int | None = None,
     epic_key: str | None = None,
     timeout: int | None = None,
+    retry: int = 0,
 ) -> SingleResult:
     """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -517,32 +576,60 @@ def _run_single(
     resolved_model = resolve_model_alias(model or "opus", CliTool.CLAUDE)
     cmd = ["claude", "--print", "--model", resolved_model]
 
-    # Run the subprocess — hooks handle priming, saving, and task tracking
+    # Run the subprocess with retry loop
     effective_timeout = timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT
-    try:
-        result = subprocess.run(
-            cmd,
-            input=full_prompt,
-            capture_output=True,
-            text=True,
-            timeout=effective_timeout,
-            cwd=working_dir,
-            env=env,
-        )
-        output = result.stdout
-        success = result.returncode == 0
-    except subprocess.TimeoutExpired:
-        sys.stderr.write("delegate: task timed out\n")
-        _safe_update_task(task_id, status="failed", error="timeout")
-        _safe_update_execution_status(execution_id, "failed", exit_code=-1)
-        _cleanup_batch_file(batch_path)
-        return SingleResult(task_id=task_id, success=False, error_message="timeout")
-    except Exception as e:
-        sys.stderr.write(f"delegate: subprocess failed: {e}\n")
-        _safe_update_task(task_id, status="failed", error=str(e)[:200])
-        _safe_update_execution_status(execution_id, "failed")
-        _cleanup_batch_file(batch_path)
-        return SingleResult(task_id=task_id, success=False, error_message=str(e))
+    max_attempts = 1 + retry  # 1 initial + N retries
+
+    for attempt in range(max_attempts):
+        try:
+            result = subprocess.run(
+                cmd,
+                input=full_prompt,
+                capture_output=True,
+                text=True,
+                timeout=effective_timeout,
+                cwd=working_dir,
+                env=env,
+            )
+            output = result.stdout
+            success = result.returncode == 0
+        except subprocess.TimeoutExpired:
+            if attempt < max_attempts - 1:
+                # Timeouts are always retryable
+                backoff = _compute_backoff(attempt)
+                sys.stderr.write(
+                    f"delegate: retry {attempt + 1}/{retry} after {backoff:.1f}s (timeout)\n"
+                )
+                time.sleep(backoff)
+                continue
+            sys.stderr.write("delegate: task timed out\n")
+            _safe_update_task(task_id, status="failed", error="timeout")
+            _safe_update_execution_status(execution_id, "failed", exit_code=-1)
+            _cleanup_batch_file(batch_path)
+            return SingleResult(task_id=task_id, success=False, error_message="timeout")
+        except Exception as e:
+            sys.stderr.write(f"delegate: subprocess failed: {e}\n")
+            _safe_update_task(task_id, status="failed", error=str(e)[:200])
+            _safe_update_execution_status(execution_id, "failed")
+            _cleanup_batch_file(batch_path)
+            return SingleResult(task_id=task_id, success=False, error_message=str(e))
+
+        if success:
+            break
+
+        # Check if this failure is retryable and we have retries left
+        stderr_text = result.stderr or ""
+        if attempt < max_attempts - 1 and _is_retryable_failure(result.returncode, stderr_text):
+            backoff = _compute_backoff(attempt)
+            reason = stderr_text[:80].strip() or f"exit code {result.returncode}"
+            sys.stderr.write(
+                f"delegate: retry {attempt + 1}/{retry} after {backoff:.1f}s ({reason})\n"
+            )
+            time.sleep(backoff)
+            continue
+
+        # Non-retryable failure or retries exhausted
+        break
 
     # Update execution with exit code
     status = "completed" if success else "failed"
@@ -652,6 +739,7 @@ def _run_parallel(
     worktree: bool = False,
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
+    retry: int = 0,
 ) -> list[int]:
     """Run multiple tasks in parallel via ThreadPoolExecutor. Returns doc_ids."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
@@ -714,6 +802,7 @@ def _run_parallel(
                     parent_task_id=parent_task_id,
                     seq=idx + 1,
                     epic_key=epic_key,
+                    retry=retry,
                 ),
             )
             return result
@@ -959,6 +1048,12 @@ def delegate(
         "-c",
         help="Category key for auto-numbered tasks",
     ),
+    retry: int = typer.Option(
+        0,
+        "--retry",
+        "-r",
+        help="Retry N times on transient failures (timeouts, rate limits)",
+    ),
     cleanup: bool = typer.Option(
         False,
         "--cleanup",
@@ -1063,6 +1158,8 @@ def delegate(
         "-e",
         "--cat",
         "-c",
+        "--retry",
+        "-r",
         "--cleanup",
     }
     consumed_flags = [t for t in task_list if t in known_flags]
@@ -1148,6 +1245,7 @@ def delegate(
                 source_doc_id=doc,
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
+                retry=retry,
             )
             if single_result.pr_url and not quiet:
                 sys.stderr.write(f"delegate: PR created: {single_result.pr_url}\n")
@@ -1170,6 +1268,7 @@ def delegate(
                 base_branch=base_branch,
                 source_doc_id=doc,
                 worktree=use_worktree,
+                retry=retry,
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
             )

@@ -7,8 +7,10 @@ Tests cover:
 - --worktree flag for git worktree isolation
 - --doc flag for document context
 - Error handling and edge cases
+- --retry flag for transient failure retry with exponential backoff
 """
 
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -16,8 +18,12 @@ import typer
 
 from emdx.commands.delegate import (
     PR_INSTRUCTION_GENERIC,
+    RETRY_BACKOFF_BASE,
+    RETRY_BACKOFF_MAX,
     SingleResult,
+    _compute_backoff,
     _extract_pr_url,
+    _is_retryable_failure,
     _load_doc_context,
     _make_branch_instruction,
     _make_pr_instruction,
@@ -306,7 +312,12 @@ class TestRunSingle:
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
     def test_failed_single_task(
-        self, mock_subprocess, mock_create, mock_update, mock_create_exec, mock_update_exec,
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
         mock_read_batch,
     ):
         mock_create.return_value = 1
@@ -1299,3 +1310,309 @@ class TestRunSingleHooksIntegration:
         )
 
         assert result.doc_id is None
+
+
+# =============================================================================
+# Tests for retry logic
+# =============================================================================
+
+
+class TestIsRetryableFailure:
+    """Tests for _is_retryable_failure — determines if a failure is retryable."""
+
+    def test_timeout_pattern_in_stderr_is_retryable(self):
+        assert _is_retryable_failure(1, "request timed out") is True
+
+    def test_rate_limit_stderr_is_retryable(self):
+        assert _is_retryable_failure(1, "Error: rate limit exceeded") is True
+
+    def test_http_429_stderr_is_retryable(self):
+        assert _is_retryable_failure(1, "HTTP 429 Too Many Requests") is True
+
+    def test_connection_reset_is_retryable(self):
+        assert _is_retryable_failure(1, "connection reset by peer") is True
+
+    def test_server_503_is_retryable(self):
+        assert _is_retryable_failure(1, "503 Service Unavailable") is True
+
+    def test_overloaded_is_retryable(self):
+        assert _is_retryable_failure(1, "API is overloaded") is True
+
+    def test_exit_code_2_is_not_retryable(self):
+        """Exit code 2 = user abort / validation error — never retry."""
+        assert _is_retryable_failure(2, "rate limit") is False
+
+    def test_clean_failure_is_not_retryable(self):
+        assert _is_retryable_failure(1, "syntax error in config") is False
+
+    def test_empty_stderr_is_not_retryable(self):
+        assert _is_retryable_failure(1, "") is False
+
+
+class TestComputeBackoff:
+    """Tests for _compute_backoff — exponential backoff with jitter."""
+
+    def test_first_attempt_base_backoff(self):
+        backoff = _compute_backoff(0)
+        # Base is 2s + up to 1s jitter
+        assert RETRY_BACKOFF_BASE <= backoff <= RETRY_BACKOFF_BASE + 1.0
+
+    def test_second_attempt_doubles(self):
+        backoff = _compute_backoff(1)
+        # 2 * 2^1 = 4s + up to 1s jitter
+        assert 4.0 <= backoff <= 5.0
+
+    def test_backoff_capped_at_max(self):
+        backoff = _compute_backoff(100)
+        # Should never exceed max + jitter
+        assert backoff <= RETRY_BACKOFF_MAX + 1.0
+
+    def test_backoff_always_positive(self):
+        for attempt in range(10):
+            assert _compute_backoff(attempt) > 0
+
+
+class TestRetryInRunSingle:
+    """Tests for retry loop integration in _run_single."""
+
+    @patch("emdx.commands.delegate.time.sleep")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_retry_succeeds_on_second_attempt(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
+        mock_sleep,
+    ):
+        """Transient failure on first attempt, success on retry."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_read_batch.return_value = 42
+
+        # First call: retryable failure (rate limit)
+        fail_result = _mock_subprocess_failure("429 Too Many Requests")
+        # Second call: success
+        success_result = _mock_subprocess_success()
+        mock_subprocess.run.side_effect = [fail_result, success_result]
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            retry=2,
+        )
+
+        assert result.success is True
+        assert result.doc_id == 42
+        assert mock_subprocess.run.call_count == 2
+        mock_sleep.assert_called_once()  # Slept once between attempts
+
+    @patch("emdx.commands.delegate.time.sleep")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_retry_exhausted_fails(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_sleep,
+    ):
+        """All retries fail — should report failure."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_read_batch.return_value = None
+
+        # All 3 attempts fail with retryable error
+        fail_result = _mock_subprocess_failure("rate limit exceeded")
+        mock_subprocess.run.return_value = fail_result
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            retry=2,
+        )
+
+        assert result.success is False
+        assert mock_subprocess.run.call_count == 3  # 1 initial + 2 retries
+        assert mock_sleep.call_count == 2
+
+    @patch("emdx.commands.delegate.time.sleep")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_non_retryable_failure_no_retry(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_sleep,
+    ):
+        """Non-retryable failure should not retry."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_read_batch.return_value = None
+
+        # Non-retryable failure (validation error, no retryable pattern)
+        fail_result = _mock_subprocess_failure("syntax error in config")
+        mock_subprocess.run.return_value = fail_result
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            retry=3,
+        )
+
+        assert result.success is False
+        assert mock_subprocess.run.call_count == 1  # No retries
+        mock_sleep.assert_not_called()
+
+    @patch("emdx.commands.delegate.time.sleep")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_timeout_retried(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_sleep,
+    ):
+        """TimeoutExpired is retried, then succeeds."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_read_batch.return_value = 42
+
+        # First call: timeout, second call: success
+        mock_subprocess.TimeoutExpired = subprocess.TimeoutExpired
+        mock_subprocess.run.side_effect = [
+            subprocess.TimeoutExpired(["claude"], 30),
+            _mock_subprocess_success(),
+        ]
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            retry=1,
+        )
+
+        assert result.success is True
+        assert mock_subprocess.run.call_count == 2
+        mock_sleep.assert_called_once()
+
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_retry_zero_no_retry(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_print,
+    ):
+        """retry=0 (default) means no retries even on retryable failure."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_read_batch.return_value = None
+
+        fail_result = _mock_subprocess_failure("rate limit exceeded")
+        mock_subprocess.run.return_value = fail_result
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            retry=0,
+        )
+
+        assert result.success is False
+        assert mock_subprocess.run.call_count == 1
+
+    @patch("emdx.commands.delegate.time.sleep")
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_exit_code_2_not_retried(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+        mock_sleep,
+    ):
+        """Exit code 2 (user abort) should never retry even with retryable stderr."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_read_batch.return_value = None
+
+        fail_result = MagicMock()
+        fail_result.returncode = 2
+        fail_result.stdout = ""
+        fail_result.stderr = "rate limit exceeded"
+        mock_subprocess.run.return_value = fail_result
+
+        result = _run_single(
+            prompt="test task",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=False,
+            retry=3,
+        )
+
+        assert result.success is False
+        assert mock_subprocess.run.call_count == 1
+        mock_sleep.assert_not_called()
