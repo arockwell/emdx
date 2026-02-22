@@ -123,7 +123,7 @@ class TestPopulate:
 
     @pytest.mark.asyncio
     async def test_populate_documents(self) -> None:
-        """Populating with documents adds correct rows."""
+        """Populating with documents adds correct rows (including section header)."""
         items: list[ActivityItem] = [
             make_doc(item_id=1, title="First"),
             make_doc(item_id=2, title="Second"),
@@ -133,13 +133,14 @@ class TestPopulate:
             await pilot.pause()
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
-            assert table.row_count == 2
+            # 1 section header (RECENT) + 2 document rows
+            assert table.row_count == 3
             keys = _table_row_keys(table)
-            assert keys == ["document:1", "document:2"]
+            assert keys == ["header:2", "document:1", "document:2"]
 
     @pytest.mark.asyncio
     async def test_populate_mixed_items(self) -> None:
-        """Populating with docs and executions works."""
+        """Populating with docs and executions works (with section headers)."""
         items: list[ActivityItem] = [
             make_exec(item_id=10, title="Running task", status="running"),
             make_doc(item_id=1, title="My doc"),
@@ -149,9 +150,15 @@ class TestPopulate:
             await pilot.pause()
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
-            assert table.row_count == 2
+            # 2 section headers (RUNNING, RECENT) + 2 item rows
+            assert table.row_count == 4
             keys = _table_row_keys(table)
-            assert keys == ["agent_execution:10", "document:1"]
+            assert keys == [
+                "header:0",
+                "agent_execution:10",
+                "header:2",
+                "document:1",
+            ]
 
     @pytest.mark.asyncio
     async def test_title_truncation(self) -> None:
@@ -164,9 +171,10 @@ class TestPopulate:
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
             titles = _table_cell_texts(table, "title")
-            assert len(titles) == 1
-            assert len(str(titles[0])) == 80  # 77 chars + "..."
-            assert str(titles[0]).endswith("...")
+            # First title is the RECENT section header, second is the doc
+            assert len(titles) == 2
+            assert len(str(titles[1])) == 80  # 77 chars + "..."
+            assert str(titles[1]).endswith("...")
 
     @pytest.mark.asyncio
     async def test_running_item_bold(self) -> None:
@@ -193,7 +201,8 @@ class TestPopulate:
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
             ids = _table_cell_texts(table, "id")
-            assert "#42" in ids[0]
+            # ids[0] is the RECENT header (empty), ids[1] is the doc
+            assert "#42" in ids[1]
 
     @pytest.mark.asyncio
     async def test_id_column_execution(self) -> None:
@@ -205,7 +214,8 @@ class TestPopulate:
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
             ids = _table_cell_texts(table, "id")
-            assert "#99" in ids[0]
+            # ids[0] is the RUNNING header (empty), ids[1] is the exec
+            assert "#99" in ids[1]
 
 
 # ===================================================================
@@ -228,7 +238,7 @@ class TestCursorSelection:
 
     @pytest.mark.asyncio
     async def test_get_selected_item_after_populate(self) -> None:
-        """After populating, cursor is on the first row."""
+        """After populating, cursor starts on header; moving down reaches first item."""
         items: list[ActivityItem] = [
             make_doc(item_id=1, title="First"),
             make_doc(item_id=2, title="Second"),
@@ -238,6 +248,11 @@ class TestCursorSelection:
             await pilot.pause()
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
+            table.focus()
+            await pilot.pause()
+            # Cursor starts on header row (returns None)
+            # Move down to first actual item
+            await pilot.press("down")
             await pilot.pause()
             selected = table.get_selected_item()
             assert selected is not None
@@ -245,7 +260,7 @@ class TestCursorSelection:
 
     @pytest.mark.asyncio
     async def test_cursor_movement(self) -> None:
-        """Moving cursor down selects the next item."""
+        """Moving cursor down past header selects items in order."""
         items: list[ActivityItem] = [
             make_doc(item_id=1, title="First"),
             make_doc(item_id=2, title="Second"),
@@ -259,8 +274,9 @@ class TestCursorSelection:
             table.focus()
             await pilot.pause()
 
-            # Move down
-            await pilot.press("down")
+            # Move past header to first item, then to second
+            await pilot.press("down")  # header -> doc 1
+            await pilot.press("down")  # doc 1 -> doc 2
             await pilot.pause()
             selected = table.get_selected_item()
             assert selected is not None
@@ -291,12 +307,14 @@ class TestRefreshItems:
             await pilot.pause()
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items_v1)
-            assert table.row_count == 2
+            # 1 header + 2 items
+            assert table.row_count == 3
 
             table.refresh_items(items_v2)
-            assert table.row_count == 2
+            assert table.row_count == 3
             titles = _table_cell_texts(table, "title")
-            assert "Updated" in titles[0]
+            # titles[0] is header, titles[1] is first doc
+            assert "Updated" in titles[1]
 
     @pytest.mark.asyncio
     async def test_refresh_structural_change_repopulates(self) -> None:
@@ -311,10 +329,12 @@ class TestRefreshItems:
             await pilot.pause()
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items_v1)
-            assert table.row_count == 1
+            # 1 header + 1 item
+            assert table.row_count == 2
 
             table.refresh_items(items_v2)
-            assert table.row_count == 2
+            # 1 header + 2 items
+            assert table.row_count == 3
 
     @pytest.mark.asyncio
     async def test_refresh_preserves_cursor(self) -> None:
@@ -332,8 +352,9 @@ class TestRefreshItems:
             table.focus()
             await pilot.pause()
 
-            # Move cursor to second row
-            await pilot.press("down")
+            # Move cursor past header to doc 1, then to doc 2
+            await pilot.press("down")  # header -> doc 1
+            await pilot.press("down")  # doc 1 -> doc 2
             await pilot.pause()
             assert table.get_selected_item() is not None
             assert table.get_selected_item().item_id == 2  # type: ignore[union-attr]
@@ -364,7 +385,7 @@ class TestFindRow:
 
     @pytest.mark.asyncio
     async def test_find_document_row(self) -> None:
-        """Finds a document row by its doc_id."""
+        """Finds a document row by its doc_id (accounting for header rows)."""
         items: list[ActivityItem] = [
             make_doc(item_id=10, doc_id=10),
             make_doc(item_id=20, doc_id=20),
@@ -375,8 +396,9 @@ class TestFindRow:
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
 
-            assert table.find_row_by_doc_id(10) == 0
-            assert table.find_row_by_doc_id(20) == 1
+            # Row 0 is RECENT header, rows 1 and 2 are docs
+            assert table.find_row_by_doc_id(10) == 1
+            assert table.find_row_by_doc_id(20) == 2
             assert table.find_row_by_doc_id(999) is None
 
     @pytest.mark.asyncio
@@ -391,7 +413,8 @@ class TestFindRow:
             table = app.query_one("#activity-table", ActivityTable)
             table.populate(items)
 
-            assert table.find_row_by_doc_id(42) == 0
+            # Row 0 is RUNNING header, row 1 is the exec
+            assert table.find_row_by_doc_id(42) == 1
 
 
 # ===================================================================
@@ -428,14 +451,16 @@ class TestMessages:
             table.focus()
             await pilot.pause()
 
-            # Press j then k to trigger highlight events
-            await pilot.press("j")
+            # Use down/up arrow keys (more reliable than j/k for DataTable)
+            await pilot.press("down")  # header -> doc 1
             await pilot.pause()
-            await pilot.press("k")
+            await pilot.press("down")  # doc 1 -> doc 2
+            await pilot.pause()
+            await pilot.press("up")  # doc 2 -> doc 1
             await pilot.pause()
 
-            assert len(received) >= 1
-            # Last highlight should be first item (after k goes back up)
-            last = received[-1]
-            assert last is not None
-            assert last.item_id == 1
+            # Filter to non-None highlights (headers produce None)
+            non_none = [r for r in received if r is not None]
+            assert len(non_none) >= 1
+            # Last non-None highlight should be first item (after up goes back)
+            assert non_none[-1].item_id == 1
