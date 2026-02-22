@@ -25,7 +25,10 @@ def create(
     """
     try:
         epic_id = tasks.create_epic(name, cat, description or "")
-        console.print(f"[green]Created epic #{epic_id}: {name} ({cat.upper()})[/green]")
+        epic = tasks.get_task(epic_id)
+        seq = epic["epic_seq"] if epic else None
+        key_label = f"{cat.upper()}-{seq}" if seq else f"#{epic_id}"
+        console.print(f"[green]Created epic {key_label}: {name}[/green]")
     except ValueError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
@@ -51,19 +54,20 @@ def list_cmd(
         return
 
     table = Table()
-    table.add_column("#", width=5)
+    table.add_column("Key", width=9)
     table.add_column("Epic")
-    table.add_column("Cat", width=5)
     table.add_column("Status", width=8)
     table.add_column("Open", justify="right", width=5)
     table.add_column("Done", justify="right", width=5)
     table.add_column("Total", justify="right", width=6)
 
     for e in epics:
+        epic_key = e.get("epic_key") or ""
+        epic_seq = e.get("epic_seq")
+        key_label = f"{epic_key}-{epic_seq}" if epic_key and epic_seq else str(e["id"])
         table.add_row(
-            str(e["id"]),
+            key_label,
             e["title"][:40],
-            e.get("epic_key") or "",
             e["status"],
             str(e["children_open"]),
             str(e["children_done"]),
