@@ -568,7 +568,7 @@ def generate_article(
     # Look up topic
     with db.get_connection() as conn:
         topic_row = conn.execute(
-            "SELECT id, topic_slug, topic_label, description FROM wiki_topics WHERE id = ?",
+            "SELECT id, topic_slug, topic_label, description, status FROM wiki_topics WHERE id = ?",
             (topic_id,),
         ).fetchone()
 
@@ -589,6 +589,22 @@ def generate_article(
     topic_slug = topic_row[1]
     topic_label = topic_row[2]
     description = topic_row[3] or ""
+    topic_status: str = topic_row[4] or "active"
+
+    # Skip topics with status='skipped'
+    if topic_status == "skipped":
+        return WikiArticleResult(
+            topic_id=topic_id,
+            topic_label=topic_label,
+            document_id=0,
+            article_id=0,
+            input_tokens=0,
+            output_tokens=0,
+            cost_usd=0.0,
+            model=model or DEFAULT_MODEL,
+            skipped=True,
+            skip_reason="Topic is skipped",
+        )
 
     # Parse top entities from description (stored as JSON array)
     import json
@@ -643,26 +659,27 @@ def generate_article(
         total_chars,
     )
 
-    # Check staleness — skip if source hash unchanged
+    # Check staleness — skip if source hash unchanged (pinned topics bypass)
     source_hash = _compute_source_hash(sources)
-    with db.get_connection() as conn:
-        existing = conn.execute(
-            "SELECT source_hash, is_stale FROM wiki_articles WHERE topic_id = ?",
-            (topic_id,),
-        ).fetchone()
-    if existing and existing[0] == source_hash and not existing[1]:
-        return WikiArticleResult(
-            topic_id=topic_id,
-            topic_label=topic_label,
-            document_id=0,
-            article_id=0,
-            input_tokens=0,
-            output_tokens=0,
-            cost_usd=0.0,
-            model=model or DEFAULT_MODEL,
-            skipped=True,
-            skip_reason="Article up to date (source hash unchanged)",
-        )
+    if topic_status != "pinned":
+        with db.get_connection() as conn:
+            existing = conn.execute(
+                "SELECT source_hash, is_stale FROM wiki_articles WHERE topic_id = ?",
+                (topic_id,),
+            ).fetchone()
+        if existing and existing[0] == source_hash and not existing[1]:
+            return WikiArticleResult(
+                topic_id=topic_id,
+                topic_label=topic_label,
+                document_id=0,
+                article_id=0,
+                input_tokens=0,
+                output_tokens=0,
+                cost_usd=0.0,
+                model=model or DEFAULT_MODEL,
+                skipped=True,
+                skip_reason="Article up to date (source hash unchanged)",
+            )
     prepare_ms = _ms_since(t0)
 
     # Step 2: ROUTE

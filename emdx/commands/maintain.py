@@ -1614,11 +1614,17 @@ def wiki_status() -> None:
         table.add_column("Status")
 
         for t in topics[:20]:
+            status_str = str(t["status"])
+            status_styled = {
+                "active": "[green]active[/green]",
+                "skipped": "[red]skipped[/red]",
+                "pinned": "[yellow]pinned[/yellow]",
+            }.get(status_str, status_str)
             table.add_row(
                 str(t["id"]),
                 str(t["label"])[:50],
                 str(t["member_count"]),
-                str(t["status"]),
+                status_styled,
             )
         console.print(table)
 
@@ -2217,6 +2223,91 @@ def wiki_rename(
     print(f"  Slug:  {old_slug} -> {new_slug}")
     if article_row:
         print(f"  Document #{doc_id} title updated")
+
+
+def _set_topic_status(topic_id: int, new_status: str) -> tuple[str, str]:
+    """Set a wiki topic's status. Returns (topic_label, old_status).
+
+    Raises typer.Exit(1) if topic not found.
+    """
+    from ..database import db as _db
+
+    with _db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT topic_label, status FROM wiki_topics WHERE id = ?",
+            (topic_id,),
+        ).fetchone()
+
+        if not row:
+            print(f"Topic {topic_id} not found")
+            raise typer.Exit(1)
+
+        old_status = row[1]
+        conn.execute(
+            "UPDATE wiki_topics SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_status, topic_id),
+        )
+        conn.commit()
+
+    return row[0], old_status
+
+
+@wiki_app.command(name="skip")
+def wiki_skip(
+    topic_id: int = typer.Argument(..., help="Topic ID to skip"),
+) -> None:
+    """Skip a topic during wiki generation.
+
+    Sets the topic status to 'skipped' so it is excluded from
+    future wiki generate runs.
+
+    Examples:
+        emdx maintain wiki skip 5
+    """
+    label, old_status = _set_topic_status(topic_id, "skipped")
+    print(f"Skipped topic {topic_id} ({label}) [was: {old_status}]")
+
+
+@wiki_app.command(name="unskip")
+def wiki_unskip(
+    topic_id: int = typer.Argument(..., help="Topic ID to unskip"),
+) -> None:
+    """Reset a skipped topic back to active.
+
+    Examples:
+        emdx maintain wiki unskip 5
+    """
+    label, old_status = _set_topic_status(topic_id, "active")
+    print(f"Unskipped topic {topic_id} ({label}) [was: {old_status}]")
+
+
+@wiki_app.command(name="pin")
+def wiki_pin(
+    topic_id: int = typer.Argument(..., help="Topic ID to pin"),
+) -> None:
+    """Pin a topic so it always regenerates during wiki generation.
+
+    Pinned topics bypass the staleness check and are always
+    regenerated, even if their source hash is unchanged.
+
+    Examples:
+        emdx maintain wiki pin 5
+    """
+    label, old_status = _set_topic_status(topic_id, "pinned")
+    print(f"Pinned topic {topic_id} ({label}) [was: {old_status}]")
+
+
+@wiki_app.command(name="unpin")
+def wiki_unpin(
+    topic_id: int = typer.Argument(..., help="Topic ID to unpin"),
+) -> None:
+    """Reset a pinned topic back to active.
+
+    Examples:
+        emdx maintain wiki unpin 5
+    """
+    label, old_status = _set_topic_status(topic_id, "active")
+    print(f"Unpinned topic {topic_id} ({label}) [was: {old_status}]")
 
 
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
