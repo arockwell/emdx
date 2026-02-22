@@ -426,7 +426,8 @@ def get_topics() -> list[dict[str, object]]:
         cursor = conn.execute(
             "SELECT t.id, t.topic_slug, t.topic_label, t.description, "
             "t.coherence_score, t.status, "
-            "COUNT(m.document_id) as member_count "
+            "COUNT(m.document_id) as member_count, "
+            "t.model_override "
             "FROM wiki_topics t "
             "LEFT JOIN wiki_topic_members m ON t.id = m.topic_id "
             "GROUP BY t.id "
@@ -443,6 +444,7 @@ def get_topics() -> list[dict[str, object]]:
             "coherence_score": row[4],
             "status": row[5],
             "member_count": row[6],
+            "model_override": row[7],
         }
         for row in rows
     ]
