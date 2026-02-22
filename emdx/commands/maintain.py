@@ -1806,7 +1806,6 @@ def wiki_entities(
     console.print(table)
 
 
-@wiki_app.command(name="list")
 def _format_ms(ms: int) -> str:
     """Format milliseconds into a human-readable string."""
     if ms >= 60_000:
@@ -1816,6 +1815,7 @@ def _format_ms(ms: int) -> str:
     return f"{ms}ms"
 
 
+@wiki_app.command(name="list")
 def wiki_list(
     limit: int = typer.Option(20, "--limit", "-l", help="Max articles to show"),
     stale: bool = typer.Option(False, "--stale", help="Show only stale articles"),
