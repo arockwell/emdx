@@ -2494,6 +2494,271 @@ def wiki_prompt(
         print(f"Set editorial prompt for topic {topic_id} ({label})")
 
 
+@wiki_app.command(name="merge")
+def wiki_merge(
+    topic_id_1: int = typer.Argument(..., help="Target topic ID (will be kept)"),
+    topic_id_2: int = typer.Argument(..., help="Source topic ID (will be deleted)"),
+) -> None:
+    """Merge two wiki topics into one.
+
+    Combines the members of both topics under the first topic's ID.
+    The merged label is "Label A & Label B". The second topic and its
+    wiki article (if any) are deleted.
+
+    Examples:
+        emdx maintain wiki merge 5 12        # Merge topic 12 into topic 5
+    """
+    import re
+
+    from ..database import db
+
+    def _slugify_label(label: str) -> str:
+        slug = label.lower().strip()
+        slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+        slug = re.sub(r"[\s-]+", "-", slug)
+        return slug[:80].strip("-")
+
+    if topic_id_1 == topic_id_2:
+        print("Error: cannot merge a topic with itself")
+        raise typer.Exit(1)
+
+    with db.get_connection() as conn:
+        # Look up both topics
+        row1 = conn.execute(
+            "SELECT topic_label FROM wiki_topics WHERE id = ?",
+            (topic_id_1,),
+        ).fetchone()
+        if not row1:
+            print(f"Topic {topic_id_1} not found")
+            raise typer.Exit(1)
+
+        row2 = conn.execute(
+            "SELECT topic_label FROM wiki_topics WHERE id = ?",
+            (topic_id_2,),
+        ).fetchone()
+        if not row2:
+            print(f"Topic {topic_id_2} not found")
+            raise typer.Exit(1)
+
+        label1 = row1[0]
+        label2 = row2[0]
+        merged_label = f"{label1} & {label2}"
+        merged_slug = _slugify_label(merged_label)
+
+        # Check slug uniqueness (excluding both topics being merged)
+        conflict = conn.execute(
+            "SELECT id FROM wiki_topics WHERE topic_slug = ? AND id NOT IN (?, ?)",
+            (merged_slug, topic_id_1, topic_id_2),
+        ).fetchone()
+        if conflict:
+            print(f"Error: slug '{merged_slug}' already in use by topic {conflict[0]}")
+            raise typer.Exit(1)
+
+        # Move members from topic 2 to topic 1 (skip duplicates)
+        members_2 = conn.execute(
+            "SELECT document_id, relevance_score, is_primary "
+            "FROM wiki_topic_members WHERE topic_id = ?",
+            (topic_id_2,),
+        ).fetchall()
+
+        moved = 0
+        for doc_id, relevance, is_primary in members_2:
+            existing = conn.execute(
+                "SELECT 1 FROM wiki_topic_members WHERE topic_id = ? AND document_id = ?",
+                (topic_id_1, doc_id),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    "INSERT INTO wiki_topic_members "
+                    "(topic_id, document_id, relevance_score, is_primary) "
+                    "VALUES (?, ?, ?, ?)",
+                    (topic_id_1, doc_id, relevance, is_primary),
+                )
+                moved += 1
+
+        # Delete wiki article for topic 2 if it exists
+        article_row = conn.execute(
+            "SELECT document_id FROM wiki_articles WHERE topic_id = ?",
+            (topic_id_2,),
+        ).fetchone()
+        article_deleted = False
+        if article_row:
+            article_doc_id = article_row[0]
+            conn.execute(
+                "DELETE FROM wiki_article_sources WHERE article_id IN "
+                "(SELECT id FROM wiki_articles WHERE topic_id = ?)",
+                (topic_id_2,),
+            )
+            conn.execute("DELETE FROM wiki_articles WHERE topic_id = ?", (topic_id_2,))
+            conn.execute(
+                "UPDATE documents SET is_deleted = 1 WHERE id = ?",
+                (article_doc_id,),
+            )
+            article_deleted = True
+
+        # Delete topic 2 members and topic row
+        conn.execute("DELETE FROM wiki_topic_members WHERE topic_id = ?", (topic_id_2,))
+        conn.execute("DELETE FROM wiki_topics WHERE id = ?", (topic_id_2,))
+
+        # Update topic 1 label and slug
+        conn.execute(
+            "UPDATE wiki_topics SET topic_label = ?, topic_slug = ?, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (merged_label, merged_slug, topic_id_1),
+        )
+
+        # Mark topic 1's article as stale if it exists
+        conn.execute(
+            "UPDATE wiki_articles SET is_stale = 1, stale_reason = 'topic merged' "
+            "WHERE topic_id = ?",
+            (topic_id_1,),
+        )
+
+        conn.commit()
+
+    # Count total members after merge
+    with db.get_connection() as conn:
+        total = conn.execute(
+            "SELECT COUNT(*) FROM wiki_topic_members WHERE topic_id = ?",
+            (topic_id_1,),
+        ).fetchone()[0]
+
+    print(f"Merged topic {topic_id_2} ({label2}) into topic {topic_id_1} ({label1})")
+    print(f"  New label: {merged_label}")
+    print(f"  New slug:  {merged_slug}")
+    print(f"  Members moved: {moved}")
+    print(f"  Total members: {total}")
+    if article_deleted:
+        print(f"  Deleted wiki article for topic {topic_id_2}")
+
+
+@wiki_app.command(name="split")
+def wiki_split(
+    topic_id: int = typer.Argument(..., help="Topic ID to split"),
+    entity: str = typer.Option(..., "--entity", "-e", help="Entity name to split by"),
+) -> None:
+    """Split a wiki topic by extracting docs that mention an entity.
+
+    Finds documents in the topic whose title or content mentions the
+    entity name, moves them to a new topic with a label derived from
+    the entity, and keeps remaining docs in the original topic.
+
+    Examples:
+        emdx maintain wiki split 5 --entity "OAuth"
+        emdx maintain wiki split 12 -e "SQLite"
+    """
+    import re
+
+    from ..database import db
+
+    def _slugify_label(label: str) -> str:
+        slug = label.lower().strip()
+        slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+        slug = re.sub(r"[\s-]+", "-", slug)
+        return slug[:80].strip("-")
+
+    with db.get_connection() as conn:
+        # Verify topic exists
+        topic_row = conn.execute(
+            "SELECT topic_label FROM wiki_topics WHERE id = ?",
+            (topic_id,),
+        ).fetchone()
+        if not topic_row:
+            print(f"Topic {topic_id} not found")
+            raise typer.Exit(1)
+
+        original_label = topic_row[0]
+
+        # Get all member docs with their titles and content
+        members = conn.execute(
+            "SELECT m.document_id, d.title, d.content "
+            "FROM wiki_topic_members m "
+            "JOIN documents d ON m.document_id = d.id "
+            "WHERE m.topic_id = ?",
+            (topic_id,),
+        ).fetchall()
+
+        if not members:
+            print(f"Topic {topic_id} has no members")
+            raise typer.Exit(1)
+
+        # Find docs mentioning the entity (case-insensitive)
+        entity_lower = entity.lower()
+        matching_doc_ids: list[int] = []
+        remaining_doc_ids: list[int] = []
+
+        for doc_id, title, content in members:
+            text = f"{title or ''} {content or ''}".lower()
+            if entity_lower in text:
+                matching_doc_ids.append(doc_id)
+            else:
+                remaining_doc_ids.append(doc_id)
+
+        if not matching_doc_ids:
+            print(f"No documents in topic {topic_id} mention '{entity}'")
+            raise typer.Exit(1)
+
+        if not remaining_doc_ids:
+            print(
+                f"All documents in topic {topic_id} mention '{entity}' "
+                "— nothing would remain. Use rename instead."
+            )
+            raise typer.Exit(1)
+
+        # Create new topic for the split-off docs
+        new_label = entity
+        new_slug = _slugify_label(new_label)
+
+        # Ensure slug uniqueness by appending a suffix if needed
+        base_slug = new_slug
+        suffix = 0
+        while True:
+            conflict = conn.execute(
+                "SELECT id FROM wiki_topics WHERE topic_slug = ?",
+                (new_slug,),
+            ).fetchone()
+            if not conflict:
+                break
+            suffix += 1
+            new_slug = f"{base_slug}-{suffix}"
+
+        conn.execute(
+            "INSERT INTO wiki_topics "
+            "(topic_slug, topic_label, entity_fingerprint, status) "
+            "VALUES (?, ?, '', 'active')",
+            (new_slug, new_label),
+        )
+        new_topic_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        # Move matching docs to the new topic
+        for doc_id in matching_doc_ids:
+            conn.execute(
+                "DELETE FROM wiki_topic_members WHERE topic_id = ? AND document_id = ?",
+                (topic_id, doc_id),
+            )
+            conn.execute(
+                "INSERT INTO wiki_topic_members "
+                "(topic_id, document_id, relevance_score, is_primary) "
+                "VALUES (?, ?, 1.0, 1)",
+                (new_topic_id, doc_id),
+            )
+
+        # Mark original topic's article as stale if it exists
+        conn.execute(
+            "UPDATE wiki_articles SET is_stale = 1, stale_reason = 'topic split' "
+            "WHERE topic_id = ?",
+            (topic_id,),
+        )
+
+        conn.commit()
+
+    print(f"Split topic {topic_id} ({original_label}) by entity '{entity}'")
+    print(f"  New topic: {new_topic_id} ({new_label})")
+    print(f"  New slug:  {new_slug}")
+    print(f"  Moved {len(matching_doc_ids)} doc(s): {matching_doc_ids}")
+    print(f"  Remaining in original: {len(remaining_doc_ids)} doc(s)")
+
+
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 
 # Register stale as a subcommand group of maintain
