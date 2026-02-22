@@ -130,6 +130,9 @@ class ActivityView(HelpMixin, Widget):
         ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
         ("c", "toggle_copy_mode", "Copy Mode"),
+        ("d", "mark_done", "Mark Done"),
+        ("a", "mark_active", "Mark Active"),
+        ("b", "mark_blocked", "Mark Blocked"),
         ("R", "jump_running", "Jump Running"),
         ("T", "jump_tasks", "Jump Tasks"),
         ("D", "jump_docs", "Jump Docs"),
@@ -946,6 +949,43 @@ class ActivityView(HelpMixin, Widget):
         except Exception as e:
             logger.error(f"Error dismissing execution: {e}")
             self._show_notification(f"Error: {e}", is_error=True)
+
+    # Task status actions
+
+    async def _set_task_status(self, new_status: str) -> None:
+        """Change status of the selected task and refresh."""
+        item = self._get_selected_item()
+        if item is None:
+            self._show_notification("No item selected", is_error=True)
+            return
+
+        if item.item_type != "task":
+            return
+
+        if item.status == new_status:
+            return
+
+        try:
+            from emdx.models.tasks import update_task
+
+            update_task(item.item_id, status=new_status)
+            self._show_notification(f"Task #{item.item_id} → {new_status}")
+            await self._refresh_data()
+        except Exception as e:
+            logger.error(f"Failed to update task: {e}")
+            self._show_notification(f"Error: {e}", is_error=True)
+
+    async def action_mark_done(self) -> None:
+        """Mark selected task as done."""
+        await self._set_task_status("done")
+
+    async def action_mark_active(self) -> None:
+        """Mark selected task as active."""
+        await self._set_task_status("active")
+
+    async def action_mark_blocked(self) -> None:
+        """Mark selected task as blocked."""
+        await self._set_task_status("blocked")
 
     def _show_notification(self, message: str, is_error: bool = False) -> None:
         """Show a notification message."""
