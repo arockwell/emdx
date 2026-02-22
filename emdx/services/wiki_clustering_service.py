@@ -451,11 +451,12 @@ def get_topics() -> list[dict[str, object]]:
 
 
 def get_topic_docs(topic_id: int) -> list[int]:
-    """Get document IDs for a specific topic."""
+    """Get document IDs for a specific topic (primary members only)."""
     with db.get_connection() as conn:
         cursor = conn.execute(
             "SELECT document_id FROM wiki_topic_members "
-            "WHERE topic_id = ? ORDER BY relevance_score DESC",
+            "WHERE topic_id = ? AND is_primary = 1 "
+            "ORDER BY relevance_score DESC",
             (topic_id,),
         )
         return [row[0] for row in cursor.fetchall()]

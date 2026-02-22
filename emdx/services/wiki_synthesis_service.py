@@ -60,6 +60,7 @@ class ArticleSource:
     content: str  # pre-processed (privacy-filtered)
     content_hash: str
     char_count: int
+    relevance_score: float = 1.0
 
 
 @dataclass
@@ -107,13 +108,25 @@ class WikiGenerationResult:
 # ── Step 1: PREPARE ──────────────────────────────────────────────────
 
 
-def _prepare_sources(doc_ids: list[int]) -> list[ArticleSource]:
+def _prepare_sources(doc_ids: list[int], topic_id: int | None = None) -> list[ArticleSource]:
     """Fetch and pre-process source documents for synthesis.
 
     Applies Layer 1 privacy filtering and computes content hashes
-    for staleness tracking.
+    for staleness tracking. When *topic_id* is given, relevance_score
+    from wiki_topic_members is used to scale each source's content
+    contribution (truncating to ``MAX_DOC_CHARS * relevance_score``).
     """
     sources: list[ArticleSource] = []
+
+    # Fetch relevance scores if topic_id provided
+    weight_map: dict[int, float] = {}
+    if topic_id is not None:
+        with db.get_connection() as conn:
+            weight_rows = conn.execute(
+                "SELECT document_id, relevance_score FROM wiki_topic_members WHERE topic_id = ?",
+                (topic_id,),
+            ).fetchall()
+        weight_map = {row[0]: row[1] for row in weight_rows}
 
     with db.get_connection() as conn:
         placeholders = ",".join("?" * len(doc_ids))
@@ -127,15 +140,19 @@ def _prepare_sources(doc_ids: list[int]) -> list[ArticleSource]:
 
     for row in rows:
         doc_id, title, content = row[0], row[1], row[2]
+        relevance = weight_map.get(doc_id, 1.0)
 
         # Apply Layer 1 privacy filtering
         filtered, warnings = preprocess_content(content)
         if warnings:
             logger.info("Doc #%d pre-processing: %s", doc_id, ", ".join(warnings))
 
-        # Truncate very long documents
-        if len(filtered) > MAX_DOC_CHARS:
-            filtered = filtered[:MAX_DOC_CHARS] + "\n\n[... content truncated ...]"
+        # Scale max chars by relevance_score
+        effective_max = int(MAX_DOC_CHARS * relevance)
+        if effective_max <= 0:
+            continue
+        if len(filtered) > effective_max:
+            filtered = filtered[:effective_max] + "\n\n[... content truncated ...]"
 
         content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
 
@@ -146,6 +163,7 @@ def _prepare_sources(doc_ids: list[int]) -> list[ArticleSource]:
                 content=filtered,
                 content_hash=content_hash,
                 char_count=len(filtered),
+                relevance_score=relevance,
             )
         )
 
@@ -654,7 +672,7 @@ def generate_article(
             skip_reason="No source documents for topic",
         )
 
-    sources = _prepare_sources(doc_ids)
+    sources = _prepare_sources(doc_ids, topic_id=topic_id)
     if not sources:
         return WikiArticleResult(
             topic_id=topic_id,
