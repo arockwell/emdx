@@ -14,7 +14,7 @@ from collections.abc import Callable
 import typer
 
 from emdx import __version__
-from emdx.utils.lazy_group import LazyTyperGroup, register_lazy_commands
+from emdx.utils.lazy_group import LazyTyperGroup, register_aliases, register_lazy_commands
 
 # =============================================================================
 # LAZY COMMANDS - Heavy features (defer import until invoked)
@@ -79,6 +79,9 @@ def create_disabled_command(name: str) -> Callable[[], None]:
 # Register lazy commands BEFORE importing any Typer apps
 # This ensures the registry is populated when LazyTyperGroup is instantiated
 register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
+
+# Register top-level command aliases (alias -> canonical name)
+register_aliases({"show": "view"})
 
 # =============================================================================
 # EAGER IMPORTS - Core KB commands (fast, always needed)

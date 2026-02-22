@@ -1,18 +1,123 @@
-"""Lazy loading support for Typer CLI commands.
+"""Lazy loading and alias support for Typer CLI commands.
 
-This module provides a LazyTyperGroup class that extends Typer's group
-to support lazy loading of subcommands. This significantly improves
-startup performance for CLI applications with many heavy dependencies.
+This module provides:
+- LazyTyperGroup: Extends Typer's group with lazy loading of subcommands
+  and command aliases. Heavy commands are only imported when invoked.
+- AliasGroup: A lighter TyperGroup subclass that adds alias support
+  without lazy loading, suitable for subcommand groups (e.g. task).
 
 Heavy commands (delegate, ai, etc.) are only imported
 when actually invoked, not on every CLI call.
 """
+
+from __future__ import annotations
 
 import importlib
 from typing import Any
 
 import click
 from typer.core import TyperGroup
+
+# Module-level registry for command aliases
+# Maps alias name -> canonical command name
+_ALIAS_REGISTRY: dict[str, str] = {}
+
+
+def register_aliases(aliases: dict[str, str]) -> None:
+    """Register command aliases in the global registry.
+
+    Args:
+        aliases: Dict mapping alias name to canonical command name.
+            Example: {"show": "view"} means 'show' resolves to 'view'.
+    """
+    _ALIAS_REGISTRY.update(aliases)
+
+
+def _build_reverse_alias_map(aliases: dict[str, str]) -> dict[str, list[str]]:
+    """Build a reverse map from canonical name -> list of aliases."""
+    reverse: dict[str, list[str]] = {}
+    for alias, canonical in aliases.items():
+        reverse.setdefault(canonical, []).append(alias)
+    return reverse
+
+
+class _AliasFormatMixin:
+    """Mixin that annotates help output with alias info (e.g. 'view (show)')."""
+
+    _aliases: dict[str, str]  # alias -> canonical
+
+    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        """Override to append alias annotations to command names in help."""
+        # Build reverse map: canonical -> [alias1, alias2, ...]
+        reverse = _build_reverse_alias_map(self._aliases)
+
+        commands: list[tuple[str, click.Command | None]] = []
+        for subcommand in self.list_commands(ctx):  # type: ignore[attr-defined]
+            cmd = self.get_command(ctx, subcommand)  # type: ignore[attr-defined]
+            if cmd is not None and not cmd.hidden:
+                commands.append((subcommand, cmd))
+
+        if not commands:
+            return
+
+        limit = formatter.width - 6 - max(len(subcommand) for subcommand, _ in commands)
+        rows: list[tuple[str, str]] = []
+        for subcommand, cmd in commands:
+            assert cmd is not None  # narrowing for mypy
+            help_text = cmd.get_short_help_str(limit=limit)
+            alias_list = reverse.get(subcommand)
+            if alias_list:
+                label = f"{subcommand} ({', '.join(sorted(alias_list))})"
+            else:
+                label = subcommand
+            rows.append((label, help_text))
+
+        if rows:
+            with formatter.section("Commands"):
+                formatter.write_dl(rows)
+
+
+class AliasGroup(_AliasFormatMixin, TyperGroup):
+    """A TyperGroup with command alias support.
+
+    Use this as cls= for Typer sub-apps that need aliases.
+    Aliases are resolved in get_command() before falling back to super().
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        aliases: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._aliases: dict[str, str] = aliases or {}
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        """Resolve aliases before looking up the command."""
+        canonical = self._aliases.get(cmd_name, cmd_name)
+        return super().get_command(ctx, canonical)
+
+
+def make_alias_group(aliases: dict[str, str]) -> type[AliasGroup]:
+    """Create an AliasGroup subclass with aliases baked in.
+
+    Typer instantiates ``cls`` without custom kwargs, so we use a factory
+    to produce a class whose ``__init__`` injects the alias map automatically.
+
+    Usage::
+
+        app = typer.Typer(cls=make_alias_group({"create": "add"}))
+    """
+
+    class _BakedAliasGroup(AliasGroup):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs.setdefault("aliases", aliases)
+            super().__init__(*args, **kwargs)
+
+    _BakedAliasGroup.__qualname__ = f"AliasGroup[{','.join(aliases)}]"
+    return _BakedAliasGroup
+
 
 # Module-level registry for lazy commands
 # This is populated by the main module and read by LazyTyperGroup instances
@@ -51,7 +156,7 @@ class LazyCommand(click.MultiCommand):
         name: str,
         import_path: str,
         help_text: str,
-        parent_group: "LazyTyperGroup",
+        parent_group: LazyTyperGroup,
     ) -> None:
         super().__init__(name=name, help=help_text)
         self.import_path = import_path
@@ -178,12 +283,15 @@ class LazyCommand(click.MultiCommand):
         return real_cmd.main(*args, **kwargs)
 
 
-class LazyTyperGroup(TyperGroup):
-    """A Typer-compatible Group with lazy subcommand loading.
+class LazyTyperGroup(_AliasFormatMixin, TyperGroup):
+    """A Typer-compatible Group with lazy subcommand loading and aliases.
 
     This class allows subcommands to be specified as import paths rather than
     actual command objects. The commands are only imported when they are
     invoked, not when the CLI is started.
+
+    It also supports command aliases (e.g. 'show' → 'view') via the global
+    alias registry or explicit ``aliases`` kwarg.
 
     The lazy commands are registered via the module-level registry using
     `register_lazy_commands()`.
@@ -194,6 +302,7 @@ class LazyTyperGroup(TyperGroup):
         *args: Any,
         lazy_subcommands: dict[str, str] | None = None,
         lazy_help: dict[str, str] | None = None,
+        aliases: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
         """Initialize the lazy group.
@@ -203,6 +312,8 @@ class LazyTyperGroup(TyperGroup):
                 If not provided, uses the global registry.
             lazy_help: Dict mapping command name to help text.
                 If not provided, uses the global registry.
+            aliases: Dict mapping alias name to canonical command name.
+                If not provided, uses the global alias registry.
         """
         super().__init__(*args, **kwargs)
 
@@ -217,6 +328,11 @@ class LazyTyperGroup(TyperGroup):
         else:
             self.lazy_help = _LAZY_REGISTRY["help"].copy()
 
+        if aliases is not None:
+            self._aliases: dict[str, str] = aliases
+        else:
+            self._aliases = _ALIAS_REGISTRY.copy()
+
         self._loaded_commands: dict[str, click.BaseCommand] = {}
         self._lazy_placeholders: dict[str, LazyCommand] = {}
 
@@ -229,12 +345,15 @@ class LazyTyperGroup(TyperGroup):
         return sorted(all_commands)
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
-        """Get command, returning a lazy placeholder if needed.
+        """Get command, resolving aliases and returning a lazy placeholder if needed.
 
         For lazy commands, this returns a LazyCommand placeholder that:
         - Has the correct help text (for --help listings)
         - Only loads the actual module when invoked
         """
+        # Resolve alias to canonical name
+        cmd_name = self._aliases.get(cmd_name, cmd_name)
+
         # Check if we've already loaded the real command
         if cmd_name in self._loaded_commands:
             loaded = self._loaded_commands[cmd_name]

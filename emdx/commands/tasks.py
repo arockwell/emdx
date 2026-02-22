@@ -12,9 +12,10 @@ from emdx.commands.categories import app as categories_app
 from emdx.commands.epics import app as epics_app
 from emdx.models import tasks
 from emdx.models.types import TaskDict
+from emdx.utils.lazy_group import make_alias_group
 from emdx.utils.output import console, is_non_interactive, print_json
 
-app = typer.Typer(help="Agent work queue")
+app = typer.Typer(help="Agent work queue", cls=make_alias_group({"create": "add"}))
 app.add_typer(epics_app, name="epic", help="Manage task epics")
 app.add_typer(categories_app, name="cat", help="Manage task categories")
 
