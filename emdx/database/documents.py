@@ -248,23 +248,6 @@ def count_documents(
         return int(result[0]) if result else 0
 
 
-def has_children(doc_id: int) -> bool:
-    """Check if a document has children.
-
-    Args:
-        doc_id: Parent document ID
-
-    Returns:
-        True if the document has at least one child
-    """
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT 1 FROM documents WHERE is_deleted = FALSE AND parent_id = ? AND archived_at IS NULL LIMIT 1",  # noqa: E501
-            (doc_id,),
-        )
-        return cursor.fetchone() is not None
-
-
 def get_children_count(
     doc_ids: list[int],
 ) -> dict[int, int]:
@@ -714,33 +697,6 @@ def get_children(doc_id: int) -> list[ChildDocumentItem]:
             _parse_doc_datetimes(raw)
             docs.append(cast(ChildDocumentItem, raw))
         return docs
-
-
-def get_descendants(doc_id: int) -> list[ChildDocumentItem]:
-    """Get all descendants of a document (children, grandchildren, etc).
-
-    Args:
-        doc_id: ID of root document
-
-    Returns:
-        List of all descendant documents
-    """
-    descendants = []
-    to_visit = [doc_id]
-    visited = set()
-
-    while to_visit:
-        current_id = to_visit.pop(0)
-        if current_id in visited:
-            continue
-        visited.add(current_id)
-
-        children = get_children(current_id)
-        for child in children:
-            descendants.append(child)
-            to_visit.append(child["id"])
-
-    return descendants
 
 
 def list_recent_documents(

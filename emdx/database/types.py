@@ -109,17 +109,6 @@ class MostViewedDoc(TypedDict):
     access_count: int
 
 
-class DocumentLinkRow(TypedDict):
-    """A link between two documents from the document_links table."""
-
-    id: int
-    source_doc_id: int
-    target_doc_id: int
-    similarity_score: float
-    created_at: str | None
-    method: str
-
-
 class DocumentLinkDetail(TypedDict):
     """A document link with joined document titles for display."""
 
@@ -131,22 +120,6 @@ class DocumentLinkDetail(TypedDict):
     similarity_score: float
     created_at: str | None
     method: str
-
-
-class WikiRunRow(TypedDict):
-    """Row from the wiki_runs table."""
-
-    id: int
-    started_at: str | None
-    completed_at: str | None
-    topics_attempted: int
-    articles_generated: int
-    articles_skipped: int
-    total_input_tokens: int
-    total_output_tokens: int
-    total_cost_usd: float
-    model: str
-    dry_run: int
 
 
 class WikiArticleTimingDict(TypedDict):

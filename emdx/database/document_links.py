@@ -69,17 +69,6 @@ def delete_link(
         return cursor.rowcount > 0
 
 
-def delete_links_for_document(doc_id: int) -> int:
-    """Delete all links involving a document. Returns count deleted."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            "DELETE FROM document_links WHERE source_doc_id = ? OR target_doc_id = ?",
-            (doc_id, doc_id),
-        )
-        conn.commit()
-        return cursor.rowcount
-
-
 def get_links_for_document(doc_id: int) -> list[DocumentLinkDetail]:
     """Get all links for a document (both directions) with titles.
 
@@ -144,27 +133,6 @@ def get_link_count(doc_id: int) -> int:
         )
         row = cursor.fetchone()
         return int(row[0]) if row else 0
-
-
-def batch_get_link_counts(doc_ids: list[int]) -> dict[int, int]:
-    """Get link counts for multiple documents efficiently."""
-    if not doc_ids:
-        return {}
-
-    with db_connection.get_connection() as conn:
-        placeholders = ",".join("?" for _ in doc_ids)
-        cursor = conn.execute(
-            f"SELECT doc_id, COUNT(*) AS cnt FROM ("
-            f"  SELECT source_doc_id AS doc_id FROM document_links "
-            f"  WHERE source_doc_id IN ({placeholders}) "
-            f"  UNION ALL "
-            f"  SELECT target_doc_id AS doc_id FROM document_links "
-            f"  WHERE target_doc_id IN ({placeholders})"
-            f") GROUP BY doc_id",
-            doc_ids + doc_ids,
-        )
-        counts = {row[0]: row[1] for row in cursor.fetchall()}
-        return {doc_id: counts.get(doc_id, 0) for doc_id in doc_ids}
 
 
 def create_links_batch(

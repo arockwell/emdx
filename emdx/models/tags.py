@@ -392,22 +392,3 @@ def merge_tags(source_tags: list[str], target_tag: str) -> int:
 
         conn.commit()
         return merged_count
-
-
-def get_tag_suggestions(partial: str, limit: int = 10) -> list[str]:
-    """Get tag suggestions based on partial input."""
-    with db.get_connection() as conn:
-        partial = partial.lower().strip()
-
-        cursor = conn.execute(
-            """
-            SELECT name
-            FROM tags
-            WHERE name LIKE ?
-            ORDER BY usage_count DESC, name
-            LIMIT ?
-        """,
-            (f"{partial}%", limit),
-        )
-
-        return [row[0] for row in cursor.fetchall()]
