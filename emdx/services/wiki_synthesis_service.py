@@ -432,22 +432,38 @@ def _save_article(
 
     if existing:
         article_id, doc_id = existing[0], existing[1]
-        # Update existing document content
+        # Stash current content before overwriting
         with db.get_connection() as conn:
+            old_row = conn.execute(
+                "SELECT content FROM documents WHERE id = ?",
+                (doc_id,),
+            ).fetchone()
+            old_content = old_row[0] if old_row else ""
+
+            # Update existing document content
             conn.execute(
                 "UPDATE documents SET content = ?, title = ?, "
                 "doc_type = 'wiki', "
                 "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 (content, outline.suggested_title, doc_id),
             )
-            # Update article metadata
+            # Update article metadata with previous content stashed
             conn.execute(
                 "UPDATE wiki_articles SET source_hash = ?, model = ?, "
                 "input_tokens = ?, output_tokens = ?, cost_usd = ?, "
                 "is_stale = 0, stale_reason = '', "
+                "previous_content = ?, "
                 "version = version + 1, generated_at = CURRENT_TIMESTAMP "
                 "WHERE id = ?",
-                (source_hash, model, input_tokens, output_tokens, cost_usd, article_id),
+                (
+                    source_hash,
+                    model,
+                    input_tokens,
+                    output_tokens,
+                    cost_usd,
+                    old_content,
+                    article_id,
+                ),
             )
             # Replace source provenance
             conn.execute(
@@ -930,3 +946,46 @@ def list_wiki_runs(limit: int = 10) -> list[dict[str, object]]:
         ).fetchall()
 
     return [dict(row) for row in rows]
+
+
+# ── Article diff ──────────────────────────────────────────────────────
+
+
+def get_article_diff(topic_id: int) -> str | None:
+    """Return a unified diff between previous and current article content.
+
+    Args:
+        topic_id: The wiki_topics.id to get the diff for.
+
+    Returns:
+        A unified diff string, or None if no previous content exists
+        or the topic/article is not found.
+    """
+    import difflib
+
+    with db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT wa.previous_content, d.content, d.title "
+            "FROM wiki_articles wa "
+            "JOIN documents d ON wa.document_id = d.id "
+            "WHERE wa.topic_id = ?",
+            (topic_id,),
+        ).fetchone()
+
+    if not row:
+        return None
+
+    previous_content: str = row[0] or ""
+    current_content: str = row[1] or ""
+    title: str = row[2] or ""
+
+    if not previous_content:
+        return None
+
+    diff_lines = difflib.unified_diff(
+        previous_content.splitlines(keepends=True),
+        current_content.splitlines(keepends=True),
+        fromfile=f"a/{title} (previous)",
+        tofile=f"b/{title} (current)",
+    )
+    return "".join(diff_lines)
