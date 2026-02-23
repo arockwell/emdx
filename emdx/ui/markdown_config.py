@@ -6,8 +6,13 @@ This module provides configuration options for improving markdown rendering,
 including code syntax highlighting themes and formatting options.
 """
 
+from __future__ import annotations
+
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from textual.widgets import RichLog
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -90,6 +95,50 @@ class MarkdownConfig:
         md = MarkdownConfig.create_markdown(content, code_theme)
         console.print(md)
         return console
+
+
+MAX_PREVIEW_LENGTH = 50000
+
+
+def prepare_document_content(content: str, title: str) -> str:
+    """Prepare document content for markdown preview.
+
+    Prepends a title heading if the content doesn't already start with one,
+    and truncates overly long content.
+    """
+    if len(content) > MAX_PREVIEW_LENGTH:
+        content = content[:MAX_PREVIEW_LENGTH] + "\n\n[dim]... (truncated)[/dim]"
+
+    content_stripped = content.lstrip()
+    has_title_header = content_stripped.startswith(f"# {title}") or content_stripped.startswith(
+        "# "
+    )
+
+    if has_title_header:
+        return content
+    return f"# {title}\n\n{content}"
+
+
+def render_markdown_to_richlog(richlog: RichLog, content: str, title: str = "Untitled") -> str:
+    """Render document content as markdown into a RichLog widget.
+
+    Handles title prepending, truncation, and fallback on render errors.
+    Returns the raw content (before markdown rendering) for copy mode.
+    """
+    prepared = prepare_document_content(content, title)
+    richlog.clear()
+
+    if not prepared.strip():
+        richlog.write("[dim]Empty document[/dim]")
+        return content[:MAX_PREVIEW_LENGTH] if content else ""
+
+    try:
+        md = MarkdownConfig.create_markdown(prepared)
+        richlog.write(md)
+    except Exception:
+        richlog.write(prepared)
+
+    return content[:MAX_PREVIEW_LENGTH] if content else ""
 
 
 def render_enhanced_markdown(content: str, code_theme: str | None = None) -> Console:
