@@ -40,7 +40,19 @@ def _save_terminal_state() -> list[Any] | None:
 
 
 def _restore_terminal_state(saved: list[Any] | None) -> None:
-    """Restore terminal attributes saved by _save_terminal_state."""
+    """Restore terminal attributes saved by _save_terminal_state.
+
+    Also re-sends ANSI mouse tracking escape sequences.  termios only
+    covers Unix terminal attributes (raw/cooked mode).  Mouse tracking
+    is controlled by separate DEC private-mode escape sequences that
+    live in the terminal emulator, not the kernel tty layer.  If a
+    subprocess or heavy import resets the terminal, the escape state is
+    lost even though termios restore succeeds.
+
+    In a tmux/multiplexer pane the multiplexer manages mouse tracking
+    independently, which is why the bug only manifests in a plain
+    (non-paned) terminal window.
+    """
     import sys
     import termios
 
@@ -58,6 +70,36 @@ def _restore_terminal_state(saved: list[Any] | None) -> None:
             termios.tcsetattr(fd, termios.TCSANOW, saved)
     except Exception as e:
         logger.warning("Failed to restore terminal state: %s", e)
+
+    # Re-enable mouse tracking escape sequences unconditionally.
+    # These are cheap no-ops if already active, but critical if a
+    # subprocess/import cleared them.
+    _reenable_mouse_tracking()
+
+
+def _reenable_mouse_tracking() -> None:
+    """Re-send DEC private-mode sequences that enable mouse tracking.
+
+    Textual's linux_driver sends these on startup, but they can be
+    cleared by subprocess execution or heavy library imports that
+    reset the terminal emulator state.  Re-sending is idempotent.
+    """
+    import sys
+
+    try:
+        fd = sys.stdout.fileno()
+        # Same sequences Textual's LinuxDriver._enable_mouse_support() writes
+        data = (
+            "\x1b[?1000h"  # SET_VT200_MOUSE
+            "\x1b[?1003h"  # SET_ANY_EVENT_MOUSE
+            "\x1b[?1015h"  # SET_VT200_HIGHLIGHT_MOUSE
+            "\x1b[?1006h"  # SET_SGR_EXT_MODE_MOUSE
+        )
+        import os
+
+        os.write(fd, data.encode())
+    except Exception as e:
+        logger.debug("Could not re-enable mouse tracking: %s", e)
 
 
 @dataclass
