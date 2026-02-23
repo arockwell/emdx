@@ -25,12 +25,16 @@ LAZY_SUBCOMMANDS = {
     # Execution/orchestration (imports subprocess, async, executor)
     "delegate": "emdx.commands.delegate:app",
     "explore": "emdx.commands.explore:app",
+    "distill": "emdx.commands.distill:app",
+    "wrapup": "emdx.commands.wrapup:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
 LAZY_HELP = {
     "delegate": "One-shot AI execution (parallel, worktree, PR)",
     "explore": "Explore what your knowledge base knows",
+    "distill": "Distill KB content into audience-aware summaries",
+    "wrapup": "Generate session summary from recent activity",
 }
 
 

@@ -26,7 +26,7 @@ from .sparkline import sparkline
 logger = logging.getLogger(__name__)
 
 try:
-    from emdx.services import document_service as doc_db
+    from emdx.database import documents as doc_db
 
     HAS_DOCS = True
 except ImportError:
@@ -528,7 +528,7 @@ class ActivityView(HelpMixin, Widget):
             header.update(f"📄 #{doc['id']}")
 
             try:
-                from emdx.services.tag_service import get_document_tags
+                from emdx.models.tags import get_document_tags
 
                 tags = get_document_tags(item.doc_id)
             except ImportError:

@@ -449,25 +449,3 @@ class TestExecutionService:
         assert any("Agent:" in t for t in titles)
         assert any("Delegate:" in t for t in titles)
         assert any("Any Type Analysis" in t for t in titles)
-
-    def test_get_execution_log_file(self, isolate_test_database):
-        """Test getting log file for running execution."""
-        from emdx.models.executions import create_execution, update_execution_status
-        from emdx.services.execution_service import get_execution_log_file
-
-        exec_id = create_execution(
-            doc_id=None,
-            doc_title="Agent: log test",
-            log_file="/tmp/agent_log.log",
-        )
-
-        # Should find running execution
-        log_file = get_execution_log_file("Agent: log%")
-        assert log_file == "/tmp/agent_log.log"
-
-        # Complete the execution
-        update_execution_status(exec_id, "completed", exit_code=0)
-
-        # Should not find it anymore (not running)
-        log_file = get_execution_log_file("Agent: log%")
-        assert log_file is None

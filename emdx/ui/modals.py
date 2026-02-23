@@ -354,7 +354,7 @@ class DocumentPreviewScreen(Screen):
     async def on_mount(self) -> None:
         """Load and display the document."""
         try:
-            from emdx.services.document_service import get_document
+            from emdx.database.documents import get_document
 
             from .markdown_config import render_markdown_to_richlog
 
