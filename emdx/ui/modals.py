@@ -9,7 +9,7 @@ from typing import Any
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import ScrollableContainer, Vertical
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Log, RichLog, Static
 
@@ -293,8 +293,11 @@ class DocumentPreviewScreen(Screen):
         color: $text-muted;
     }
 
-    #preview-rendered {
+    #preview-scroll {
         height: 1fr;
+    }
+
+    #preview-rendered {
         padding: 0 2;
     }
 
@@ -330,13 +333,14 @@ class DocumentPreviewScreen(Screen):
         with Vertical(id="preview-header"):
             yield Static("Loading...", id="preview-title")
             yield Static("", id="preview-meta")
-        yield RichLog(
-            id="preview-rendered",
-            highlight=True,
-            markup=True,
-            wrap=True,
-            auto_scroll=False,
-        )
+        with ScrollableContainer(id="preview-scroll"):
+            yield RichLog(
+                id="preview-rendered",
+                highlight=True,
+                markup=True,
+                wrap=True,
+                auto_scroll=False,
+            )
         yield Log(
             id="preview-copy",
             highlight=True,
@@ -351,6 +355,8 @@ class DocumentPreviewScreen(Screen):
         """Load and display the document."""
         try:
             from emdx.services.document_service import get_document
+
+            from .markdown_config import render_markdown_to_richlog
 
             result = get_document(self.doc_id)
             self._doc_data = dict(result) if result else None
@@ -370,21 +376,8 @@ class DocumentPreviewScreen(Screen):
             self.query_one("#preview-meta", Static).update(" │ ".join(meta_parts))
 
             content = self._doc_data.get("content", "")
-            if len(content) > 50000:
-                content = content[:50000]
-            self._raw_content = content
-
             rendered = self.query_one("#preview-rendered", RichLog)
-            if content.strip():
-                try:
-                    from .markdown_config import MarkdownConfig
-
-                    md = MarkdownConfig.create_markdown(content)
-                    rendered.write(md)
-                except Exception:
-                    rendered.write(content)
-            else:
-                rendered.write("[dim]Empty document[/dim]")
+            self._raw_content = render_markdown_to_richlog(rendered, content, title)
 
         except Exception as e:
             logger.error(f"Error loading document preview: {e}")
@@ -400,7 +393,7 @@ class DocumentPreviewScreen(Screen):
 
     def action_toggle_copy_mode(self) -> None:
         """Toggle between rendered preview and selectable copy mode."""
-        rendered = self.query_one("#preview-rendered", RichLog)
+        preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
         copy_log = self.query_one("#preview-copy", Log)
         footer = self.query_one("#preview-footer", Static)
 
@@ -409,13 +402,13 @@ class DocumentPreviewScreen(Screen):
             copy_log.clear()
             if self._raw_content.strip():
                 copy_log.write(self._raw_content)
-            rendered.display = False
+            preview_scroll.display = False
             copy_log.display = True
             footer.update(
                 "Esc/q=Close │ e=Edit │ c=Preview Mode │ "
                 "[bold]COPY MODE[/bold] - select text with mouse"
             )
         else:
-            rendered.display = True
+            preview_scroll.display = True
             copy_log.display = False
             footer.update("Esc/q=Close │ e=Edit │ c=Copy Mode")

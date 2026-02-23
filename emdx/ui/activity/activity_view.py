@@ -387,25 +387,12 @@ class ActivityView(HelpMixin, Widget):
 
         return counts
 
-    def _render_markdown_preview(self, content: str) -> None:
+    def _render_markdown_preview(self, content: str, title: str = "Untitled") -> None:
         """Render markdown content to the preview RichLog."""
-        from emdx.ui.markdown_config import MarkdownConfig
-
-        self._preview_raw_content = content[:50000] if content else ""
+        from emdx.ui.markdown_config import render_markdown_to_richlog
 
         preview = self.query_one("#preview-content", RichLog)
-        preview.clear()
-
-        try:
-            if len(content) > 50000:
-                content = content[:50000] + "\n\n[dim]... (truncated)[/dim]"
-            if content.strip():
-                markdown = MarkdownConfig.create_markdown(content)
-                preview.write(markdown)
-            else:
-                preview.write("[dim]Empty document[/dim]")
-        except Exception:
-            preview.write(content[:50000] if content else "[dim]No content[/dim]")
+        self._preview_raw_content = render_markdown_to_richlog(preview, content, title)
 
         if self._copy_mode:
             self._update_copy_widget()
@@ -480,22 +467,15 @@ class ActivityView(HelpMixin, Widget):
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
-                    content_stripped = content.lstrip()
-                    has_title_header = content_stripped.startswith(
-                        f"# {title}"
-                    ) or content_stripped.startswith("# ")
-                    if has_title_header:
-                        self._render_markdown_preview(content)
-                    else:
-                        self._render_markdown_preview(f"# {title}\n\n{content}")
+                    self._render_markdown_preview(content, title)
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return
                 else:
                     self._render_markdown_preview(
-                        f"# {item.title}\n\n"
                         f"*Document #{item.doc_id} not found*\n\n"
-                        "This document may have been deleted."
+                        "This document may have been deleted.",
+                        item.title,
                     )
                     show_markdown()
                     header.update(f"⚠️ #{item.doc_id} (missing)")
@@ -742,7 +722,7 @@ class ActivityView(HelpMixin, Widget):
             if doc:
                 content = doc.get("content", "")
                 title = doc.get("title", "Untitled")
-                self._render_markdown_preview(f"# {title}\n\n{content}")
+                self._render_markdown_preview(content, title)
                 header = self.query_one("#preview-header", Static)
                 header.update(f"📄 #{doc_id}")
                 self._show_notification(f"Showing: {title[:40]}")
