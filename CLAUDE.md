@@ -103,17 +103,6 @@ When writing CLI examples in README.md or docs:
 - Each code block should build progressively — later commands reference earlier output
 - Don't use `<details>` collapsible sections — content is either worth showing or not
 
-## Demo GIF
-
-`demo.gif` in the repo root is shown in the README. Recorded with `asciinema` + `agg`:
-
-```bash
-asciinema rec demo.cast --cols 80 --rows 24
-agg demo.cast demo.gif --cols 80 --rows 24
-```
-
-The overview docs (#6929-#6935, tagged `about,overview`) exist as demo content for the GIF — they show emdx with real documents to browse.
-
 ## Rich Console Gotcha
 
 - `console.pager()` defaults to `styles=False`, stripping all colors. Always use `console.pager(styles=True)` when rendering Rich markup inside a pager.
