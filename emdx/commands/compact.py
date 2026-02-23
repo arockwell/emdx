@@ -7,51 +7,28 @@ using TF-IDF clustering for discovery and Claude for synthesis.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
-
-if TYPE_CHECKING:
-    import numpy as np
-    import numpy.typing as npt
+from typing import Any, TypedDict
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from ..database import db
+from ..services.clustering import (
+    ClusterDocumentDict,
+    compute_tfidf,
+    cosine_similarity,
+    fetch_cluster_documents,
+    find_clusters,
+    require_sklearn,
+)
 from ..utils.output import is_non_interactive
 
 console = Console()
 app = typer.Typer(help="Compact documents by AI-powered synthesis")
 
-
-# Import guards for optional dependencies
-try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
-
-    HAS_SKLEARN = True
-except ImportError:
-    HAS_SKLEARN = False
-
-
-def _require_sklearn() -> None:
-    """Raise ImportError with helpful message if sklearn is not installed."""
-    if not HAS_SKLEARN:
-        raise ImportError(
-            "scikit-learn is required for document clustering. "
-            "Install it with: pip install 'emdx[similarity]'"
-        )
-
-
-class CompactDocumentDict(TypedDict):
-    """Document data used in compact clustering."""
-
-    id: int
-    title: str
-    content: str
-    project: str | None
-    created_at: str | None
-    tags: str | None
+# Re-export for backwards compatibility with tests that import from here
+CompactDocumentDict = ClusterDocumentDict
+_require_sklearn = require_sklearn
 
 
 class SynthesisResultDict(TypedDict):
@@ -64,132 +41,34 @@ class SynthesisResultDict(TypedDict):
     source_ids: list[int]
 
 
-def _fetch_all_documents() -> list[CompactDocumentDict]:
-    """Fetch all active documents with their content."""
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT
-                d.id,
-                d.title,
-                d.content,
-                d.project,
-                d.created_at,
-                GROUP_CONCAT(t.name) as tags
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            LEFT JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = FALSE
-            AND LENGTH(d.content) > 50
-            GROUP BY d.id
-            HAVING COALESCE(GROUP_CONCAT(t.name), '') NOT LIKE '%superseded%'
-            ORDER BY d.id
-        """)
-        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
+def _fetch_all_documents() -> list[ClusterDocumentDict]:
+    """Fetch all active documents, excluding superseded ones."""
+    return fetch_cluster_documents(exclude_superseded=True)
 
 
 def _compute_similarity_matrix(
-    documents: list[CompactDocumentDict],
-) -> tuple[npt.NDArray[np.float64] | None, list[int]]:
+    documents: list[ClusterDocumentDict],
+) -> tuple[Any, list[int]]:
     """Compute TF-IDF similarity matrix for documents.
 
-    Args:
-        documents: List of document dicts with 'content' and 'id' keys
-
     Returns:
-        Tuple of (similarity_matrix, doc_ids)
+        Tuple of (similarity_matrix, doc_ids). Matrix is None if no documents.
     """
-    _require_sklearn()
-
     if not documents:
         return None, []
 
-    # Build corpus
-    corpus = []
-    doc_ids = []
-    for doc in documents:
-        text = f"{doc['title']} {doc['content']}"
-        corpus.append(text)
-        doc_ids.append(doc["id"])
-
-    # Compute TF-IDF matrix
-    # Adjust min_df and max_df based on corpus size to avoid edge cases
-    n_docs = len(corpus)
-    min_df = 1 if n_docs < 3 else 2
-    max_df = 1.0 if n_docs < 3 else 0.95
-
-    vectorizer = TfidfVectorizer(
-        max_features=5000,
-        min_df=min_df,
-        max_df=max_df,
-        stop_words="english",
-        ngram_range=(1, 2),
-    )
-
-    tfidf_matrix = vectorizer.fit_transform(corpus)
-    similarity_matrix = cosine_similarity(tfidf_matrix)
-
-    return similarity_matrix, doc_ids
+    result = compute_tfidf(documents, title_boost=1)
+    similarity_matrix = cosine_similarity(result.matrix)
+    return similarity_matrix, result.doc_ids
 
 
 def _find_clusters(
-    similarity_matrix: npt.NDArray[np.float64],
+    similarity_matrix: Any,
     doc_ids: list[int],
     threshold: float = 0.5,
 ) -> list[list[int]]:
-    """Find document clusters using union-find algorithm.
-
-    Groups documents that are similar above the threshold using
-    transitive closure (if A~B and B~C, then A,B,C are in same cluster).
-
-    Args:
-        similarity_matrix: Pairwise similarity matrix
-        doc_ids: List of document IDs corresponding to matrix rows
-        threshold: Minimum similarity to consider documents related
-
-    Returns:
-        List of clusters, each cluster is a list of document IDs
-    """
-    n = len(doc_ids)
-    if n == 0:
-        return []
-
-    # Union-Find data structure
-    parent = list(range(n))
-    rank = [0] * n
-
-    def find(x: int) -> int:
-        if parent[x] != x:
-            parent[x] = find(parent[x])  # Path compression
-        return parent[x]
-
-    def union(x: int, y: int) -> None:
-        px, py = find(x), find(y)
-        if px == py:
-            return
-        # Union by rank
-        if rank[px] < rank[py]:
-            px, py = py, px
-        parent[py] = px
-        if rank[px] == rank[py]:
-            rank[px] += 1
-
-    # Union documents that are similar
-    for i in range(n):
-        for j in range(i + 1, n):
-            if similarity_matrix[i, j] >= threshold:
-                union(i, j)
-
-    # Group by root
-    clusters_map: dict[int, list[int]] = {}
-    for i in range(n):
-        root = find(i)
-        if root not in clusters_map:
-            clusters_map[root] = []
-        clusters_map[root].append(doc_ids[i])
-
-    # Return only clusters with more than one document
-    return [cluster for cluster in clusters_map.values() if len(cluster) > 1]
+    """Find document clusters using union-find."""
+    return find_clusters(similarity_matrix, doc_ids, threshold)
 
 
 def _display_clusters(
