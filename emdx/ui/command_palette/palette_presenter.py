@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from .palette_commands import CommandContext, PaletteCommand, get_command_registry
 
 if TYPE_CHECKING:
-    from emdx.services.unified_search import UnifiedSearchService
+    from emdx.services.hybrid_search import HybridSearchService
 
 logger = logging.getLogger(__name__)
 
@@ -75,20 +75,20 @@ class PalettePresenter:
         self.context = context or CommandContext.GLOBAL
         self._state = PaletteState()
         self._command_registry = get_command_registry()
-        self._search_service: UnifiedSearchService | None = None  # Lazy load
+        self._search_service: HybridSearchService | None = None  # Lazy load
         self._history: list[PaletteResultItem] = []
         self._max_history = 10
 
     @property
-    def search_service(self) -> UnifiedSearchService | None:
-        """Lazy load the unified search service."""
+    def search_service(self) -> HybridSearchService | None:
+        """Lazy load the hybrid search service."""
         if self._search_service is None:
             try:
-                from emdx.services.unified_search import UnifiedSearchService
+                from emdx.services.hybrid_search import HybridSearchService
 
-                self._search_service = UnifiedSearchService()
+                self._search_service = HybridSearchService()
             except ImportError:
-                logger.warning("UnifiedSearchService not available")
+                logger.warning("HybridSearchService not available")
         return self._search_service
 
     @property
@@ -224,10 +224,10 @@ class PalettePresenter:
 
         # Search documents with these tags
         try:
-            from emdx.services.unified_search import SearchQuery
+            from emdx.services.hybrid_search import SearchQuery
 
             search_query = SearchQuery(tags=tags, tag_mode="all", limit=10)
-            results = await self.search_service.search(search_query)
+            results = await self.search_service.search_unified(search_query)
 
             return [
                 PaletteResultItem(
@@ -295,10 +295,10 @@ class PalettePresenter:
         # Otherwise, semantic search
         if self.search_service.has_embeddings():
             try:
-                from emdx.services.unified_search import SearchQuery
+                from emdx.services.hybrid_search import SearchQuery
 
                 search_query = SearchQuery(text=query, semantic=True, limit=10)
-                results = await self.search_service.search(search_query)
+                results = await self.search_service.search_unified(search_query)
 
                 return [
                     PaletteResultItem(
@@ -385,10 +385,10 @@ class PalettePresenter:
 
         # FTS search for content matches
         try:
-            from emdx.services.unified_search import SearchQuery
+            from emdx.services.hybrid_search import SearchQuery
 
             search_query = SearchQuery(text=query, limit=10)
-            fts_results = await self.search_service.search(search_query)
+            fts_results = await self.search_service.search_unified(search_query)
 
             for r in fts_results:
                 if r.doc_id not in seen_ids:
