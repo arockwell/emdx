@@ -8,6 +8,8 @@
 
 Claude sessions start from zero. emdx doesn't. Save your research, fire off agents that write results back to your knowledge base, and track what's left. One CLI, local SQLite, nothing vanishes.
 
+![emdx TUI demo](demo.gif)
+
 ## See it in action
 
 ```bash
