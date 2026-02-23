@@ -448,7 +448,7 @@ def blocked(
 def list_cmd(
     status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
-    done: bool = typer.Option(False, "--done", help="Include done/failed tasks"),
+    done: bool = typer.Option(False, "--done", help="Show done tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
     epic: int | None = typer.Option(None, "-e", "--epic", help="Filter by epic ID"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
@@ -456,7 +456,7 @@ def list_cmd(
 ) -> None:
     """List tasks.
 
-    By default shows open, active, and blocked tasks (hides done/failed).
+    By default shows open, active, and blocked tasks (hides done).
 
     Examples:
         emdx task list
@@ -468,10 +468,10 @@ def list_cmd(
     """
     if status:
         status_list = [s.strip() for s in status.split(",")]
-    elif not done:
-        status_list = ["open", "active", "blocked"]
+    elif done:
+        status_list = ["done"]
     else:
-        status_list = None
+        status_list = ["open", "active", "blocked"]
 
     exclude_delegate = not all
     task_list = tasks.list_tasks(
