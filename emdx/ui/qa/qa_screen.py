@@ -172,6 +172,8 @@ class QAScreen(HelpMixin, Widget):
         )
         # Background task that survives widget unmount/remount
         self._bg_task: asyncio.Task[None] | None = None
+        # Set when presenter is initialized (embeddings preloaded)
+        self._initialized = False
         # Buffer for streaming text — accumulate until newline for RichLog
         self._stream_buffer: str = ""
         # Maps DataTable row key string to presenter entries index
@@ -214,8 +216,11 @@ class QAScreen(HelpMixin, Widget):
 
     async def on_mount(self) -> None:
         """Initialize or restore the Q&A screen."""
+        # Fast sync init — loads history from DB, checks CLI. No heavy imports.
+        if not self._presenter.state.entries and not self._presenter.state.is_asking:
+            self._presenter.initialize_sync()
+
         entries = self._presenter.state.entries
-        has_state = bool(entries) or self._presenter.state.is_asking
         logger.info(
             "QAScreen mounted (entries=%d, asking=%s)",
             len(entries),
@@ -227,26 +232,36 @@ class QAScreen(HelpMixin, Widget):
         if not table.columns:
             table.add_column("question", key="question")
 
-        if not has_state:
-            await self._presenter.initialize()
-            # Re-check — initialize may have loaded history from DB
-            entries = self._presenter.state.entries
-
         if entries:
-            self._rebuild_history_table()
-            # Select the latest entry
-            self._selected_index = len(entries) - 1
-            latest = entries[-1]
-            if latest.is_loading:
-                self._streaming_index = self._selected_index
-                self._show_stream_scroll()
-            else:
-                self._render_answer_panel(latest)
+            self._restore_existing_state(entries)
         else:
             self._show_welcome()
 
+        # Preload sentence-transformers in the background (~2-3s).
+        # Questions are blocked until this finishes.
+        if not self._initialized:
+            self._update_status("Loading embeddings...")
+            asyncio.get_event_loop().create_task(self._preload_embeddings())
+
         # Focus the history table so j/k work immediately
         table.focus()
+
+    async def _preload_embeddings(self) -> None:
+        """Preload sentence-transformers, then mark ready."""
+        await self._presenter.preload_embeddings()
+        self._initialized = True
+        self._update_status(self._presenter.state.status_text)
+
+    def _restore_existing_state(self, entries: list[QAEntry]) -> None:
+        """Populate the UI from existing presenter state."""
+        self._rebuild_history_table()
+        self._selected_index = len(entries) - 1
+        latest = entries[-1]
+        if latest.is_loading:
+            self._streaming_index = self._selected_index
+            self._show_stream_scroll()
+        else:
+            self._render_answer_panel(latest)
 
     # -- History panel --
 
@@ -412,6 +427,9 @@ class QAScreen(HelpMixin, Widget):
             return
         question = event.value.strip()
         if not question:
+            return
+        if not self._initialized:
+            self.notify("Still loading — please wait", timeout=2)
             return
         if self._presenter.state.is_asking:
             self.notify("Still waiting — press Escape to cancel", timeout=2)
