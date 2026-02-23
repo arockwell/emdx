@@ -19,6 +19,18 @@ def run_browser(theme: str | None = None) -> None:
 
     from .browser_container import BrowserContainer
 
+    # Eagerly import sentence-transformers BEFORE Textual enters application
+    # mode.  This library (or its torch dependency) corrupts terminal state
+    # on Python 3.13.  Importing it here — while the terminal is still in
+    # normal cooked mode — means the damage is harmless.  Textual's own
+    # startup will then set up raw mode + mouse tracking cleanly afterward.
+    try:
+        from sentence_transformers import SentenceTransformer  # noqa: F401
+
+        logger.info("Pre-loaded sentence-transformers for QA")
+    except ImportError:
+        pass
+
     app = BrowserContainer(initial_theme=theme)
     try:
         logger.info("=== STARTING BROWSER APP ===")
