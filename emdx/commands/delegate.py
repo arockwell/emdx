@@ -503,6 +503,7 @@ class SingleResult:
     duration_seconds: float | None = None
     execution_id: int | None = None
     output_doc_id: int | None = None
+    raw_output: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """Convert to a JSON-serializable dict."""
@@ -546,6 +547,7 @@ def _run_single(
     epic_key: str | None = None,
     timeout: int | None = None,
     task_flag: int | None = None,
+    print_content: bool = True,
 ) -> SingleResult:
     """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -729,6 +731,9 @@ def _run_single(
     pr_url = _extract_pr_url(output)
     pushed_branch = pr_branch
 
+    # Store raw output for caller when not printing (parallel mode)
+    stored_output: str | None = None
+
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
         # Try to extract PR URL from saved doc content
@@ -736,14 +741,19 @@ def _run_single(
             doc = get_document(doc_id)
             if doc:
                 pr_url = _extract_pr_url(doc.get("content", ""))
-        _print_doc_content(doc_id)
+        if print_content:
+            _print_doc_content(doc_id)
     else:
         _safe_update_task(task_id, status="done")
-        # Hook didn't save — print captured output directly
-        if output:
-            sys.stdout.write(output)
-            if not output.endswith("\n"):
-                sys.stdout.write("\n")
+        if print_content:
+            # Hook didn't save — print captured output directly
+            if output:
+                sys.stdout.write(output)
+                if not output.endswith("\n"):
+                    sys.stdout.write("\n")
+        else:
+            # Store raw output so caller can print it (no doc to read from DB)
+            stored_output = output or None
 
     single_result = SingleResult(
         doc_id=doc_id,
@@ -754,6 +764,7 @@ def _run_single(
         duration_seconds=elapsed,
         execution_id=execution_id,
         output_doc_id=doc_id,
+        raw_output=stored_output,
     )
 
     # Print summary line (unless suppressed by quiet or caller)
@@ -919,6 +930,7 @@ def _run_parallel(
                     seq=idx + 1,
                     epic_key=epic_key,
                     task_flag=task_flag,
+                    print_content=False,  # caller handles output streaming
                 ),
             )
             return result
@@ -935,6 +947,30 @@ def _run_parallel(
         for future in as_completed(futures):
             idx, single_result = future.result()
             results[idx] = single_result
+
+            # Stream output as each task completes (unless --quiet/--json)
+            if not quiet:
+                task_label = tasks[idx] if idx < len(tasks) else "?"
+                if single_result.success:
+                    sys.stdout.write(
+                        f"\n=== Task {idx + 1}/{len(tasks)}: "
+                        f"{task_label} ===\n\n"
+                    )
+                    if single_result.doc_id is not None:
+                        _print_doc_content(single_result.doc_id)
+                    elif single_result.raw_output:
+                        sys.stdout.write(single_result.raw_output)
+                        if not single_result.raw_output.endswith("\n"):
+                            sys.stdout.write("\n")
+                    sys.stdout.flush()
+                else:
+                    sys.stdout.write(
+                        f"\n=== Task {idx + 1}/{len(tasks)}: "
+                        f"{task_label} [FAILED] ===\n"
+                    )
+                    if single_result.error_message:
+                        sys.stdout.write(f"{single_result.error_message}\n")
+                    sys.stdout.flush()
 
     # Collect doc_ids in original task order (filter out None values)
     doc_ids: list[int] = [
@@ -1058,12 +1094,7 @@ def _run_parallel(
         final_status = "partial" if failed_count > 0 else "done"
         error_msg = f"{failed_count}/{len(tasks)} tasks failed" if failed_count > 0 else None
         _safe_update_task(parent_task_id, status=final_status, error=error_msg)
-
-        # Print each result separated
-        for i, doc_id in enumerate(doc_ids):
-            if len(doc_ids) > 1:
-                sys.stdout.write(f"\n=== Task {i + 1}: {tasks[i] if i < len(tasks) else '?'} ===\n")
-            _print_doc_content(doc_id)
+        # Content already streamed to stdout in as_completed loop above
 
     parallel_result = ParallelResult(
         parent_task_id=parent_task_id,
