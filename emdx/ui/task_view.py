@@ -526,11 +526,14 @@ class TaskView(Widget):
                     key=f"{HEADER_PREFIX}epic:none",
                 )
 
-            # Render child tasks with tree connectors
+            # Render child tasks — tree connectors only under real epics
             for i, task in enumerate(child_tasks):
-                is_last = i == len(child_tasks) - 1
-                connector = "└─" if is_last else "├─"
-                self._render_task_row(table, task, tree_prefix=connector)
+                if epic_key:
+                    is_last = i == len(child_tasks) - 1
+                    connector = "└─" if is_last else "├─"
+                    self._render_task_row(table, task, tree_prefix=connector)
+                else:
+                    self._render_task_row(table, task)
 
     def _select_row_by_key(self, key: str) -> None:
         """Move cursor to a row by its key string."""
