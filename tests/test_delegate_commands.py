@@ -693,6 +693,126 @@ class TestRunParallel:
         # Worktrees should be cleaned up (not pr mode)
         assert mock_cleanup_worktree.call_count == 2
 
+    @patch("emdx.commands.delegate._run_single")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    def test_parallel_streams_output_as_tasks_complete(
+        self, mock_create, mock_update, mock_print, mock_run_single, capsys
+    ):
+        """Test that parallel mode prints each task's output as it completes."""
+        mock_create.return_value = 1
+        mock_run_single.side_effect = [
+            SingleResult(doc_id=10, task_id=1),
+            SingleResult(doc_id=20, task_id=2),
+        ]
+
+        _run_parallel(
+            tasks=["check auth", "review tests"],
+            tags=[],
+            title=None,
+            jobs=2,
+            synthesize=False,
+            model=None,
+            quiet=False,
+        )
+
+        captured = capsys.readouterr()
+        # Headers should appear in stdout (order depends on thread scheduling)
+        assert "=== Task" in captured.out
+        assert "check auth" in captured.out
+        assert "review tests" in captured.out
+        # _print_doc_content should be called from the as_completed loop
+        assert mock_print.call_count == 2
+
+    @patch("emdx.commands.delegate._run_single")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    def test_parallel_streams_failures_immediately(
+        self, mock_create, mock_update, mock_print, mock_run_single, capsys
+    ):
+        """Test that failed tasks surface immediately with error info."""
+        mock_create.return_value = 1
+        mock_run_single.side_effect = [
+            SingleResult(doc_id=10, task_id=1),
+            SingleResult(task_id=2, success=False, error_message="connection timeout"),
+        ]
+
+        _run_parallel(
+            tasks=["check auth", "scan network"],
+            tags=[],
+            title=None,
+            jobs=2,
+            synthesize=False,
+            model=None,
+            quiet=False,
+        )
+
+        captured = capsys.readouterr()
+        assert "[FAILED]" in captured.out
+        assert "connection timeout" in captured.out
+
+    @patch("emdx.commands.delegate._run_single")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    def test_parallel_quiet_suppresses_streaming(
+        self, mock_create, mock_update, mock_print, mock_run_single, capsys
+    ):
+        """Test that quiet=True suppresses streaming output."""
+        mock_create.return_value = 1
+        mock_run_single.side_effect = [
+            SingleResult(doc_id=10, task_id=1),
+            SingleResult(doc_id=20, task_id=2),
+        ]
+
+        _run_parallel(
+            tasks=["task1", "task2"],
+            tags=[],
+            title=None,
+            jobs=2,
+            synthesize=False,
+            model=None,
+            quiet=True,
+        )
+
+        captured = capsys.readouterr()
+        assert "=== Task" not in captured.out
+        # _print_doc_content should NOT be called (quiet mode)
+        assert mock_print.call_count == 0
+
+    @patch("emdx.commands.delegate._run_single")
+    @patch("emdx.commands.delegate._print_doc_content")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    def test_parallel_streams_raw_output_fallback(
+        self, mock_create, mock_update, mock_print, mock_run_single, capsys
+    ):
+        """Test that raw_output is printed when no doc_id (hook didn't save).
+
+        Note: a result with no doc_id triggers the "all failures" exit path,
+        but the raw output is still surfaced to stdout before that happens.
+        """
+        mock_create.return_value = 1
+        mock_run_single.side_effect = [
+            SingleResult(doc_id=None, task_id=1, raw_output="raw result text"),
+        ]
+
+        with pytest.raises(typer.Exit):
+            _run_parallel(
+                tasks=["task1"],
+                tags=[],
+                title=None,
+                jobs=1,
+                synthesize=False,
+                model=None,
+                quiet=False,
+            )
+
+        captured = capsys.readouterr()
+        assert "raw result text" in captured.out
+
 
 # =============================================================================
 # Tests for delegate command (CLI entry point)
