@@ -16,7 +16,7 @@ from .activity_items import (
 logger = logging.getLogger(__name__)
 
 try:
-    from emdx.services import document_service as doc_svc
+    from emdx.database import documents as doc_svc
 
     HAS_DOCS = True
 except ImportError:
