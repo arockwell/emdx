@@ -87,7 +87,8 @@ class TestQAPresenterInitialization:
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch.object(presenter, "_has_embeddings", return_value=False),
         ):
-            await presenter.initialize()
+            presenter.initialize_sync()
+            await presenter.preload_embeddings()
 
         assert presenter.state.has_claude_cli is True
         assert "Ready" in presenter.state.status_text
@@ -100,7 +101,8 @@ class TestQAPresenterInitialization:
             patch("shutil.which", return_value=None),
             patch.object(presenter, "_has_embeddings", return_value=False),
         ):
-            await presenter.initialize()
+            presenter.initialize_sync()
+            await presenter.preload_embeddings()
 
         assert presenter.state.has_claude_cli is False
         assert "Claude CLI not found" in presenter.state.status_text
@@ -113,7 +115,8 @@ class TestQAPresenterInitialization:
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch.object(presenter, "_has_embeddings", return_value=True),
         ):
-            await presenter.initialize()
+            presenter.initialize_sync()
+            await presenter.preload_embeddings()
 
         assert presenter.state.has_embeddings is True
         assert "semantic" in presenter.state.status_text
@@ -127,7 +130,8 @@ class TestQAPresenterInitialization:
             patch("shutil.which", return_value="/usr/bin/claude"),
             patch.object(presenter, "_has_embeddings", return_value=False),
         ):
-            await presenter.initialize()
+            presenter.initialize_sync()
+            await presenter.preload_embeddings()
 
         mock_callback.assert_called()
         # Callback should receive the state

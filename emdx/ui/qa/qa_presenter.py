@@ -165,21 +165,39 @@ class QAPresenter:
     def state(self) -> QAStateVM:
         return self._state
 
-    async def initialize(self) -> None:
-        """Check capabilities and load saved Q&A history."""
-        has_claude_cli = shutil.which("claude") is not None
-        self._state.has_claude_cli = has_claude_cli
-
-        # Guard embedding check — importing sentence-transformers/torch
-        # can reset terminal state (raw → cooked + clear mouse tracking).
-        term_state = _save_terminal_state()
-        self._state.has_embeddings = self._has_embeddings()
-        _restore_terminal_state(term_state)
-
-        # Load saved Q&A exchanges from the knowledge base
+    def initialize_sync(self) -> None:
+        """Fast synchronous init — CLI check + load history. No heavy imports."""
+        self._state.has_claude_cli = shutil.which("claude") is not None
         self.load_history()
 
-        if has_claude_cli:
+    async def preload_embeddings(self) -> None:
+        """Pre-import sentence-transformers/torch in a background thread.
+
+        This library corrupts terminal state (raw → cooked) on import.
+        By running in to_thread with terminal guards we avoid blocking
+        the event loop (~2-3s) and restore terminal state immediately
+        after.  Once imported, it's cached in sys.modules so later uses
+        (in _retrieve_semantic) are instant and harmless.
+        """
+
+        def _preload_and_check() -> bool:
+            term_state = _save_terminal_state()
+            try:
+                has = self._has_embeddings()
+                if has:
+                    try:
+                        from sentence_transformers import SentenceTransformer  # noqa: F401
+
+                        logger.info("Pre-loaded sentence-transformers")
+                    except ImportError:
+                        pass
+                return has
+            finally:
+                _restore_terminal_state(term_state)
+
+        self._state.has_embeddings = await asyncio.to_thread(_preload_and_check)
+
+        if self._state.has_claude_cli:
             method = "semantic" if self._state.has_embeddings else "keyword"
             self._state.status_text = f"Ready | {method} retrieval"
         else:
