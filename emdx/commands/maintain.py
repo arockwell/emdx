@@ -1099,8 +1099,10 @@ def maintain_callback(
     Subcommands:
         cleanup      Clean up execution resources (branches, processes)
         cleanup-dirs Clean up temporary directories
-        analyze      Analyze knowledge base health and patterns
         stale        Knowledge decay and staleness tracking
+
+    See also:
+        emdx status --health    Knowledge base health metrics
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -1111,12 +1113,6 @@ def maintain_callback(
 
 app.command(name="cleanup")(cleanup_main)
 app.command(name="cleanup-dirs")(cleanup_temp_dirs)
-
-# Import and register analyze as a subcommand of maintain
-# Late import to avoid circular dependencies
-from emdx.commands.analyze import analyze as analyze_cmd  # noqa: E402
-
-app.command(name="analyze")(analyze_cmd)
 
 # Register compact as a subcommand of maintain
 from emdx.commands.compact import app as compact_app  # noqa: E402

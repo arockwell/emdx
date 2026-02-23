@@ -135,7 +135,7 @@ app.add_typer(trash_app, name="trash", help="Manage deleted documents")
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Agent work queue")
 
-# Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs, analyze)
+# Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
 
 # Add the prime command for Claude session priming
