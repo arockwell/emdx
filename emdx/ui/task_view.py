@@ -358,10 +358,12 @@ class TaskView(Widget):
         if len(title) > 45:
             title = title[:42] + "..."
 
-        # Epic badge: epics show "#id", children show "KEY-N"
+        # Epic badge: epics and children show "KEY-N" when available
         epic_key = task.get("epic_key")
         epic_seq = task.get("epic_seq")
-        if is_epic:
+        if is_epic and epic_key and epic_seq:
+            epic_text = Text(f"{epic_key}-{epic_seq}", style="bold cyan")
+        elif is_epic:
             epic_text = Text(f"#{task['id']}", style="bold cyan")
         elif epic_key and epic_seq:
             epic_text = Text(f"{epic_key}-{epic_seq}", style="cyan")
@@ -457,11 +459,18 @@ class TaskView(Widget):
 
     def _render_groups_by_epic(self, table: "DataTable[str | Text]") -> None:
         """Render tasks grouped by epic with tree connectors."""
-        # Collect all filtered tasks into epic groups
+        # Collect all filtered tasks into epic groups.
+        # Only group under an epic if the task is actually a child (has parent_task_id)
+        # or is the epic itself. Tasks with epic_key but no parent go to ungrouped.
         tasks_by_epic: dict[str, list[TaskDict]] = defaultdict(list)
         for status in STATUS_ORDER:
             for task in self._tasks_by_status.get(status, []):
-                epic_key = task.get("epic_key") or ""
+                is_epic = task.get("type") == "epic"
+                has_parent = bool(task.get("parent_task_id"))
+                if is_epic or has_parent:
+                    epic_key = task.get("epic_key") or ""
+                else:
+                    epic_key = ""
                 tasks_by_epic[epic_key].append(task)
 
         # Sort epic keys: named epics alphabetically, ungrouped last
