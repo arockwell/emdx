@@ -342,12 +342,12 @@ class TestTaskList:
         )
 
     @patch("emdx.commands.tasks.tasks")
-    def test_list_done_flag_shows_all_statuses(self, mock_tasks):
+    def test_list_done_flag_shows_only_done(self, mock_tasks):
         mock_tasks.list_tasks.return_value = []
         result = runner.invoke(app, ["list", "--done"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=None,
+            status=["done"],
             limit=20,
             exclude_delegate=True,
             epic_key=None,
