@@ -1,0 +1,17 @@
+{
+  "description": "emdx plugin hooks: auto-save subagent research output to knowledge base",
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": "Explore|general-purpose",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/save-subagent-output.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
