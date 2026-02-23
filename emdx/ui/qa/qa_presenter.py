@@ -422,7 +422,8 @@ class QAPresenter:
             output_format="stream-json",
         )
 
-        # Spawn subprocess
+        # Spawn subprocess in a new session so it cannot reset the
+        # controlling terminal's mouse tracking / raw-mode state.
         process = subprocess.Popen(
             cmd.args,
             stdin=subprocess.PIPE,
@@ -431,6 +432,7 @@ class QAPresenter:
             text=True,
             cwd=cmd.cwd,
             env=get_subprocess_env(),
+            start_new_session=True,
         )
 
         # Feed prompt via stdin then close
