@@ -80,14 +80,17 @@ def _restore_terminal_state(saved: list[Any] | None) -> None:
 def _reenable_mouse_tracking() -> None:
     """Re-send DEC private-mode sequences that enable mouse tracking.
 
-    Textual's linux_driver sends these on startup, but they can be
-    cleared by subprocess execution or heavy library imports that
-    reset the terminal emulator state.  Re-sending is idempotent.
+    Textual's LinuxDriver writes output to sys.__stderr__ (not stdout).
+    We must write the mouse escape sequences to the same fd, otherwise
+    they go to the wrong place and have no effect.
     """
+    import os
     import sys
 
     try:
-        fd = sys.stdout.fileno()
+        if sys.__stderr__ is None:
+            return
+        fd = sys.__stderr__.fileno()
         # Same sequences Textual's LinuxDriver._enable_mouse_support() writes
         data = (
             "\x1b[?1000h"  # SET_VT200_MOUSE
@@ -95,8 +98,6 @@ def _reenable_mouse_tracking() -> None:
             "\x1b[?1015h"  # SET_VT200_HIGHLIGHT_MOUSE
             "\x1b[?1006h"  # SET_SGR_EXT_MODE_MOUSE
         )
-        import os
-
         os.write(fd, data.encode())
     except Exception as e:
         logger.debug("Could not re-enable mouse tracking: %s", e)
@@ -422,8 +423,7 @@ class QAPresenter:
             output_format="stream-json",
         )
 
-        # Spawn subprocess in a new session so it cannot reset the
-        # controlling terminal's mouse tracking / raw-mode state.
+        # Spawn subprocess
         process = subprocess.Popen(
             cmd.args,
             stdin=subprocess.PIPE,
@@ -432,7 +432,6 @@ class QAPresenter:
             text=True,
             cwd=cmd.cwd,
             env=get_subprocess_env(),
-            start_new_session=True,
         )
 
         # Feed prompt via stdin then close
