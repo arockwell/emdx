@@ -361,31 +361,31 @@ class TestFormatMs:
     """Test the _format_ms helper in maintain.py."""
 
     def test_milliseconds(self) -> None:
-        from emdx.commands.maintain import _format_ms
+        from emdx.commands.wiki import _format_ms
 
         assert _format_ms(500) == "500ms"
 
     def test_seconds(self) -> None:
-        from emdx.commands.maintain import _format_ms
+        from emdx.commands.wiki import _format_ms
 
         assert _format_ms(2500) == "2.5s"
 
     def test_minutes(self) -> None:
-        from emdx.commands.maintain import _format_ms
+        from emdx.commands.wiki import _format_ms
 
         assert _format_ms(90_000) == "1.5m"
 
     def test_zero(self) -> None:
-        from emdx.commands.maintain import _format_ms
+        from emdx.commands.wiki import _format_ms
 
         assert _format_ms(0) == "0ms"
 
     def test_exactly_one_second(self) -> None:
-        from emdx.commands.maintain import _format_ms
+        from emdx.commands.wiki import _format_ms
 
         assert _format_ms(1000) == "1.0s"
 
     def test_exactly_one_minute(self) -> None:
-        from emdx.commands.maintain import _format_ms
+        from emdx.commands.wiki import _format_ms
 
         assert _format_ms(60_000) == "1.0m"

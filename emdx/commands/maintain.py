@@ -1140,8 +1140,5 @@ from emdx.commands.stale import app as stale_app  # noqa: E402
 
 app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
 
-# Backwards-compatible re-export so existing test imports still work
-from emdx.commands.wiki import _format_ms  # noqa: E402, F401
-
 if __name__ == "__main__":
     app()

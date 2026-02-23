@@ -44,19 +44,6 @@ class ProcessHealthStatus(TypedDict):
     reason: str | None
 
 
-class ExecutionAction(TypedDict, total=False):
-    """An action taken (or to be taken) on an execution."""
-
-    execution_id: int
-    doc_title: str | None
-    action: str  # 'mark_failed' | 'kill_zombie'
-    reason: str | None
-    details: str | None
-    completed: bool
-    pid: int  # only in kill_zombie_processes
-    error: str  # only on failure
-
-
 class ExecutionMetrics(TypedDict):
     """Aggregate execution metrics."""
 
@@ -105,23 +92,6 @@ class DuplicateStats(TypedDict):
 
 
 # ── Auto-tagger types ────────────────────────────────────────────────
-
-
-class DocumentTagResult(TypedDict, total=False):
-    """Per-document result from batch auto-tagging."""
-
-    id: int
-    suggested_tags: list[tuple[str, float]]
-    applied_tags: list[str]  # only when not dry_run
-
-
-class BatchAutoTagResult(TypedDict):
-    """Summary result from batch_auto_tag()."""
-
-    processed: int
-    tagged: int
-    tags_applied: int
-    documents: list[DocumentTagResult]
 
 
 # ── Unified Executor types ────────────────────────────────────────────

@@ -21,7 +21,6 @@ __all__ = [
     "create_execution",
     "get_agent_executions",
     "get_execution",
-    "get_execution_log_file",
     "get_recent_executions",
     "get_running_count",
     "update_execution",
@@ -86,19 +85,3 @@ def get_running_count() -> int:
         cursor = conn.execute("SELECT COUNT(*) FROM executions WHERE status = 'running'")
         row = cursor.fetchone()
         return row[0] if row else 0
-
-
-def get_execution_log_file(doc_title_pattern: str) -> str | None:
-    """Find the log file for a running execution matching a title pattern."""
-    with db_connection.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT log_file FROM executions
-            WHERE doc_title LIKE ?
-            AND status = 'running'
-            ORDER BY id DESC LIMIT 1
-            """,
-            (doc_title_pattern,),
-        )
-        row = cursor.fetchone()
-        return row[0] if row else None
