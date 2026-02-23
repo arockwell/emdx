@@ -83,8 +83,7 @@ emdx/
 │   ├── file_watcher.py       # file monitoring
 │   ├── auto_tagger.py        # automatic tagging
 │   ├── embedding_service.py   # semantic search embeddings
-│   ├── hybrid_search.py      # combined keyword + semantic search
-│   ├── unified_search.py     # unified search interface
+│   ├── hybrid_search.py      # canonical search service (FTS5, semantic, fuzzy, tags)
 │   ├── similarity.py         # document similarity
 │   ├── duplicate_detector.py  # duplicate detection
 │   ├── ask_service.py        # AI Q&A service
