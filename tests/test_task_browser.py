@@ -1315,8 +1315,8 @@ class TestEpicGrouping:
     async def test_g_toggles_to_epic_grouping(self, mock_task_data: MockDict) -> None:
         """Pressing g switches from status grouping to epic grouping."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Auth task", status="open", epic_key="AUTH"),
-            make_task(id=2, title="TUI task", status="open", epic_key="TUI"),
+            make_task(id=1, title="Auth task", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="TUI task", status="open", epic_key="TUI", parent_task_id=101),
         ]
         mock_task_data["list_epics"].return_value = [
             make_epic(id=100, epic_key="AUTH"),
@@ -1362,8 +1362,11 @@ class TestEpicGrouping:
     async def test_epic_grouping_shows_ungrouped(self, mock_task_data: MockDict) -> None:
         """Tasks without an epic appear under UNGROUPED."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Epic task", status="open", epic_key="AUTH"),
+            make_task(id=1, title="Epic task", status="open", epic_key="AUTH", parent_task_id=100),
             make_task(id=2, title="Loose task", status="open", epic_key=None),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="AUTH"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1380,10 +1383,10 @@ class TestEpicGrouping:
     async def test_epic_grouping_shows_progress(self, mock_task_data: MockDict) -> None:
         """Epic headers show done/total progress when epic info is available."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Task", status="open", epic_key="AUTH"),
+            make_task(id=1, title="Task", status="open", epic_key="AUTH", parent_task_id=100),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(epic_key="AUTH", child_count=10, children_done=7),
+            make_epic(id=100, epic_key="AUTH", child_count=10, children_done=7),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1414,9 +1417,13 @@ class TestEpicGrouping:
     async def test_epic_grouping_composes_with_filters(self, mock_task_data: MockDict) -> None:
         """Epic grouping works together with status and text filters."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Fix auth", status="open", epic_key="AUTH"),
-            make_task(id=2, title="Fix deploy", status="open", epic_key="AUTH"),
-            make_task(id=3, title="Fix TUI", status="active", epic_key="TUI"),
+            make_task(id=1, title="Fix auth", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Fix deploy", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=3, title="Fix TUI", status="active", epic_key="TUI", parent_task_id=101),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="AUTH"),
+            make_epic(id=101, epic_key="TUI"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1471,9 +1478,15 @@ class TestEpicGrouping:
     async def test_epic_grouping_hides_all_done_epics(self, mock_task_data: MockDict) -> None:
         """Epics where all tasks are done/failed are hidden in epic grouping."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Active work", status="open", epic_key="LIVE"),
-            make_task(id=2, title="Old stuff", status="done", epic_key="DEAD"),
-            make_task(id=3, title="Also old", status="failed", epic_key="DEAD"),
+            make_task(
+                id=1, title="Active work", status="open", epic_key="LIVE", parent_task_id=200
+            ),
+            make_task(id=2, title="Old stuff", status="done", epic_key="DEAD", parent_task_id=201),
+            make_task(id=3, title="Also old", status="failed", epic_key="DEAD", parent_task_id=201),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(id=201, epic_key="DEAD"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1492,9 +1505,16 @@ class TestEpicGrouping:
     ) -> None:
         """Done tasks within an epic that has open tasks are hidden."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Open work", status="open", epic_key="MIX"),
-            make_task(id=2, title="Finished work", status="done", epic_key="MIX"),
-            make_task(id=3, title="Failed work", status="failed", epic_key="MIX"),
+            make_task(id=1, title="Open work", status="open", epic_key="MIX", parent_task_id=300),
+            make_task(
+                id=2, title="Finished work", status="done", epic_key="MIX", parent_task_id=300
+            ),
+            make_task(
+                id=3, title="Failed work", status="failed", epic_key="MIX", parent_task_id=300
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=300, epic_key="MIX"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1579,8 +1599,14 @@ class TestWontdoStatus:
     async def test_wontdo_hidden_in_epic_grouping(self, mock_task_data: MockDict) -> None:
         """Epics where all tasks are wontdo are hidden in epic grouping."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Active work", status="open", epic_key="LIVE"),
-            make_task(id=2, title="Skipped", status="wontdo", epic_key="SKIP"),
+            make_task(
+                id=1, title="Active work", status="open", epic_key="LIVE", parent_task_id=400
+            ),
+            make_task(id=2, title="Skipped", status="wontdo", epic_key="SKIP", parent_task_id=401),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=400, epic_key="LIVE"),
+            make_epic(id=401, epic_key="SKIP"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
