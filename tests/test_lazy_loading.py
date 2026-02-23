@@ -192,7 +192,6 @@ class TestCLIIntegration:
         lazy_modules = [
             "emdx.commands.delegate",
             "emdx.commands.claude_execute",
-            "emdx.commands.ask",
         ]
 
         # Clear any cached imports
