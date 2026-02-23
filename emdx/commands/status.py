@@ -5,13 +5,19 @@ Provides a quick overview of:
 - Active delegate tasks (running now)
 - Recent completed tasks
 - Failed tasks (with retry hints)
+- Knowledge base health (--health)
 """
 
+from __future__ import annotations
+
+import json
 from datetime import datetime, timedelta
 from typing import Any
 
 import typer
+from rich import box
 from rich.console import Console
+from rich.table import Table
 
 from ..models.tasks import (
     get_active_delegate_tasks,
@@ -20,6 +26,7 @@ from ..models.tasks import (
     get_recent_completed_tasks,
 )
 from ..utils.output import print_json
+from .types import HealthData, HealthMetricData
 
 console = Console()
 
@@ -198,6 +205,138 @@ def _collect_status_data() -> dict[str, Any]:
     }
 
 
+def _get_status_emoji(score: float) -> str:
+    """Get status emoji based on score."""
+    if score >= 80:
+        return "✅"
+    elif score >= 60:
+        return "⚠️"
+    else:
+        return "❌"
+
+
+def _show_health() -> None:
+    """Show knowledge base health metrics and recommendations."""
+    from ..services.health_monitor import HealthMonitor
+
+    monitor = HealthMonitor()
+
+    try:
+        with console.status("[bold green]Analyzing knowledge base health..."):
+            metrics = monitor.calculate_overall_health()
+    except ImportError as e:
+        console.print(f"  [red]{e}[/red]")
+        return
+
+    # Overall health score
+    overall_score = metrics["overall_score"] * 100
+    health_color = "green" if overall_score >= 80 else "yellow" if overall_score >= 60 else "red"
+
+    console.print(
+        f"[bold]Overall Health Score: [{health_color}]{overall_score:.0f}%[/{health_color}][/bold]"
+    )
+
+    # Detailed metrics table
+    console.print("\n[bold]Health Metrics:[/bold]")
+
+    metrics_table = Table(show_header=False, box=box.SIMPLE)
+    metrics_table.add_column("Metric", style="cyan")
+    metrics_table.add_column("Score", justify="right")
+    metrics_table.add_column("Status")
+    metrics_table.add_column("Details")
+
+    for key in ("tag_coverage", "duplicate_ratio", "organization", "activity"):
+        metric = metrics["metrics"].get(key)
+        if metric is None:
+            continue
+        score = metric.value * 100
+        color = "green" if score >= 80 else "yellow" if score >= 60 else "red"
+        metrics_table.add_row(
+            metric.name,
+            f"[{color}]{score:.0f}%[/{color}]",
+            _get_status_emoji(score),
+            metric.details,
+        )
+
+    console.print(metrics_table)
+
+    # Tag coverage details
+    _show_tag_summary()
+
+    # Recommendations
+    all_recommendations: list[str] = []
+    for metric in metrics["metrics"].values():
+        all_recommendations.extend(metric.recommendations)
+
+    if all_recommendations:
+        console.print("\n[bold]Recommendations:[/bold]")
+        for rec in all_recommendations:
+            console.print(f"  • {rec}")
+
+    console.print("\n[dim]For duplicates/similar docs: emdx maintain compact --dry-run[/dim]")
+
+
+def _show_tag_summary() -> None:
+    """Show tag coverage summary as part of health output."""
+    from ..database.connection import db_connection
+
+    with db_connection.get_connection() as conn:
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                COUNT(DISTINCT d.id) as total_docs,
+                COUNT(DISTINCT CASE WHEN dt.document_id IS NOT NULL
+                    THEN d.id END) as tagged_docs
+            FROM documents d
+            LEFT JOIN (
+                SELECT document_id FROM document_tags GROUP BY document_id
+            ) dt ON d.id = dt.document_id
+            WHERE d.is_deleted = 0
+        """)
+
+        stats = cursor.fetchone()
+        total = stats["total_docs"]
+        tagged = stats["tagged_docs"]
+        untagged = total - tagged
+
+        if untagged > 0:
+            console.print(
+                f"\n  [yellow]{untagged} untagged documents[/yellow] out of {total} total"
+            )
+
+
+def _collect_health_json() -> HealthData:
+    """Collect health metrics as structured data for JSON output."""
+    from ..services.health_monitor import HealthMonitor
+
+    monitor = HealthMonitor()
+    try:
+        metrics = monitor.calculate_overall_health()
+    except ImportError as e:
+        return HealthData(error=str(e))
+
+    metrics_dict: dict[str, HealthMetricData] = {}
+    for key, metric in metrics["metrics"].items():
+        metrics_dict[key] = HealthMetricData(
+            name=metric.name,
+            value=metric.value,
+            score=metric.value * 100,
+            weight=metric.weight,
+            status=metric.status,
+            details=metric.details,
+            recommendations=metric.recommendations,
+        )
+
+    return HealthData(
+        overall_score=metrics["overall_score"],
+        overall_status=metrics["overall_status"],
+        metrics=metrics_dict,
+        statistics=metrics["statistics"],
+        timestamp=metrics["timestamp"],
+    )
+
+
 def _show_kb_stats(project: str | None = None, detailed: bool = False) -> None:
     """Show knowledge base statistics (folded from old `stats` command)."""
     from emdx.database import db
@@ -222,7 +361,7 @@ def _show_kb_stats(project: str | None = None, detailed: bool = False) -> None:
     if stats_data.get("most_viewed"):
         most_viewed = stats_data["most_viewed"]
         console.print(
-            f"[blue]Most Viewed:[/blue] \"{most_viewed['title']}\" "
+            f'[blue]Most Viewed:[/blue] "{most_viewed["title"]}" '
             f"({most_viewed['access_count']} views)"
         )
 
@@ -265,9 +404,8 @@ def _show_kb_stats(project: str | None = None, detailed: bool = False) -> None:
 def status(
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show additional details"),
     json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
-    stats: bool = typer.Option(
-        False, "--stats", help="Show knowledge base statistics"
-    ),
+    stats: bool = typer.Option(False, "--stats", help="Show knowledge base statistics"),
+    health: bool = typer.Option(False, "--health", "-H", help="Show knowledge base health metrics"),
     detailed: bool = typer.Option(
         False, "--detailed", "-d", help="Show detailed statistics (with --stats)"
     ),
@@ -280,13 +418,25 @@ def status(
 
     Displays active delegate tasks, recent completions, and failures.
     Use --stats for knowledge base statistics.
+    Use --health for health scores, tag coverage, and recommendations.
 
     Examples:
         emdx status
         emdx status --verbose
         emdx status --stats
         emdx status --stats --detailed
+        emdx status --health
+        emdx status --health --json
     """
+    if health:
+        if json_output:
+            print(json.dumps(_collect_health_json(), indent=2))
+        else:
+            console.print()
+            _show_health()
+            console.print()
+        return
+
     if json_output:
         print_json(_collect_status_data())
         return

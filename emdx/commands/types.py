@@ -112,11 +112,11 @@ class PrimeOutput(TypedDict, total=False):
     stale_docs: list[StaleDoc]
 
 
-# ── Analyze command types ──────────────────────────────────────────────
+# ── Status command types (health) ─────────────────────────────────────
 
 
 class HealthMetricData(TypedDict):
-    """Health metric data for JSON output in analyze.py."""
+    """Health metric data for JSON output in status --health."""
 
     name: str
     value: float
@@ -128,7 +128,7 @@ class HealthMetricData(TypedDict):
 
 
 class HealthData(TypedDict, total=False):
-    """Health analysis data from _collect_health_data()."""
+    """Health analysis data from status --health --json."""
 
     overall_score: float
     overall_status: str
@@ -136,125 +136,6 @@ class HealthData(TypedDict, total=False):
     statistics: HealthStats
     timestamp: str
     error: str  # only on error
-
-
-class DuplicateGroup(TypedDict):
-    """Exact duplicate group for JSON output."""
-
-    title: str
-    count: int
-    ids: list[int]
-
-
-class DuplicatePairDoc(TypedDict):
-    """Document in a near-duplicate pair."""
-
-    id: int
-    title: str
-
-
-class DuplicatePair(TypedDict):
-    """Near-duplicate pair for JSON output."""
-
-    doc1: DuplicatePairDoc
-    doc2: DuplicatePairDoc
-    similarity: float
-
-
-class ExactDuplicatesData(TypedDict):
-    """Exact duplicates section in DuplicatesData."""
-
-    count: int
-    total_duplicates: int
-    groups: list[DuplicateGroup]
-
-
-class NearDuplicatesData(TypedDict):
-    """Near duplicates section in DuplicatesData."""
-
-    count: int
-    pairs: list[DuplicatePair]
-
-
-class DuplicatesData(TypedDict):
-    """Duplicate analysis data from _collect_duplicates_data()."""
-
-    exact_duplicates: ExactDuplicatesData
-    near_duplicates: NearDuplicatesData
-
-
-class SimilarCandidate(TypedDict):
-    """Merge candidate for JSON output."""
-
-    doc1_id: int
-    doc1_title: str
-    doc2_id: int
-    doc2_title: str
-    similarity: float
-
-
-class SimilarData(TypedDict, total=False):
-    """Similar documents data from _collect_similar_data()."""
-
-    count: int
-    candidates: list[SimilarCandidate]
-    error: str  # only on error
-
-
-class EmptyDoc(TypedDict):
-    """Empty document for JSON output."""
-
-    id: int
-    title: str
-    length: int
-    project: str | None
-    access_count: int
-
-
-class EmptyData(TypedDict):
-    """Empty documents data from _collect_empty_data()."""
-
-    count: int
-    documents: list[EmptyDoc]
-
-
-class TagUsage(TypedDict):
-    """Tag usage count for JSON output."""
-
-    name: str
-    count: int
-
-
-class TagsData(TypedDict):
-    """Tag analysis data from _collect_tags_data()."""
-
-    project: str | None
-    coverage: float
-    total_documents: int
-    tagged_documents: int
-    unique_tags: int
-    avg_tags_per_doc: float
-    top_tags: list[TagUsage]
-    untagged_count: int
-
-
-class ProjectInfo(TypedDict):
-    """Project info for JSON output."""
-
-    name: str
-    doc_count: int
-    avg_length: float
-    total_views: int
-    unique_tags: int
-    last_updated: str | None
-    days_since_update: int
-
-
-class ProjectsData(TypedDict):
-    """Project analysis data from _collect_projects_data()."""
-
-    count: int
-    projects: list[ProjectInfo]
 
 
 # ── Delegate command types ─────────────────────────────────────────────
