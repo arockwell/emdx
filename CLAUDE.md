@@ -312,6 +312,12 @@ grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
 - `logger.debug("msg")` will NOT appear in TUI logs — emdx.* level is INFO. Use `logger.info()` or `logger.warning()` for debug output that must be visible.
 - TUI logs and CLI logs go to DIFFERENT files. If you're debugging the GUI, check `tui_debug.log`, not `emdx.log`.
 
+## Delegate Cleanup Gotchas
+
+- When delegates remove functions, they sometimes miss: (1) tests importing the removed code, (2) private methods called from OTHER files, (3) entirely dead files that should be deleted not just pruned
+- Always check CI after delegate cleanup PRs — `ImportError` in tests is the most common failure mode
+- When multiple delegate PRs touch the same file, merge one at a time — they WILL conflict with each other
+
 ## Known Gotchas
 
 - **`emdx find` does not support OR/AND/NOT** — `escape_fts5_query()` quotes each term, making operators literal. Use separate find calls or `--tags` with `--any-tags`.
