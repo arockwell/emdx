@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import Any, TypedDict
 
 import typer
 from rich.console import Console
@@ -23,46 +23,22 @@ from rich.table import Table
 from rich.text import Text
 
 from ..database import db
-
-if TYPE_CHECKING:
-    import numpy.typing as npt
+from ..services.clustering import (
+    ClusterDocumentDict,
+    compute_tfidf,
+    cosine_similarity,
+    fetch_cluster_documents,
+    find_clusters,
+    require_sklearn,
+)
 
 console = Console()
 app = typer.Typer(help="Explore what your knowledge base knows")
 
-# Import guard for sklearn (optional dependency)
-try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    from sklearn.metrics.pairwise import cosine_similarity
-
-    HAS_SKLEARN = True
-except ImportError:
-    HAS_SKLEARN = False
-
-
-def _require_sklearn() -> None:
-    """Raise ImportError with helpful message if sklearn is not installed."""
-    if not HAS_SKLEARN:
-        raise ImportError(
-            "scikit-learn is required for topic clustering. "
-            "Install it with: pip install 'emdx[similarity]'"
-        ) from None
-
-
-# ── TypedDicts ────────────────────────────────────────────────────────
-
-
-class ExploreDocumentDict(TypedDict):
-    """Document data fetched for explore clustering."""
-
-    id: int
-    title: str
-    content: str
-    project: str | None
-    created_at: str | None
-    accessed_at: str | None
-    access_count: int
-    tags: str | None
+# Re-export for backwards compatibility with tests that import from here
+ExploreDocumentDict = ClusterDocumentDict
+_require_sklearn = require_sklearn
+_fetch_all_documents = fetch_cluster_documents
 
 
 class TopicCluster(TypedDict):
@@ -118,121 +94,24 @@ class TopicQuestions(TypedDict):
     questions: list[str]
 
 
-# ── Data fetching ─────────────────────────────────────────────────────
-
-
-def _fetch_all_documents() -> list[ExploreDocumentDict]:
-    """Fetch all active documents with metadata for clustering."""
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT
-                d.id,
-                d.title,
-                d.content,
-                d.project,
-                d.created_at,
-                d.accessed_at,
-                d.access_count,
-                GROUP_CONCAT(t.name) as tags
-            FROM documents d
-            LEFT JOIN document_tags dt ON d.id = dt.document_id
-            LEFT JOIN tags t ON dt.tag_id = t.id
-            WHERE d.is_deleted = FALSE
-            AND LENGTH(d.content) > 50
-            GROUP BY d.id
-            ORDER BY d.id
-        """)
-        return [dict(row) for row in cursor.fetchall()]  # type: ignore[misc]
-
-
-# ── Clustering ────────────────────────────────────────────────────────
+# ── Wrappers around shared clustering module ────────────────────────
 
 
 def _compute_tfidf(
-    documents: list[ExploreDocumentDict],
+    documents: list[ClusterDocumentDict],
 ) -> tuple[Any, list[int], Any]:
-    """Compute TF-IDF matrix and return (matrix, doc_ids, vectorizer).
-
-    Returns the vectorizer so we can extract feature names for topic labels.
-    Title text is repeated to boost its weight in clustering and label extraction.
-    """
-    _require_sklearn()
-
-    corpus = []
-    doc_ids = []
-    for doc in documents:
-        # Repeat title 3x to boost its weight — titles are human-curated
-        # summaries and produce better topic labels than code content
-        title = doc["title"]
-        text = f"{title} {title} {title} {doc['content']}"
-        corpus.append(text)
-        doc_ids.append(doc["id"])
-
-    n_docs = len(corpus)
-    min_df = 1 if n_docs < 3 else 2
-    max_df = 1.0 if n_docs < 3 else 0.95
-
-    vectorizer = TfidfVectorizer(
-        max_features=5000,
-        min_df=min_df,
-        max_df=max_df,
-        stop_words="english",
-        ngram_range=(1, 2),
-    )
-
-    tfidf_matrix = vectorizer.fit_transform(corpus)
-    return tfidf_matrix, doc_ids, vectorizer
+    """Compute TF-IDF matrix with 3x title boost for topic label extraction."""
+    result = compute_tfidf(documents, title_boost=3)
+    return result.matrix, result.doc_ids, result.vectorizer
 
 
 def _find_clusters(
-    similarity_matrix: npt.NDArray[Any],
+    similarity_matrix: Any,
     doc_ids: list[int],
     threshold: float,
 ) -> list[list[int]]:
-    """Find document clusters using union-find on the similarity matrix.
-
-    Returns clusters with 2+ documents. Singletons are excluded.
-    """
-    n = len(doc_ids)
-    if n == 0:
-        return []
-
-    parent = list(range(n))
-    rank = [0] * n
-
-    def find(x: int) -> int:
-        if parent[x] != x:
-            parent[x] = find(parent[x])
-        return parent[x]
-
-    def union(x: int, y: int) -> None:
-        px, py = find(x), find(y)
-        if px == py:
-            return
-        if rank[px] < rank[py]:
-            px, py = py, px
-        parent[py] = px
-        if rank[px] == rank[py]:
-            rank[px] += 1
-
-    for i in range(n):
-        for j in range(i + 1, n):
-            if similarity_matrix[i, j] >= threshold:
-                union(i, j)
-
-    clusters_map: dict[int, list[int]] = {}
-    for i in range(n):
-        root = find(i)
-        if root not in clusters_map:
-            clusters_map[root] = []
-        clusters_map[root].append(doc_ids[i])
-
-    return sorted(
-        [c for c in clusters_map.values() if len(c) > 1],
-        key=len,
-        reverse=True,
-    )
+    """Find clusters, sorted largest-first for explore display."""
+    return find_clusters(similarity_matrix, doc_ids, threshold, sort_by_size=True)
 
 
 # ── Topic label extraction ────────────────────────────────────────────

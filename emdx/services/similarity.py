@@ -20,6 +20,7 @@ from pathlib import Path
 
 from ..config.constants import EMDX_CONFIG_DIR
 from ..database import db
+from .clustering import require_sklearn as _require_sklearn
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +28,8 @@ try:
     import scipy.sparse  # type: ignore[import-untyped]
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.metrics.pairwise import cosine_similarity
-
-    HAS_SKLEARN = True
 except ImportError:
-    HAS_SKLEARN = False
-
-
-def _require_sklearn() -> None:
-    """Raise ImportError with helpful message if sklearn is not installed."""
-    if not HAS_SKLEARN:
-        raise ImportError(
-            "scikit-learn is required for similarity features. "
-            "Install it with: pip install 'emdx[similarity]'"
-        )
+    pass
 
 
 @dataclass
