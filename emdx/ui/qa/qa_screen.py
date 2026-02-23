@@ -1,9 +1,11 @@
 """
 QA Screen - Conversational Q&A over your knowledge base.
 
-Delegates retrieval and answer generation to QAPresenter, which handles
-terminal state save/restore around threaded operations to prevent
-Textual's mouse/key handling from breaking.
+Layout: Input bar | History panel (left) + Answer panel (right) | Status | Nav
+
+History panel shows a DataTable of past questions. Answer panel shows the
+selected entry's full answer with inline sources. Clicking a #N doc ref
+opens the DocumentPreviewScreen fullscreen modal.
 """
 
 import asyncio
@@ -16,24 +18,15 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.widget import Widget
-from textual.widgets import Input, Markdown, RichLog, Static
+from textual.widgets import DataTable, Input, Markdown, RichLog, Static
 
 from ..modals import HelpMixin
-from .qa_presenter import QAEntry, QAPresenter, QASource, QAStateVM
+from .qa_presenter import QAEntry, QAPresenter, QAStateVM
 
 logger = logging.getLogger(__name__)
 
-_msg_counter = 0
-
-_MD_SYNTAX = re.compile(r"#{1,6}\s+|[*_]{1,3}|`{1,3}|^-{3,}$|^\s*[-*+]\s", re.MULTILINE)
-
 # Match #N doc references in answer text, but not inside markdown headings or code
 _DOC_REF = re.compile(r"(?<![#\w])#(\d+)\b")
-
-
-def _strip_md(text: str) -> str:
-    """Strip markdown syntax for plain-text display."""
-    return _MD_SYNTAX.sub("", text).strip()
 
 
 def _linkify_doc_refs(text: str, source_ids: set[int] | None = None) -> str:
@@ -52,17 +45,19 @@ def _linkify_doc_refs(text: str, source_ids: set[int] | None = None) -> str:
     return _DOC_REF.sub(_replace, text)
 
 
-def _next_msg_id() -> str:
-    global _msg_counter
-    _msg_counter += 1
-    return f"qa-msg-{_msg_counter}"
+def _truncate(text: str, max_len: int = 35) -> str:
+    """Truncate text for history panel display."""
+    text = text.replace("\n", " ").strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "\u2026"
 
 
 class QAScreen(HelpMixin, Widget):
     """
     Conversational Q&A widget over your knowledge base.
 
-    Layout: Input bar | Scrollable conversation | Status bar | Nav bar
+    Layout: Input bar | History (left) + Answer (right) | Status bar | Nav bar
     """
 
     HELP_TITLE = "Q&A"
@@ -73,6 +68,8 @@ class QAScreen(HelpMixin, Widget):
         Binding("tab", "toggle_input_focus", "Input", show=False),
         Binding("shift+tab", "toggle_input_focus", "Input", show=False),
         Binding("slash", "focus_input", "Focus Input"),
+        Binding("j", "history_down", "Next", show=False),
+        Binding("k", "history_up", "Prev", show=False),
         Binding("s", "save_exchange", "Save"),
         Binding("c", "clear_history", "Clear"),
         Binding("question_mark", "show_help", "Help"),
@@ -113,85 +110,45 @@ class QAScreen(HelpMixin, Widget):
         height: 1fr;
     }
 
-    #qa-conversation-panel {
-        width: 60%;
+    #qa-history-panel {
+        width: 30%;
         height: 100%;
     }
 
-    #qa-conversation {
-        height: 1fr;
-        width: 100%;
-        padding: 0 1;
-        scrollbar-gutter: stable;
-    }
-
-    #qa-source-panel {
-        width: 40%;
-        height: 100%;
-        border-left: solid $primary;
-    }
-
-    #qa-source-header {
+    #qa-history-header {
         height: 1;
         background: $surface;
         padding: 0 1;
         text-style: bold;
     }
 
-    #qa-source-scroll {
+    #qa-history-table {
         height: 1fr;
-        padding: 0;
     }
 
-    .qa-source-item {
-        width: 100%;
-        margin: 0;
-        padding: 1 1;
-        border-bottom: solid $surface-darken-1;
+    #qa-answer-panel {
+        width: 70%;
+        height: 100%;
+        border-left: solid $primary;
     }
 
-    .qa-source-item:hover {
-        background: $boost;
-    }
-
-    #qa-source-preview-scroll {
+    #qa-answer-stream-scroll {
         height: 1fr;
-        display: none;
-    }
-
-    #qa-source-preview {
         padding: 0 1;
     }
 
-    #qa-source-back {
-        height: 1;
-        background: $surface;
+    #qa-answer-md-scroll {
+        height: 1fr;
         padding: 0 1;
         display: none;
     }
 
-    #qa-source-back:hover {
-        background: $boost;
+    #qa-answer-log {
+        width: 100%;
     }
 
-    .qa-message {
+    #qa-answer-md {
         width: 100%;
-        margin: 0;
-        padding: 0;
-    }
-
-    .qa-answer {
-        width: 100%;
-        margin: 0 0 1 0;
-        padding: 0;
-    }
-
-    #qa-stream {
-        width: 100%;
-        margin: 0;
-        padding: 0;
-        height: auto;
-        max-height: 50%;
     }
 
     #qa-status {
@@ -213,16 +170,16 @@ class QAScreen(HelpMixin, Widget):
             on_state_update=self._on_state_update,
             on_answer_chunk=self._on_chunk,
         )
-        self._source_ids: list[int] = []
         # Background task that survives widget unmount/remount
         self._bg_task: asyncio.Task[None] | None = None
         # Buffer for streaming text — accumulate until newline for RichLog
         self._stream_buffer: str = ""
-        self._streaming_started: bool = False
-        # Track whether source panel is showing a doc preview vs source list
-        self._viewing_source: bool = False
-        # Last sources for restoring after closing a preview
-        self._last_sources: list[QASource] = []
+        # Maps DataTable row key string to presenter entries index
+        self._row_key_to_entry_index: dict[str, int] = {}
+        # Currently selected entry index (in presenter.state.entries)
+        self._selected_index: int | None = None
+        # Entry index currently being streamed
+        self._streaming_index: int | None = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="qa-input-bar"):
@@ -233,33 +190,30 @@ class QAScreen(HelpMixin, Widget):
             yield Static("Q&A", id="qa-mode-label")
 
         with Horizontal(id="qa-main"):
-            with Vertical(id="qa-conversation-panel"):
-                yield ScrollableContainer(id="qa-conversation")
-            with Vertical(id="qa-source-panel"):
-                yield Static("SOURCES", id="qa-source-header")
-                yield ScrollableContainer(id="qa-source-scroll")
-                with ScrollableContainer(id="qa-source-preview-scroll"):
-                    yield Markdown("", id="qa-source-preview", open_links=False)
-                yield Static(
-                    "[bold]< Back[/bold] to sources",
-                    id="qa-source-back",
+            with Vertical(id="qa-history-panel"):
+                yield Static("HISTORY", id="qa-history-header")
+                yield DataTable(
+                    id="qa-history-table",
+                    cursor_type="row",
+                    show_header=False,
+                    zebra_stripes=True,
                 )
+            with Vertical(id="qa-answer-panel"):
+                with ScrollableContainer(id="qa-answer-stream-scroll"):
+                    yield RichLog(id="qa-answer-log", wrap=True, markup=True)
+                with ScrollableContainer(id="qa-answer-md-scroll"):
+                    yield Markdown("", id="qa-answer-md", open_links=False)
 
         yield Static("Ready | Type a question and press Enter", id="qa-status")
         yield Static(
             "[dim]1[/dim] Docs | [dim]2[/dim] Tasks | [bold]3[/bold] Q&A | "
-            "[dim]/[/dim] type | [dim]Enter[/dim] ask | "
-            "[dim]s[/dim] save | [dim]c[/dim] clear",
+            "[dim]/[/dim] type | [dim]j/k[/dim] history | "
+            "[dim]Enter[/dim] ask | [dim]s[/dim] save | [dim]c[/dim] clear",
             id="qa-nav",
         )
 
     async def on_mount(self) -> None:
-        """Initialize or restore the Q&A screen.
-
-        Called both on first mount and on re-mount after switching screens.
-        If we have prior conversation entries, rebuild them instead of
-        showing the welcome message.
-        """
+        """Initialize or restore the Q&A screen."""
         entries = self._presenter.state.entries
         has_state = bool(entries) or self._presenter.state.is_asking
         logger.info(
@@ -268,115 +222,182 @@ class QAScreen(HelpMixin, Widget):
             self._presenter.state.is_asking,
         )
 
+        # Set up the history table column
+        table = self.query_one("#qa-history-table", DataTable)
+        if not table.columns:
+            table.add_column("question", key="question")
+
         if not has_state:
-            # First mount — initialize presenter and show welcome
             await self._presenter.initialize()
-            self._show_welcome()
-            self._update_source_panel([])
+            # Re-check — initialize may have loaded history from DB
+            entries = self._presenter.state.entries
+
+        if entries:
+            self._rebuild_history_table()
+            # Select the latest entry
+            self._selected_index = len(entries) - 1
+            latest = entries[-1]
+            if latest.is_loading:
+                self._streaming_index = self._selected_index
+                self._show_stream_scroll()
+            else:
+                self._render_answer_panel(latest)
         else:
-            self._rebuild_conversation()
-            # Restore source panel from latest entry
-            latest = entries[-1] if entries else None
-            self._update_source_panel(latest.sources if latest else [])
+            self._show_welcome()
 
-        # Focus conversation, not Input — avoids mouse sequence corruption
-        self.query_one("#qa-conversation", ScrollableContainer).focus()
+        # Focus the history table so j/k work immediately
+        table.focus()
 
-    def _append_message(self, markup: str) -> None:
-        """Append a Rich markup message to the conversation."""
-        container = self.query_one("#qa-conversation", ScrollableContainer)
-        msg = Static(markup, classes="qa-message", id=_next_msg_id())
-        container.mount(msg)
-        msg.scroll_visible()
+    # -- History panel --
 
-    def _append_markdown(self, content: str) -> None:
-        """Append a rendered Markdown widget to the conversation."""
-        container = self.query_one("#qa-conversation", ScrollableContainer)
-        md = Markdown(content, classes="qa-answer", id=_next_msg_id(), open_links=False)
-        container.mount(md)
-        md.scroll_visible()
+    def _rebuild_history_table(self) -> None:
+        """Rebuild the history DataTable from presenter state."""
+        table = self.query_one("#qa-history-table", DataTable)
+        table.clear()
+        self._row_key_to_entry_index.clear()
+
+        entries = self._presenter.state.entries
+        for i, entry in enumerate(entries):
+            icon = "\u2026" if entry.is_loading else "\u2714"
+            label = f"{icon} {_truncate(entry.question)}"
+            row_key = table.add_row(label, key=f"entry-{i}")
+            self._row_key_to_entry_index[str(row_key)] = i
+
+        # Update header
+        header = self.query_one("#qa-history-header", Static)
+        count = len(entries)
+        header.update(f"HISTORY ({count})" if count else "HISTORY")
+
+        # Move cursor to selected or last row
+        if entries:
+            target = self._selected_index if self._selected_index is not None else len(entries) - 1
+            try:
+                table.move_cursor(row=target)
+            except Exception:
+                logger.warning("Could not move cursor to row %d", target)
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """When a history row is highlighted, show its answer."""
+        if event.row_key is None:
+            return
+        key_str = str(event.row_key)
+        entry_index = self._row_key_to_entry_index.get(key_str)
+        if entry_index is None:
+            return
+
+        # Don't re-render if selecting the currently streaming entry
+        if entry_index == self._streaming_index:
+            self._selected_index = entry_index
+            self._show_stream_scroll()
+            return
+
+        entries = self._presenter.state.entries
+        if entry_index >= len(entries):
+            return
+
+        entry = entries[entry_index]
+        self._selected_index = entry_index
+
+        if entry.is_loading:
+            # Still loading — show stream scroll
+            self._show_stream_scroll()
+        else:
+            self._render_answer_panel(entry)
+
+    # -- Answer panel rendering --
+
+    def _show_stream_scroll(self) -> None:
+        """Show the streaming RichLog, hide the Markdown scroll."""
+        self.query_one("#qa-answer-stream-scroll").display = True
+        self.query_one("#qa-answer-md-scroll").display = False
+
+    def _show_md_scroll(self) -> None:
+        """Show the Markdown scroll, hide the streaming RichLog."""
+        self.query_one("#qa-answer-stream-scroll").display = False
+        self.query_one("#qa-answer-md-scroll").display = True
+
+    def _render_answer_panel(self, entry: QAEntry) -> None:
+        """Render a completed entry in the answer panel Markdown widget."""
+        logger.info(
+            "_render_answer_panel: sources=%d, answer_len=%d, elapsed=%dms",
+            len(entry.sources),
+            len(entry.answer),
+            entry.elapsed_ms,
+        )
+        self._show_md_scroll()
+
+        parts: list[str] = []
+
+        # Question
+        parts.append(f"**Q:** {entry.question}\n")
+
+        # Sources block at top — bulleted list for clickability
+        if entry.sources:
+            source_lines = "\n".join(
+                f"- [#{s.doc_id} {s.title}](emdx://doc/{s.doc_id})" for s in entry.sources
+            )
+            parts.append(f"**Sources:**\n\n{source_lines}\n")
+
+        parts.append("***\n")
+
+        # Answer with linkified doc refs
+        answer_text = _linkify_doc_refs(entry.answer).rstrip()
+        parts.append(answer_text)
+
+        # Footer with clickable source links
+        has_footer = entry.sources or entry.elapsed_ms or entry.error
+        if has_footer:
+            parts.append("\n***\n")
+        if entry.sources:
+            elapsed = f" *({entry.elapsed_ms / 1000:.1f}s)*" if entry.elapsed_ms else ""
+            footer_source_lines = "\n".join(
+                f"- [#{s.doc_id} {s.title}](emdx://doc/{s.doc_id})" for s in entry.sources
+            )
+            parts.append(f"**Sources:**{elapsed}\n\n{footer_source_lines}")
+        elif entry.elapsed_ms:
+            parts.append(f"*{entry.elapsed_ms / 1000:.1f}s*")
+        if entry.error:
+            parts.append(f"\n*Error: {entry.error}*")
+
+        content = "\n".join(parts)
+        md = self.query_one("#qa-answer-md", Markdown)
+        md.update(content)
 
     def _show_welcome(self) -> None:
-        """Show welcome message."""
-        self._append_message(
-            "[bold]Welcome to Q&A[/bold]\n"
-            "\n"
-            "Ask questions about your knowledge base in natural language.\n"
-            "Answers are generated from your documents using Claude.\n"
-            "\n"
-            "[dim]Examples:[/dim]\n"
-            "  [italic]What's our caching strategy?[/italic]\n"
-            "  [italic]How did we fix the auth bug?[/italic]\n"
-            "  [italic]Summarize the architecture decisions[/italic]\n"
-            "\n"
-            "[dim]Tip: Reference docs directly with #42 syntax[/dim]\n"
-            "[dim]─────────────────────────────────────────[/dim]"
-        )
+        """Show welcome message in the RichLog."""
+        self._show_stream_scroll()
+        log = self.query_one("#qa-answer-log", RichLog)
+        log.clear()
+        log.write("[bold]Welcome to Q&A[/bold]")
+        log.write("")
+        log.write("Ask questions about your knowledge base in natural language.")
+        log.write("Answers are generated from your documents using Claude.")
+        log.write("")
+        log.write("[dim]Examples:[/dim]")
+        log.write("  [italic]What's our caching strategy?[/italic]")
+        log.write("  [italic]How did we fix the auth bug?[/italic]")
+        log.write("  [italic]Summarize the architecture decisions[/italic]")
+        log.write("")
+        log.write("[dim]Tip: Reference docs directly with #42 syntax[/dim]")
+        log.write("[dim]j/k to navigate history[/dim]")
 
-    def _rebuild_conversation(self) -> None:
-        """Rebuild conversation DOM from presenter state.
+    def _start_streaming_in_answer_panel(self, entry: QAEntry) -> None:
+        """Set up the answer panel for streaming an in-progress entry."""
+        self._show_stream_scroll()
+        log = self.query_one("#qa-answer-log", RichLog)
+        log.clear()
+        log.write(f"[bold cyan]Q:[/bold cyan] {entry.question}")
+        log.write("")
 
-        Called on re-mount after switching screens.  The child widgets
-        were destroyed by remove_children() but presenter state survived.
-        """
-        for entry in self._presenter.state.entries:
-            self._append_message(f"\n[bold cyan]Q:[/bold cyan] {entry.question}\n")
-            if entry.is_loading:
-                self._set_thinking("[dim]Still generating answer...[/dim]")
-            else:
-                self._render_entry(entry)
+        if entry.sources:
+            for s in entry.sources:
+                log.write(f"  [dim]#{s.doc_id} {s.title}[/dim]")
+            log.write("")
 
-    def _update_source_panel(self, sources: list[QASource]) -> None:
-        """Update the source panel with the given sources."""
-        self._last_sources = list(sources)  # defensive copy
-        # If viewing a doc preview, just save sources — don't disturb the preview
-        if self._viewing_source:
-            logger.info("_update_source_panel: skipping (viewing source)")
-            return
-        logger.info(
-            "_update_source_panel: rendering %d sources",
-            len(sources),
-        )
-        try:
-            scroll = self.query_one("#qa-source-scroll", ScrollableContainer)
-            header = self.query_one("#qa-source-header", Static)
-        except Exception:
-            logger.warning("_update_source_panel: widgets not mounted")
-            return
-        scroll.remove_children()
-        if not sources:
-            header.update("SOURCES")
-            scroll.mount(
-                Static(
-                    "[dim]No sources yet[/dim]",
-                    classes="qa-source-item",
-                    id=_next_msg_id(),
-                )
-            )
-            return
-        header.update(f"SOURCES ({len(sources)})")
-        for i, src in enumerate(sources, 1):
-            snippet = _strip_md(src.snippet).replace("[", "\\[") if src.snippet else ""
-            # Collapse runs of blank lines but keep single newlines
-            snippet = re.sub(r"\n{2,}", "\n", snippet).strip()
-            if len(snippet) > 150:
-                snippet = snippet[:150].rsplit(" ", 1)[0] + "..."
-            title = src.title.replace("[", "\\[")
-            label = f"[bold cyan]{i}.[/bold cyan] [bold]#{src.doc_id}[/bold] {title}"
-            if snippet:
-                label += f"\n[dim]{snippet}[/dim]"
-            # Use unique IDs to avoid DuplicateIds when remove_children()
-            # hasn't finished before we re-mount (it's async internally).
-            item = Static(
-                label,
-                classes="qa-source-item",
-                id=f"qa-src-{src.doc_id}-{_next_msg_id()}",
-            )
-            scroll.mount(item)
-        logger.info(
-            "_update_source_panel: mounted %d items into scroll",
-            len(sources),
-        )
+        log.write("[bold green]A:[/bold green]")
+        self._stream_buffer = ""
+
+    # -- State update / streaming --
 
     def _update_status(self, text: str) -> None:
         """Update the status bar text."""
@@ -400,17 +421,23 @@ class QAScreen(HelpMixin, Widget):
             self.notify("Claude CLI not found", severity="error", timeout=3)
             return
 
-        # Clear input and unfocus
+        # Clear input
         event.input.value = ""
-        self.query_one("#qa-conversation", ScrollableContainer).focus()
 
-        # Show the question immediately
-        self._append_message(f"\n[bold cyan]Q:[/bold cyan] {question}\n")
-        self._set_thinking("[dim]Searching knowledge base...[/dim]")
+        # Show searching state in the RichLog
+        self._show_stream_scroll()
+        log = self.query_one("#qa-answer-log", RichLog)
+        log.clear()
+        log.write(f"[bold cyan]Q:[/bold cyan] {question}")
+        log.write("")
+        log.write("[dim]Searching knowledge base...[/dim]")
 
-        # Launch as a free-standing asyncio task so it survives widget
-        # unmount/remount (run_worker gets cancelled on unmount).
+        # Launch the ask task
         self._bg_task = asyncio.get_event_loop().create_task(self._presenter.ask(question))
+
+        # Rebuild history after entry is added (next tick)
+        # The entry gets created inside presenter.ask(), so we schedule
+        # the rebuild to happen after the first state update.
 
     async def _on_state_update(self, state: QAStateVM) -> None:
         """React to presenter state changes."""
@@ -421,66 +448,56 @@ class QAScreen(HelpMixin, Widget):
 
         if state.is_asking and state.entries:
             entry = state.entries[-1]
+            entry_index = len(state.entries) - 1
+
             if entry.is_loading:
                 src_count = len(entry.sources)
-                if src_count > 0 and not self._streaming_started:
-                    # Replace thinking indicator with streaming widgets
-                    self._remove_thinking()
-                    self._start_streaming()
-                    self._update_source_panel(entry.sources)
+                if src_count > 0 and self._streaming_index is None:
+                    # Sources arrived — start streaming display
+                    self._streaming_index = entry_index
+                    self._selected_index = entry_index
+                    self._start_streaming_in_answer_panel(entry)
+                    self._rebuild_history_table()
+
+                elif self._streaming_index is None:
+                    # Entry created but no sources yet — rebuild history
+                    self._selected_index = entry_index
+                    self._rebuild_history_table()
 
         # Entry just finished
         if not state.is_asking and state.entries:
             latest = state.entries[-1]
             if not latest.is_loading:
-                self._stop_streaming()
-                self._render_entry(latest)
-                self._update_source_panel(latest.sources)
+                # Flush remaining stream buffer
+                if self._stream_buffer:
+                    try:
+                        log = self.query_one("#qa-answer-log", RichLog)
+                        log.write(self._stream_buffer)
+                    except Exception:
+                        pass
+                    self._stream_buffer = ""
 
-    def _start_streaming(self) -> None:
-        """Mount the streaming RichLog widget for live answer display."""
-        try:
-            container = self.query_one("#qa-conversation", ScrollableContainer)
-            label = Static("[bold green]A:[/bold green]", classes="qa-message", id=_next_msg_id())
-            container.mount(label)
-            stream_log = RichLog(id="qa-stream", wrap=True, markup=True)
-            container.mount(stream_log)
-            stream_log.scroll_visible()
-            self._streaming_started = True
-            self._stream_buffer = ""
-        except Exception:
-            pass  # Widget not mounted
-
-    def _stop_streaming(self) -> None:
-        """Remove the streaming RichLog and flush any remaining buffer."""
-        # Flush remaining buffer
-        if self._stream_buffer:
-            try:
-                stream_log = self.query_one("#qa-stream", RichLog)
-                stream_log.write(self._stream_buffer)
-            except Exception:
-                pass
-            self._stream_buffer = ""
-        # Remove the streaming widget
-        try:
-            self.query_one("#qa-stream", RichLog).remove()
-        except Exception:
-            pass
-        self._streaming_started = False
+                self._streaming_index = None
+                self._selected_index = len(state.entries) - 1
+                self._render_answer_panel(latest)
+                self._rebuild_history_table()
 
     async def _on_chunk(self, chunk: str) -> None:
         """Handle streaming answer chunk — write complete lines to RichLog."""
         if not self._is_mounted_in_dom():
             return
 
+        # Only write to RichLog if the user is viewing the streaming entry
+        if self._selected_index != self._streaming_index:
+            return
+
         self._stream_buffer += chunk
-        # Write complete lines to RichLog, keep partial line in buffer
         while "\n" in self._stream_buffer:
             line, self._stream_buffer = self._stream_buffer.split("\n", 1)
             try:
-                stream_log = self.query_one("#qa-stream", RichLog)
-                stream_log.write(line)
-                stream_log.scroll_visible()
+                log = self.query_one("#qa-answer-log", RichLog)
+                log.write(line)
+                log.scroll_visible()
             except Exception:
                 pass
 
@@ -489,66 +506,27 @@ class QAScreen(HelpMixin, Widget):
         self._presenter.cancel()
         if self._bg_task and not self._bg_task.done():
             self._bg_task.cancel()
-        self._remove_thinking()
-        self._stop_streaming()
-        self._append_message("[dim italic]Cancelled[/dim italic]")
-        self._append_message("[dim]─────────────────────────────────────────[/dim]")
-        self._update_status("Cancelled | Ready")
+        self._streaming_index = None
+        self._stream_buffer = ""
 
-    def _set_thinking(self, text: str) -> None:
-        """Update or create the thinking indicator."""
+        # Show cancelled in the RichLog
         try:
-            existing = self.query_one("#qa-thinking", Static)
-            existing.update(text)
-        except Exception:
-            try:
-                container = self.query_one("#qa-conversation", ScrollableContainer)
-                indicator = Static(text, id="qa-thinking", classes="qa-message")
-                container.mount(indicator)
-                indicator.scroll_visible()
-            except Exception:
-                pass  # Widget not mounted
-
-    def _remove_thinking(self) -> None:
-        """Remove the thinking indicator."""
-        try:
-            self.query_one("#qa-thinking", Static).remove()
+            log = self.query_one("#qa-answer-log", RichLog)
+            log.write("")
+            log.write("[dim italic]Cancelled[/dim italic]")
         except Exception:
             pass
+
+        self._rebuild_history_table()
+        self._update_status("Cancelled | Ready")
 
     def _is_mounted_in_dom(self) -> bool:
         """Check if this widget is currently in the live DOM."""
         try:
-            self.query_one("#qa-conversation", ScrollableContainer)
+            self.query_one("#qa-answer-log", RichLog)
             return True
         except Exception:
             return False
-
-    def _render_entry(self, entry: QAEntry) -> None:
-        """Render a single Q&A entry into the conversation DOM."""
-        logger.info(
-            "_render_entry: sources=%d, answer_len=%d, elapsed=%dms",
-            len(entry.sources),
-            len(entry.answer),
-            entry.elapsed_ms,
-        )
-        self._append_message("[bold green]A:[/bold green]")
-        # Linkify ALL #N doc references in the answer so they're clickable
-        answer_text = _linkify_doc_refs(entry.answer)
-        if entry.sources:
-            self._source_ids = [s.doc_id for s in entry.sources]
-        self._append_markdown(answer_text)
-        if entry.sources:
-            source_lines = "\n".join(
-                f"- [#{s.doc_id}](emdx://doc/{s.doc_id}) {s.title}" for s in entry.sources
-            )
-            elapsed = ""
-            if entry.elapsed_ms:
-                elapsed = f" *({entry.elapsed_ms / 1000:.1f}s)*"
-            self._append_markdown(f"**Sources**{elapsed}\n\n{source_lines}")
-        elif entry.elapsed_ms:
-            self._append_message(f"[dim]{entry.elapsed_ms / 1000:.1f}s[/dim]")
-        self._append_message("[dim]─────────────────────────────────────────[/dim]")
 
     # -- Actions --
 
@@ -564,31 +542,56 @@ class QAScreen(HelpMixin, Widget):
         self.query_one("#qa-input", Input).focus()
 
     def action_toggle_input_focus(self) -> None:
-        """Toggle focus between input and conversation."""
+        """Toggle focus between input and history table."""
         inp = self.query_one("#qa-input", Input)
         if inp.has_focus:
-            self.query_one("#qa-conversation", ScrollableContainer).focus()
+            self.query_one("#qa-history-table", DataTable).focus()
         else:
             inp.focus()
 
+    def action_history_down(self) -> None:
+        """Move down in history table."""
+        table = self.query_one("#qa-history-table", DataTable)
+        table.action_cursor_down()
+
+    def action_history_up(self) -> None:
+        """Move up in history table."""
+        table = self.query_one("#qa-history-table", DataTable)
+        table.action_cursor_up()
+
     def action_clear_history(self) -> None:
         """Clear conversation history."""
-        container = self.query_one("#qa-conversation", ScrollableContainer)
-        container.remove_children()
         self._presenter.clear_history()
-        self._source_ids.clear()
-        self._update_source_panel([])
+        self._row_key_to_entry_index.clear()
+        self._selected_index = None
+        self._streaming_index = None
+        self._stream_buffer = ""
+        table = self.query_one("#qa-history-table", DataTable)
+        table.clear()
+        self.query_one("#qa-history-header", Static).update("HISTORY")
         self._show_welcome()
         self.notify("History cleared", timeout=1)
 
     def action_save_exchange(self) -> None:
-        """Save the most recent Q&A exchange as a document."""
+        """Save the selected Q&A exchange as a document."""
         entries = self._presenter.state.entries
         if not entries:
             self.notify("Nothing to save", timeout=2)
             return
 
-        entry = entries[-1]
+        # Save selected entry, fall back to latest
+        if self._selected_index is not None and self._selected_index < len(entries):
+            entry = entries[self._selected_index]
+        else:
+            entry = entries[-1]
+
+        if entry.is_loading or not entry.answer:
+            self.notify("Answer not ready yet", timeout=2)
+            return
+
+        if entry.saved_doc_id is not None:
+            self.notify(f"Already saved as #{entry.saved_doc_id}", timeout=2)
+            return
 
         content = f"# Q: {entry.question}\n\n{entry.answer}\n"
         if entry.sources:
@@ -603,19 +606,18 @@ class QAScreen(HelpMixin, Widget):
                 title=f"Q&A: {entry.question[:60]}",
                 content=content,
                 tags=["qa", "auto"],
+                doc_type="qa",
             )
+            entry.saved_doc_id = doc_id
             self.notify(f"Saved as document #{doc_id}", timeout=3)
         except Exception as e:
             logger.error(f"Failed to save Q&A: {e}")
             self.notify(f"Save failed: {e}", severity="error", timeout=3)
 
     async def action_exit_qa(self) -> None:
-        """Cancel current question if asking, close source preview, or exit."""
+        """Cancel current question if asking, or exit."""
         if self._presenter.state.is_asking:
             self._cancel_asking()
-            return
-        if self._viewing_source:
-            self._close_source_preview()
             return
         if hasattr(self.app, "switch_browser"):
             await self.app.switch_browser("activity")
@@ -625,30 +627,30 @@ class QAScreen(HelpMixin, Widget):
         try:
             search_input = self.query_one("#qa-input", Input)
             if search_input.has_focus:
-                pass_through_keys = {"s", "c", "1", "2", "slash"}
+                pass_through_keys = {"s", "c", "j", "k", "1", "2", "slash"}
                 if event.key in pass_through_keys:
                     return
         except Exception:
             pass
 
     def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
-        """Handle clicks on links in any Markdown widget (answers + preview)."""
+        """Handle clicks on doc ref links — open fullscreen preview."""
         event.prevent_default()
         href = event.href
-        # emdx://doc/N — open source preview
+        # emdx://doc/N — open fullscreen document preview
         if href.startswith("emdx://doc/"):
             try:
                 doc_id = int(href.removeprefix("emdx://doc/"))
             except ValueError:
                 return
             logger.info("Doc ref link clicked: #%d", doc_id)
-            self._show_source_preview(doc_id)
+            self._open_doc_preview(doc_id)
             return
         # Inline #N refs that got linkified — same pattern
         if href.startswith("#") and href[1:].isdigit():
             doc_id = int(href[1:])
             logger.info("Hash ref link clicked: #%d", doc_id)
-            self._show_source_preview(doc_id)
+            self._open_doc_preview(doc_id)
             return
         # External URLs — open in browser
         if href.startswith(("http://", "https://")):
@@ -658,98 +660,11 @@ class QAScreen(HelpMixin, Widget):
             return
         logger.debug("Ignoring link click: %s", href)
 
-    def on_click(self, event: events.Click) -> None:
-        """Handle clicks on source items or back button."""
-        widget = event.widget
-        if not isinstance(widget, Static):
-            return
+    def _open_doc_preview(self, doc_id: int) -> None:
+        """Open the fullscreen DocumentPreviewScreen for a doc."""
+        from ..modals import DocumentPreviewScreen
 
-        # Back button — return to source list
-        if widget.id == "qa-source-back":
-            logger.info("Back button clicked")
-            self._close_source_preview()
-            return
-
-        # Source item — show inline preview
-        if "qa-source-item" not in widget.classes:
-            return
-        widget_id = widget.id or ""
-        if not widget_id.startswith("qa-src-"):
-            return
-        try:
-            # ID format: qa-src-{doc_id}-qa-msg-{n}
-            rest = widget_id.removeprefix("qa-src-")
-            doc_id_str = rest.split("-qa-msg-")[0]
-            doc_id = int(doc_id_str)
-        except (ValueError, IndexError):
-            return
-        logger.info("Source item clicked: #%d", doc_id)
-        self._show_source_preview(doc_id)
-
-    def _show_source_preview(self, doc_id: int) -> None:
-        """Load and render a document in the source panel."""
-        from emdx.database import db
-
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT title, content FROM documents WHERE id = ? AND is_deleted = 0",
-                (doc_id,),
-            )
-            row = cursor.fetchone()
-
-        if not row:
-            logger.warning("Source preview: doc #%d not found", doc_id)
-            self.notify(f"Document #{doc_id} not found", severity="warning", timeout=2)
-            return
-
-        title, content = row[0], row[1]
-        logger.info(
-            "Showing source preview: #%d %s (%d chars)",
-            doc_id,
-            title,
-            len(content),
-        )
-
-        # Build markdown content
-        content_stripped = content.lstrip()
-        has_title_header = content_stripped.startswith(f"# {title}") or content_stripped.startswith(
-            "# "
-        )
-        if has_title_header:
-            render_content = content
-        else:
-            render_content = f"# {title}\n\n{content}"
-        if len(render_content) > 50000:
-            render_content = render_content[:50000] + "\n\n[dim]... (truncated)[/dim]"
-
-        # Swap containers: hide source list, show preview
-        self.query_one("#qa-source-scroll", ScrollableContainer).display = False
-        self.query_one("#qa-source-preview-scroll", ScrollableContainer).display = True
-        self.query_one("#qa-source-back", Static).display = True
-        self.query_one("#qa-source-header", Static).update(f"#{doc_id} {title}")
-
-        # Update the Markdown widget content
-        preview = self.query_one("#qa-source-preview", Markdown)
-        preview.update(render_content)
-        self._viewing_source = True
-
-    def _close_source_preview(self) -> None:
-        """Return from document preview to source list."""
-        saved = self._last_sources
-        logger.info(
-            "Closing source preview, _last_sources has %d items: %s",
-            len(saved),
-            [f"#{s.doc_id} {s.title}" for s in saved],
-        )
-        # Swap containers: show source list, hide preview
-        self.query_one("#qa-source-preview-scroll", ScrollableContainer).display = False
-        self.query_one("#qa-source-scroll", ScrollableContainer).display = True
-        self.query_one("#qa-source-back", Static).display = False
-        self._viewing_source = False
-
-        # Rebuild source list from saved state
-        self._update_source_panel(saved)
+        self.app.push_screen(DocumentPreviewScreen(doc_id))
 
     def set_query(self, query: str) -> None:
         """Set the input query programmatically (from command palette)."""
@@ -758,11 +673,7 @@ class QAScreen(HelpMixin, Widget):
         inp.focus()
 
     def save_state(self) -> dict[str, Any]:
-        """Save current state for restoration.
-
-        Conversation data lives in the presenter which survives on the
-        cached widget instance. on_mount rebuilds the DOM from presenter state.
-        """
+        """Save current state for restoration."""
         return {
             "entry_count": len(self._presenter.state.entries),
             "is_asking": self._presenter.state.is_asking,

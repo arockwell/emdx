@@ -81,6 +81,7 @@ class QAEntry:
     is_loading: bool = False
     error: str | None = None
     elapsed_ms: int = 0
+    saved_doc_id: int | None = None  # DB doc ID if loaded from/saved to KB
 
 
 @dataclass
@@ -122,11 +123,14 @@ class QAPresenter:
         return self._state
 
     async def initialize(self) -> None:
-        """Check capabilities on startup."""
+        """Check capabilities and load saved Q&A history."""
         has_claude_cli = shutil.which("claude") is not None
         self._state.has_claude_cli = has_claude_cli
 
         self._state.has_embeddings = self._has_embeddings()
+
+        # Load saved Q&A exchanges from the knowledge base
+        self.load_history()
 
         if has_claude_cli:
             method = "semantic" if self._state.has_embeddings else "keyword"
@@ -232,6 +236,17 @@ class QAPresenter:
             src_count = len(entry.sources)
             self._state.status_text = f"{src_count} sources | {entry.method} | {entry.elapsed_ms}ms"
             self._cancel_event = None
+
+            # Auto-save completed answers to the knowledge base
+            logger.info(
+                "ask() finally: answer=%d chars, error=%r, saving=%s",
+                len(entry.answer),
+                entry.error,
+                bool(entry.answer and not entry.error),
+            )
+            if entry.answer and not entry.error:
+                self._auto_save_entry(entry)
+
             await self._notify_update()
 
     def cancel(self) -> None:
@@ -493,8 +508,107 @@ class QAPresenter:
 
         return "".join(accumulated)
 
+    def _auto_save_entry(self, entry: QAEntry) -> None:
+        """Persist a completed Q&A entry to the knowledge base."""
+        try:
+            from emdx.models.documents import save_document
+
+            content = f"# Q: {entry.question}\n\n{entry.answer}\n"
+            if entry.sources:
+                content += "\n## Sources\n\n"
+                for s in entry.sources:
+                    content += f"- Document #{s.doc_id}: {s.title}\n"
+
+            doc_id = save_document(
+                title=f"Q&A: {entry.question[:60]}",
+                content=content,
+                tags=["qa", "auto"],
+                doc_type="qa",
+            )
+            entry.saved_doc_id = doc_id
+            logger.info("Auto-saved Q&A entry as document #%d", doc_id)
+        except Exception as e:
+            logger.warning("Failed to auto-save Q&A entry: %s", e)
+
+    def load_history(self, limit: int = 50) -> None:
+        """Load saved Q&A exchanges from the knowledge base.
+
+        Queries documents with doc_type='qa' and parses question/answer from
+        their content format (``# Q: question\\n\\nanswer``).
+        """
+        import re
+
+        from emdx.database import db
+
+        try:
+            with db.get_connection() as conn:
+                # Migrate any old Q&A docs that were saved with doc_type='user'
+                conn.execute(
+                    "UPDATE documents SET doc_type = 'qa' "
+                    "WHERE doc_type = 'user' AND is_deleted = 0 "
+                    "AND title LIKE 'Q&A: %'"
+                )
+                conn.commit()
+
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT id, title, content, created_at "
+                    "FROM documents "
+                    "WHERE doc_type = 'qa' AND is_deleted = 0 "
+                    "ORDER BY created_at ASC "
+                    "LIMIT ?",
+                    (limit,),
+                )
+                rows = cursor.fetchall()
+        except Exception as e:
+            logger.warning("Failed to load Q&A history: %s", e)
+            return
+
+        for row in rows:
+            doc_id, title, content, created_at = row[0], row[1], row[2], row[3]
+
+            # Parse question from title (format: "Q&A: question text")
+            question = title
+            if title.startswith("Q&A: "):
+                question = title[5:]
+
+            # Parse answer from content (format: "# Q: ...\n\n<answer>\n\n## Sources")
+            answer = content
+            # Strip the heading line
+            lines = content.split("\n", 2)
+            if len(lines) > 2 and lines[0].startswith("# Q:"):
+                answer = lines[2]
+            # Strip the sources section at the end
+            sources_idx = answer.rfind("\n## Sources\n")
+            if sources_idx >= 0:
+                answer = answer[:sources_idx]
+            answer = answer.strip()
+
+            # Parse sources from content
+            sources: list[QASource] = []
+            source_match = re.findall(r"- Document #(\d+): (.+)", content)
+            for sid, stitle in source_match:
+                sources.append(QASource(doc_id=int(sid), title=stitle))
+
+            # Parse timestamp
+            try:
+                ts = datetime.fromisoformat(created_at)
+            except (ValueError, TypeError):
+                ts = datetime.now()
+
+            entry = QAEntry(
+                question=question,
+                answer=answer,
+                sources=sources,
+                timestamp=ts,
+                saved_doc_id=doc_id,
+            )
+            self._state.entries.append(entry)
+
+        logger.info("Loaded %d Q&A entries from database", len(rows))
+
     def clear_history(self) -> None:
-        """Clear conversation history."""
+        """Clear conversation history (session only, does not delete from DB)."""
         self._state.entries.clear()
         self._state.status_text = "History cleared"
 
