@@ -346,11 +346,52 @@ class QAPresenter:
             parts.append(f"# Document #{doc_id}: {title}\n\n{truncated}")
         return "\n\n---\n\n".join(parts)
 
+    # ~2000 tokens ≈ 8000 chars for prior conversation context
+    MAX_HISTORY_CHARS = 8000
+
+    def _build_conversation_history(self) -> str:
+        """Build prior Q&A context from recent entries (excluding the current one).
+
+        Returns a formatted string of recent exchanges, capped at MAX_HISTORY_CHARS.
+        Only includes completed entries (not loading, not errored).
+        """
+        # Current question is already appended to entries, so exclude the last one
+        completed = [e for e in self._state.entries[:-1] if e.answer and not e.error]
+        if not completed:
+            return ""
+
+        # Build from most recent backward, stop when we hit the char budget
+        parts: list[str] = []
+        chars = 0
+        for entry in reversed(completed):
+            # Truncate long answers to keep context focused
+            answer = entry.answer[:2000] if len(entry.answer) > 2000 else entry.answer
+            exchange = f"Q: {entry.question}\nA: {answer}"
+            if chars + len(exchange) > self.MAX_HISTORY_CHARS:
+                break
+            parts.append(exchange)
+            chars += len(exchange)
+
+        if not parts:
+            return ""
+
+        parts.reverse()  # chronological order
+        return "\n\n".join(parts)
+
     async def _stream_answer(self, question: str, context: str) -> str:
         """Generate an answer via Claude CLI, streaming chunks as they arrive."""
         from emdx.services.cli_executor.claude import ClaudeCliExecutor
         from emdx.utils.environment import get_subprocess_env
         from emdx.utils.stream_json_parser import parse_stream_json_line
+
+        history = self._build_conversation_history()
+        history_section = ""
+        if history:
+            history_section = (
+                "\n\nPrior conversation for context:\n\n"
+                f"{history}\n\n"
+                "Use the above conversation history to understand follow-up questions."
+            )
 
         system_prompt = (
             "You answer questions using the provided knowledge base context.\n\n"
@@ -361,6 +402,7 @@ class QAPresenter:
             "- If the context doesn't contain relevant information, say so clearly\n"
             "- Be concise but complete\n"
             "- If documents contain conflicting information, note the discrepancy"
+            f"{history_section}"
         )
         user_message = (
             f"Context from my knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"
