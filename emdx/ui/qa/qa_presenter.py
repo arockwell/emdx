@@ -168,7 +168,11 @@ class QAPresenter:
         has_claude_cli = shutil.which("claude") is not None
         self._state.has_claude_cli = has_claude_cli
 
+        # Guard embedding check — importing sentence-transformers/torch
+        # can reset terminal state (raw → cooked + clear mouse tracking).
+        term_state = _save_terminal_state()
         self._state.has_embeddings = self._has_embeddings()
+        _restore_terminal_state(term_state)
 
         if has_claude_cli:
             method = "semantic" if self._state.has_embeddings else "keyword"
