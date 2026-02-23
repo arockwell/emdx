@@ -15,8 +15,25 @@ from datetime import date
 from pathlib import Path
 
 
+def get_latest_tag() -> str | None:
+    """Get the latest vX.Y.Z tag, or None if no tags exist."""
+    result = subprocess.run(
+        ["git", "tag", "--sort=-v:refname", "--list", "v*"],
+        capture_output=True,
+        text=True,
+    )
+    tags = result.stdout.strip().split("\n")
+    return tags[0] if tags and tags[0] else None
+
+
 def get_commits_since_version(version: str | None = None) -> list[dict]:
     """Get commits since the last version tag or all commits if no tag."""
+    # Auto-detect latest tag if no version specified
+    if version is None:
+        tag = get_latest_tag()
+        if tag:
+            version = tag.lstrip("v")
+
     # Get commits (all if no tags exist)
     cmd = ["git", "log", "--pretty=format:%H|%s", "--reverse"]
     if version:
@@ -37,7 +54,7 @@ def get_commits_since_version(version: str | None = None) -> list[dict]:
 
 def categorize_commits(commits: list[dict]) -> dict[str, list[str]]:
     """Categorize commits by type (feat, fix, refactor, etc.)."""
-    categories = {
+    categories: dict[str, list[str]] = {
         "features": [],
         "fixes": [],
         "refactor": [],
@@ -151,7 +168,7 @@ def bump_version(new_version: str) -> None:
     new_content = re.sub(
         r'(\[tool\.poetry\]\nname = "emdx"\n)version = "[^"]+"',
         f'\\1version = "{new_version}"',
-        content
+        content,
     )
 
     pyproject.write_text(new_content)
@@ -161,11 +178,7 @@ def bump_version(new_version: str) -> None:
     init_file = Path("emdx/__init__.py")
     if init_file.exists():
         init_content = init_file.read_text()
-        new_init = re.sub(
-            r'__version__ = "[^"]+"',
-            f'__version__ = "{new_version}"',
-            init_content
-        )
+        new_init = re.sub(r'__version__ = "[^"]+"', f'__version__ = "{new_version}"', init_content)
         init_file.write_text(new_init)
         print(f"Updated emdx/__init__.py to version {new_version}")
 
@@ -186,7 +199,7 @@ def update_changelog(entry: str) -> None:
                 break
             header_lines.append(line)
         header = "\n".join(header_lines)
-        rest = "\n".join(lines[len(header_lines):])
+        rest = "\n".join(lines[len(header_lines) :])
         new_content = header + "\n" + entry + "\n" + rest
     else:
         new_content = content[:header_end] + "\n" + entry + "\n" + content[header_end:]
@@ -195,7 +208,7 @@ def update_changelog(entry: str) -> None:
     print("Updated CHANGELOG.md")
 
 
-def main():
+def main() -> None:
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)
@@ -212,12 +225,20 @@ def main():
         print("=== Features ===")
         for f in categories["features"][:20]:
             print(f"  - {f}")
-        print(f"\n  ... and {len(categories['features']) - 20} more" if len(categories["features"]) > 20 else "")  # noqa: E501
+        print(
+            f"\n  ... and {len(categories['features']) - 20} more"
+            if len(categories["features"]) > 20
+            else ""
+        )  # noqa: E501
 
         print("\n=== Fixes ===")
         for f in categories["fixes"][:20]:
             print(f"  - {f}")
-        print(f"\n  ... and {len(categories['fixes']) - 20} more" if len(categories["fixes"]) > 20 else "")  # noqa: E501
+        print(
+            f"\n  ... and {len(categories['fixes']) - 20} more"
+            if len(categories["fixes"]) > 20
+            else ""
+        )  # noqa: E501
 
         print(f"\nTotal: {len(categories['features'])} features, {len(categories['fixes'])} fixes")
 

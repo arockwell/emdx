@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-02-23
+
+**Cleanup and performance patch.** The TUI now launches instantly — the ~2.5s sentence-transformers import moved from app startup to QA screen load, where it runs in a background thread with a loading indicator. Six refactoring PRs removed ~2,400 lines of dead code and consolidated duplicated modules.
+
+### ⚡ Performance
+
+- Defer sentence-transformers import to QA screen load — TUI launches ~2.5s faster (#840)
+
+### 🐛 Bug Fixes
+
+- `--done` flag on `task list` now shows only done tasks instead of everything (#838)
+- Fix release changelog script to auto-detect latest tag instead of showing all commits
+
+### 🔧 Improvements
+
+- Consolidate `UnifiedSearch` into `HybridSearch` — one canonical search service (#836)
+- Fold `analyze.py` into `status --health`, delete redundant command (#835)
+- Extract shared clustering module from explore/compact duplication (#834)
+- Split `maintain.py` god file into `maintain` + `wiki` + `maintain_index` (#833)
+- Delete dead `claude_executor.py` — zero callers (#831)
+- Delete dead `commands/ask.py` — never registered, all features duplicated (#830)
+- Add TUI demo GIF to README (#837)
+
+[0.22.1]: https://github.com/arockwell/emdx/compare/v0.22.0...v0.22.1
+
 ## [0.22.0] - 2026-02-23
 
 **The plugin + QA redesign release.** EMDX ships as a Claude Code plugin with a marketplace manifest, lifecycle hooks, and a setup skill. The QA screen was rebuilt from scratch — a left-side history panel replaces the old source panel, answers persist to the database across sessions, and clickable `#N` document references open fullscreen previews. The task browser's epic grouping got several fixes so standalone tasks no longer masquerade as epic children.
