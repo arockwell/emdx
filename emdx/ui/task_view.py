@@ -481,6 +481,9 @@ class TaskView(Widget):
             ]
             if not child_tasks and not epic_tasks:
                 continue
+            # Skip fully-finished epics with no open children
+            if not child_tasks and epic_tasks and epic_tasks[0]["status"] in finished:
+                continue
 
             if not first_group:
                 table.add_row(
