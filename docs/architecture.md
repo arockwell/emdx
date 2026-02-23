@@ -88,7 +88,6 @@ emdx/
 │   ├── similarity.py         # document similarity
 │   ├── duplicate_detector.py  # duplicate detection
 │   ├── ask_service.py        # AI Q&A service
-│   ├── claude_executor.py    # Claude API executor
 │   ├── document_service.py   # document operations
 │   ├── document_merger.py    # document merging
 │   ├── synthesis_service.py  # synthesis orchestration
