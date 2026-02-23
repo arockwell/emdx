@@ -1,6 +1,18 @@
 {
-  "description": "emdx plugin hooks: auto-save subagent research output to knowledge base",
+  "description": "emdx plugin hooks: environment check on session start, auto-save subagent output",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-emdx.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "matcher": "Explore|general-purpose",
