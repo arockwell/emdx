@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-02-23
+
+**The plugin + QA redesign release.** EMDX ships as a Claude Code plugin with a marketplace manifest, lifecycle hooks, and a setup skill. The QA screen was rebuilt from scratch — a left-side history panel replaces the old source panel, answers persist to the database across sessions, and clickable `#N` document references open fullscreen previews. The task browser's epic grouping got several fixes so standalone tasks no longer masquerade as epic children.
+
+### 🚀 Major Features
+
+#### Claude Code plugin system (#821, #823, #820)
+EMDX is now installable as a Claude Code plugin. A `marketplace.json` manifest (#821) enables discovery, and two lifecycle hooks integrate with the Claude Code session:
+
+- **SessionStart hook** (#823) — primes the session with ready tasks, in-progress work, and recent docs. Includes `/emdx:setup` skill for first-time plugin configuration.
+- **SubagentStop hook** (#820) — auto-saves subagent output to the knowledge base when a delegate finishes, so nothing is lost when conversations end.
+
+#### QA screen redesign (#828, #826)
+The QA screen was rebuilt with a persistent history panel and inline sources:
+
+- **History panel** — a left-side DataTable shows past Q&A exchanges. Navigate with `j`/`k`, and answers load instantly from the database.
+- **Persistent Q&A** — every answer auto-saves as a `doc_type="qa"` document, surviving across sessions without cluttering search results or the activity screen.
+- **Inline sources** — sources appear as clickable bulleted lists at the top and bottom of each answer. Clicking a `#N` reference opens the fullscreen `DocumentPreviewScreen` modal.
+- **Shared markdown rendering** (#826) — the preview pane and fullscreen modal now share a single `render_markdown_to_richlog()` function, eliminating duplicate rendering code.
+
+#### Streaming delegate output (#822)
+Parallel delegate results now stream to stdout as each task completes, instead of waiting for all tasks to finish. You see progress immediately when running `emdx delegate "task1" "task2" "task3"`.
+
+### 🐛 Bug Fixes
+
+- Fix terminal corruption when sentence-transformers loads in a background thread — save/restore terminal state around threaded calls (#827)
+- Hide fully-done epics in task browser epic group view (#825)
+- Fix non-epic tasks showing tree connectors and epic group headers in epic view — tasks with `epic_key` but no `parent_task_id` now go to UNGROUPED (#829)
+- Show `KEY-N` badge instead of `#id` for epics that have a sequence number (#829)
+
+[0.22.0]: https://github.com/arockwell/emdx/compare/v0.21.0...v0.22.0
+
 ## [0.21.0] - 2026-02-22
 
 **The auto-wiki release.** EMDX can now generate a full wiki from your knowledge base — topic clustering groups documents by theme, an LLM synthesizes each cluster into a polished article, and the whole thing exports to MkDocs for static site hosting. A suite of curation commands (`skip`, `pin`, `rename`, `merge`, `split`) lets you shape topics before generation, and per-topic controls let you override models, inject editorial prompts, and weight source documents. The TUI gained two-pane QA with source references, epic-child tree connectors in the task browser, and streaming answer tokens.
