@@ -1,0 +1,27 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "arockwell-emdx",
+  "description": "Knowledge base skills for Claude Code. Save research, delegate parallel work, and maintain session memory across conversations.",
+  "owner": {
+    "name": "Alex Rockwell"
+  },
+  "plugins": [
+    {
+      "name": "emdx",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/arockwell/emdx.git"
+      },
+      "description": "Knowledge base skills for Claude Code. Save research, delegate parallel work, and maintain session memory across conversations.",
+      "version": "0.21.0",
+      "author": {
+        "name": "Alex Rockwell"
+      },
+      "category": "productivity",
+      "homepage": "https://github.com/arockwell/emdx",
+      "repository": "https://github.com/arockwell/emdx",
+      "license": "MIT",
+      "keywords": ["knowledge-base", "research", "delegate", "persistence", "memory"]
+    }
+  ]
+}
