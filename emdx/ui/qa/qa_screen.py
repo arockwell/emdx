@@ -73,6 +73,7 @@ class QAScreen(HelpMixin, Widget):
         Binding("s", "save_exchange", "Save"),
         Binding("c", "clear_history", "Clear"),
         Binding("question_mark", "show_help", "Help"),
+        Binding("z", "toggle_zoom", "Zoom", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -111,8 +112,12 @@ class QAScreen(HelpMixin, Widget):
     }
 
     #qa-history-panel {
-        width: 30%;
-        height: 100%;
+        height: 30%;
+        width: 100%;
+    }
+
+    #qa-history-panel.zoom-hidden {
+        display: none;
     }
 
     #qa-history-header {
@@ -127,9 +132,14 @@ class QAScreen(HelpMixin, Widget):
     }
 
     #qa-answer-panel {
-        width: 70%;
+        height: 70%;
+        width: 100%;
+        border-top: solid $primary;
+    }
+
+    #qa-answer-panel.zoom-full {
         height: 100%;
-        border-left: solid $primary;
+        border-top: none;
     }
 
     #qa-answer-stream-scroll {
@@ -182,6 +192,7 @@ class QAScreen(HelpMixin, Widget):
         self._selected_index: int | None = None
         # Entry index currently being streamed
         self._streaming_index: int | None = None
+        self._zoomed: bool = False
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="qa-input-bar"):
@@ -191,7 +202,7 @@ class QAScreen(HelpMixin, Widget):
             )
             yield Static("Q&A", id="qa-mode-label")
 
-        with Horizontal(id="qa-main"):
+        with Vertical(id="qa-main"):
             with Vertical(id="qa-history-panel"):
                 yield Static("HISTORY", id="qa-history-header")
                 yield DataTable(
@@ -210,7 +221,8 @@ class QAScreen(HelpMixin, Widget):
         yield Static(
             "[dim]1[/dim] Docs | [dim]2[/dim] Tasks | [bold]3[/bold] Q&A | "
             "[dim]/[/dim] type | [dim]j/k[/dim] history | "
-            "[dim]Enter[/dim] ask | [dim]s[/dim] save | [dim]c[/dim] clear",
+            "[dim]Enter[/dim] ask | [dim]s[/dim] save | [dim]c[/dim] clear | "
+            "[dim]z[/dim] zoom",
             id="qa-nav",
         )
 
@@ -577,6 +589,19 @@ class QAScreen(HelpMixin, Widget):
         table = self.query_one("#qa-history-table", DataTable)
         table.action_cursor_up()
 
+    def action_toggle_zoom(self) -> None:
+        """Toggle zoom: hide history panel, expand answer to full height."""
+        history_panel = self.query_one("#qa-history-panel")
+        answer_panel = self.query_one("#qa-answer-panel")
+        self._zoomed = not self._zoomed
+        if self._zoomed:
+            history_panel.add_class("zoom-hidden")
+            answer_panel.add_class("zoom-full")
+        else:
+            history_panel.remove_class("zoom-hidden")
+            answer_panel.remove_class("zoom-full")
+            self.query_one("#qa-history-table", DataTable).focus()
+
     def action_clear_history(self) -> None:
         """Clear conversation history."""
         self._presenter.clear_history()
@@ -645,7 +670,7 @@ class QAScreen(HelpMixin, Widget):
         try:
             search_input = self.query_one("#qa-input", Input)
             if search_input.has_focus:
-                pass_through_keys = {"s", "c", "j", "k", "1", "2", "slash"}
+                pass_through_keys = {"s", "c", "j", "k", "z", "1", "2", "slash"}
                 if event.key in pass_through_keys:
                     return
         except Exception:

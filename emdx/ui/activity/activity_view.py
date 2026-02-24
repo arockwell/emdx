@@ -115,6 +115,7 @@ class ActivityView(HelpMixin, Widget):
         ("question_mark", "show_help", "Help"),
         ("c", "toggle_copy_mode", "Copy Mode"),
         ("w", "cycle_doc_type_filter", "Filter Docs"),
+        ("z", "toggle_zoom", "Zoom"),
     ]
 
     DEFAULT_CSS = """
@@ -134,17 +135,21 @@ class ActivityView(HelpMixin, Widget):
     }
 
     #activity-panel {
-        width: 40%;
-        height: 100%;
+        height: 40%;
+        width: 100%;
+    }
+
+    #activity-panel.zoom-hidden {
+        display: none;
     }
 
     #activity-list-section {
-        height: 70%;
+        width: 70%;
     }
 
     #context-section {
-        height: 30%;
-        border-top: solid $secondary;
+        width: 30%;
+        border-left: solid $secondary;
     }
 
     #context-header {
@@ -162,9 +167,14 @@ class ActivityView(HelpMixin, Widget):
     }
 
     #preview-panel {
-        width: 60%;
+        height: 60%;
+        width: 100%;
+        border-top: solid $primary;
+    }
+
+    #preview-panel.zoom-full {
         height: 100%;
-        border-left: solid $primary;
+        border-top: none;
     }
 
     #activity-header {
@@ -237,6 +247,7 @@ class ActivityView(HelpMixin, Widget):
         self._copy_mode = False
         self._refresh_in_progress = False
         self._data_loader = ActivityDataLoader()
+        self._zoomed: bool = False
 
     def _get_selected_item(self) -> ActivityItem | None:
         """Get the currently selected ActivityItem from the table."""
@@ -254,10 +265,10 @@ class ActivityView(HelpMixin, Widget):
         yield Static("", id="notification", classes="notification")
 
         # Main content
-        with Horizontal(id="main-content"):
-            # Left: Activity table (top) + Context panel (bottom)
-            with Vertical(id="activity-panel"):
-                # Top: Activity table
+        with Vertical(id="main-content"):
+            # Top band: Activity table (left) + Context panel (right)
+            with Horizontal(id="activity-panel"):
+                # Left: Activity table
                 with Vertical(id="activity-list-section"):
                     yield Static("DOCUMENTS", id="activity-header")
                     yield ActivityTable(id="activity-table")
@@ -624,6 +635,19 @@ class ActivityView(HelpMixin, Widget):
     async def action_refresh(self) -> None:
         """Manual refresh."""
         await self._refresh_data()
+
+    def action_toggle_zoom(self) -> None:
+        """Toggle zoom: hide list panel, expand preview to full height."""
+        activity_panel = self.query_one("#activity-panel")
+        preview_panel = self.query_one("#preview-panel")
+        self._zoomed = not self._zoomed
+        if self._zoomed:
+            activity_panel.add_class("zoom-hidden")
+            preview_panel.add_class("zoom-full")
+        else:
+            activity_panel.remove_class("zoom-hidden")
+            preview_panel.remove_class("zoom-full")
+            self.query_one("#activity-table", ActivityTable).focus()
 
     def action_focus_next(self) -> None:
         """Focus next pane."""
