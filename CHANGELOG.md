@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-02-24
+
+**The wiki quality release.** Seven GitHub issues closed in one session — the entire Wiki Quality & Workflow Improvements epic (FEAT-73). Topic clustering now produces readable labels instead of raw code identifiers, a new `wiki setup` command bootstraps the full pipeline in one shot, and `wiki triage` lets you bulk-skip or auto-label topics without 70+ individual commands. Generation got backpressure support and a progress dashboard.
+
+### 🚀 Major Features
+
+#### Wiki setup and triage workflow (#863, Issue #846)
+The wiki bootstrap experience went from a 5-command sequence to one:
+
+- **`wiki setup`** — runs the full bootstrap: build embedding index, extract entities, discover topics with auto-labeling, and show a summary. One command replaces `maintain index` → `maintain entities --all` → `wiki topics --save`.
+- **`wiki triage`** — non-interactive batch cleanup for saved topics. `--skip-below 0.05` skips low-coherence clusters, `--auto-label` uses Claude CLI to generate human-readable names. Both flags compose.
+- **`wiki topics --auto-label`** — when used with `--save`, passes discovered clusters through Claude CLI to generate topic names before persisting.
+
+#### Wiki generation progress and backpressure (#859, #861, Issues #850, #851)
+- **`wiki progress`** — new command showing generation status: topic counts, a color-coded progress bar, cost breakdown, and token usage. Supports `--json` for pipelines (#859).
+- **`wiki generate --concurrency N`** — sequential processing by default (memory-efficient), with `-c N` for parallel generations. Per-topic streaming progress shows cost and timing as each article completes (#861).
+
+#### TUI top/bottom split layout (#865)
+All three TUI screens (Docs, Tasks, Q&A) switched from left/right to top/bottom split — detail panes now render at full terminal width for much better markdown readability. Press `z` to zoom the detail pane to 100% height (hiding the list), and `z` again to restore the split. `j`/`k` navigation still works while zoomed.
+
+### 🔧 Improvements
+
+- **Entity type filtering for topic clustering** — `wiki topics` now defaults to `heading` and `proper_noun` entities, excluding noisy `tech_term` code identifiers. Override with `-e tech_term` if needed. Also adds `--min-df` to prune singleton entities (#854, Issue #845)
+- **`wiki export --topic <id>`** — export a single article instead of dumping all 50+ files every time (#858, Issue #849)
+- **`task cat rename`** — rename or merge task categories (#856, Issue #842)
+- **Task work log display** — TUI detail pane now shows work logs with better formatting (#857, Issue #852)
+- **Typer 0.24.1** — dependency bump (#843)
+
+### 🐛 Bug Fixes
+
+- `wiki generate --dry-run` summary now shows correct article counts instead of "Estimated 0 articles (skipped N)" (#853, Issue #847)
+- Wiki article timing columns (`prepare_ms`, `outline_ms`, etc.) now use float precision — sub-millisecond phases no longer truncate to 0 (#855, Issue #848)
+- Release script changelog detection hardened with strict semver tag filtering (#860)
+
+### 🧹 Maintenance
+
+- Wire orphaned commands, delete dead `browse`/`review` modules (#839)
+- Add non-interactive auto-confirm tests for all confirmation prompts (#862)
+
+[0.23.0]: https://github.com/arockwell/emdx/compare/v0.22.1...v0.23.0
+
 ## [0.22.1] - 2026-02-23
 
 **Cleanup and performance patch.** The TUI now launches instantly — the ~2.5s sentence-transformers import moved from app startup to QA screen load, where it runs in a background thread with a loading indicator. Six refactoring PRs removed ~2,400 lines of dead code and consolidated duplicated modules.

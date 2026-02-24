@@ -261,6 +261,7 @@ emdx task active <id>                  # Mark in-progress
 emdx task done <id>                    # Mark complete
 emdx task epic list                    # See active epics
 emdx task cat list                     # See available categories
+emdx task cat rename OLD NEW           # Rename or merge categories
 
 # Tags
 emdx tag add 42 gameplan active
@@ -277,6 +278,17 @@ emdx maintain index                    # Build/update embedding index
 emdx maintain link --all               # Auto-link related documents
 # Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
 # Configure via `maintain.auto_link_on_save` setting.
+
+# Wiki
+emdx maintain wiki setup               # Full bootstrap (index → entities → topics → auto-label)
+emdx maintain wiki topics --save --auto-label  # Discover and label topics
+emdx maintain wiki triage --skip-below 0.05    # Bulk skip low-coherence topics
+emdx maintain wiki triage --auto-label         # LLM-label all topics
+emdx maintain wiki progress            # Show generation progress + costs
+emdx maintain wiki generate            # Generate articles (sequential)
+emdx maintain wiki generate -c 3       # Generate with 3 concurrent
+emdx maintain wiki export ./wiki-site  # Export to MkDocs
+emdx maintain wiki export ./wiki-site --topic 42  # Single article
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
@@ -360,11 +372,16 @@ If a delegate appears stuck (no output beyond worktree creation):
 just changelog          # Preview changes since last release
 just bump 0.X.Y         # Bump version in pyproject.toml + emdx/__init__.py
 # Write changelog entry in CHANGELOG.md
+# Update version badge in README.md
+# Update version in .claude-plugin/plugin.json
+# Check for new commands/features needing docs updates (docs/cli-api.md, CLAUDE.md)
 # Branch, commit, PR, merge, then:
 git tag vX.Y.Z && git push --tags
 ```
 
 Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and `.claude-plugin/plugin.json`.
+
+**Doc check:** If new commands or flags were added, verify they appear in `docs/cli-api.md` (subcommand tables + examples) and `CLAUDE.md` (essential commands section).
 
 ## Claude Code Plugin
 
