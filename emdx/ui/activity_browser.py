@@ -46,7 +46,7 @@ class ActivityBrowser(Widget):
         yield Static(
             "[bold]1[/bold] Docs │ [dim]2[/dim] Tasks │ [dim]3[/dim] Q&A │ "
             "[dim]j/k[/dim] nav │ [dim]Enter[/dim] open │ "
-            "[dim]w[/dim] filter │ [dim]?[/dim] help",
+            "[dim]w[/dim] filter │ [dim]z[/dim] zoom │ [dim]?[/dim] help",
             id="help-bar",
         )
 
