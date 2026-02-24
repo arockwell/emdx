@@ -16,14 +16,17 @@ from pathlib import Path
 
 
 def get_latest_tag() -> str | None:
-    """Get the latest vX.Y.Z tag, or None if no tags exist."""
+    """Get the latest vX.Y.Z semver tag, or None if no tags exist."""
     result = subprocess.run(
         ["git", "tag", "--sort=-v:refname", "--list", "v*"],
         capture_output=True,
         text=True,
     )
-    tags = result.stdout.strip().split("\n")
-    return tags[0] if tags and tags[0] else None
+    semver_re = re.compile(r"^v\d+\.\d+\.\d+$")
+    for tag in result.stdout.strip().split("\n"):
+        if tag and semver_re.match(tag):
+            return tag
+    return None
 
 
 def get_commits_since_version(version: str | None = None) -> list[dict]:
@@ -217,6 +220,11 @@ def main() -> None:
 
     if command == "changelog":
         # Generate changelog from recent commits
+        baseline_tag = get_latest_tag()
+        if baseline_tag:
+            print(f"Changelog since {baseline_tag}\n")
+        else:
+            print("No version tags found — showing all commits\n")
         commits = get_commits_since_version()
         # Limit to last 100 commits for sanity
         recent = commits[-100:] if len(commits) > 100 else commits
