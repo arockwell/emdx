@@ -934,8 +934,13 @@ def generate_wiki(
     limit: int = DEFAULT_BATCH_LIMIT,
     dry_run: bool = False,
     topic_ids: list[int] | None = None,
+    concurrency: int = 1,
 ) -> WikiGenerationResult:
     """Generate wiki articles for multiple topics.
+
+    Processes topics sequentially by default (concurrency=1) for
+    memory-efficient streaming.  Set concurrency > 1 to allow
+    N concurrent generations via a thread pool.
 
     Args:
         audience: Privacy audience mode ("me", "team", "public").
@@ -943,6 +948,7 @@ def generate_wiki(
         limit: Max articles to generate in this batch.
         dry_run: If True, estimate costs without calling LLM.
         topic_ids: Specific topic IDs to generate (None = all).
+        concurrency: Max concurrent article generations (default 1).
 
     Returns:
         WikiGenerationResult with batch statistics.
@@ -960,6 +966,9 @@ def generate_wiki(
     else:
         topics = get_topics()
 
+    # Apply limit upfront to avoid over-fetching
+    effective_topics = topics[:limit]
+
     results: list[WikiArticleResult] = []
     generated = 0
     skipped = 0
@@ -967,29 +976,57 @@ def generate_wiki(
     total_output = 0
     total_cost = 0.0
 
-    for topic in topics:
-        if generated >= limit:
-            break
+    if concurrency <= 1:
+        # Sequential — memory-efficient, one topic at a time
+        for topic in effective_topics:
+            topic_id = topic["id"]
+            assert isinstance(topic_id, int)
 
-        topic_id = topic["id"]
-        assert isinstance(topic_id, int)
+            result = generate_article(
+                topic_id=topic_id,
+                audience=audience,
+                model=model,
+                dry_run=dry_run,
+            )
+            results.append(result)
 
-        result = generate_article(
-            topic_id=topic_id,
-            audience=audience,
-            model=model,
-            dry_run=dry_run,
-        )
-        results.append(result)
+            if result.skipped and result.skip_reason != "dry run":
+                skipped += 1
+            else:
+                generated += 1
 
-        if result.skipped and result.skip_reason != "dry run":
-            skipped += 1
-        else:
-            generated += 1
+            total_input += result.input_tokens
+            total_output += result.output_tokens
+            total_cost += result.cost_usd
+    else:
+        # Concurrent processing with ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        total_input += result.input_tokens
-        total_output += result.output_tokens
-        total_cost += result.cost_usd
+        def _gen(t: dict[str, object]) -> WikiArticleResult:
+            tid = t["id"]
+            assert isinstance(tid, int)
+            return generate_article(
+                topic_id=tid,
+                audience=audience,
+                model=model,
+                dry_run=dry_run,
+            )
+
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = {pool.submit(_gen, t): t for t in effective_topics}
+
+            for future in as_completed(futures):
+                result = future.result()
+                results.append(result)
+
+                if result.skipped and result.skip_reason != "dry run":
+                    skipped += 1
+                else:
+                    generated += 1
+
+                total_input += result.input_tokens
+                total_output += result.output_tokens
+                total_cost += result.cost_usd
 
     return WikiGenerationResult(
         articles_generated=generated,

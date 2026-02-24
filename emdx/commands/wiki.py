@@ -292,13 +292,21 @@ def wiki_generate(
     limit: int = typer.Option(10, "--limit", "-l", help="Max articles to generate"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Estimate costs without calling LLM"),
     all_topics: bool = typer.Option(False, "--all", help="Generate for all topics"),
+    concurrency: int = typer.Option(
+        1, "--concurrency", "-c", help="Max concurrent generations (default: 1 = sequential)"
+    ),
 ) -> None:
     """Generate wiki articles from topic clusters.
+
+    By default processes topics sequentially (--concurrency 1) for
+    memory-efficient streaming.  Use -c N to allow N concurrent
+    generations.
 
     Examples:
         emdx maintain wiki generate --dry-run        # Estimate costs
         emdx maintain wiki generate 5                # Generate for topic 5
         emdx maintain wiki generate --all -l 50      # Generate up to 50
+        emdx maintain wiki generate --all -c 3       # 3 concurrent
         emdx maintain wiki generate --audience me    # Personal wiki mode
     """
     import time as _time
@@ -314,6 +322,10 @@ def wiki_generate(
         console.print("[red]Provide a topic ID or use --all[/red]")
         raise typer.Exit(1)
 
+    if concurrency < 1:
+        console.print("[red]--concurrency must be >= 1[/red]")
+        raise typer.Exit(1)
+
     # Build topic list
     topic_list: list[int]
     if topic_id is not None:
@@ -321,6 +333,9 @@ def wiki_generate(
     else:
         topics_data = _get_topics()
         topic_list = [cast(int, t["id"]) for t in topics_data]
+
+    # Apply limit to topic list upfront to avoid over-fetching
+    effective_topics = topic_list[:limit]
 
     # Create a run record
     run_model = model or "claude-sonnet-4-5-20250929"
@@ -332,51 +347,107 @@ def wiki_generate(
     total_output = 0
     total_cost = 0.0
     topics_attempted = 0
+    total_count = len(effective_topics)
     batch_start = _time.time()
 
-    for i, tid in enumerate(topic_list):
-        if generated >= limit:
-            break
+    if concurrency == 1:
+        # Sequential processing — memory-efficient, streaming progress
+        for i, tid in enumerate(effective_topics):
+            topics_attempted += 1
+            start = _time.time()
 
-        topics_attempted += 1
-        label = f"[{i + 1}/{len(topic_list)}]"
-        console.print(f"  {label} topic {tid}...", end=" ")
-        start = _time.time()
+            result = generate_article(
+                topic_id=tid,
+                audience=audience,
+                model=model,
+                dry_run=dry_run,
+            )
+            elapsed = _time.time() - start
 
-        result = generate_article(
-            topic_id=tid,
-            audience=audience,
-            model=model,
-            dry_run=dry_run,
-        )
-        elapsed = _time.time() - start
-
-        if result.skipped and result.skip_reason != "dry run":
-            skipped += 1
-            console.print(f"[dim]{result.skip_reason} ({elapsed:.1f}s)[/dim]")
-        else:
-            generated += 1
-            if dry_run:
+            label = f"[{i + 1}/{total_count}]"
+            if result.skipped and result.skip_reason != "dry run":
+                skipped += 1
                 console.print(
-                    f"[cyan]would generate[/cyan] "
-                    f"'{result.topic_label[:40]}' "
-                    f"(~{result.input_tokens:,}+{result.output_tokens:,} tok, "
-                    f"~${result.cost_usd:.4f}, {elapsed:.1f}s)"
+                    f"  {label} [dim]Skipped: {result.topic_label or f'topic {tid}'}"
+                    f" — {result.skip_reason} ({elapsed:.1f}s)[/dim]"
                 )
             else:
-                console.print(
-                    f"[green]#{result.document_id}[/green] "
-                    f"'{result.topic_label[:40]}' "
-                    f"({result.input_tokens:,}+{result.output_tokens:,} tok, "
-                    f"${result.cost_usd:.4f}, {elapsed:.1f}s)"
-                )
-            if result.warnings:
-                for w in result.warnings:
-                    console.print(f"    [yellow]⚠ {w}[/yellow]")
+                generated += 1
+                if dry_run:
+                    console.print(
+                        f"  {label} [cyan]Would generate:[/cyan] "
+                        f"{result.topic_label[:50]} "
+                        f"(~${result.cost_usd:.2f})"
+                    )
+                else:
+                    console.print(
+                        f"  {label} [green]Generated:[/green] "
+                        f"{result.topic_label[:50]} "
+                        f"({elapsed:.0f}s, ${result.cost_usd:.2f})"
+                    )
+                if result.warnings:
+                    for w in result.warnings:
+                        console.print(f"         [yellow]⚠ {w}[/yellow]")
 
-        total_input += result.input_tokens
-        total_output += result.output_tokens
-        total_cost += result.cost_usd
+            total_input += result.input_tokens
+            total_output += result.output_tokens
+            total_cost += result.cost_usd
+    else:
+        # Concurrent processing with ThreadPoolExecutor
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        from ..services.wiki_synthesis_service import WikiArticleResult
+
+        # Track order of completion for progress labeling
+        completed_count = 0
+
+        def _gen_one(tid: int) -> tuple[int, WikiArticleResult, float]:
+            t0 = _time.time()
+            res = generate_article(
+                topic_id=tid,
+                audience=audience,
+                model=model,
+                dry_run=dry_run,
+            )
+            return tid, res, _time.time() - t0
+
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = {pool.submit(_gen_one, tid): tid for tid in effective_topics}
+            topics_attempted = len(futures)
+
+            for future in as_completed(futures):
+                _tid, result, elapsed = future.result()
+                completed_count += 1
+                label = f"[{completed_count}/{total_count}]"
+
+                if result.skipped and result.skip_reason != "dry run":
+                    skipped += 1
+                    console.print(
+                        f"  {label} [dim]Skipped: "
+                        f"{result.topic_label or f'topic {_tid}'}"
+                        f" — {result.skip_reason} ({elapsed:.1f}s)[/dim]"
+                    )
+                else:
+                    generated += 1
+                    if dry_run:
+                        console.print(
+                            f"  {label} [cyan]Would generate:[/cyan] "
+                            f"{result.topic_label[:50]} "
+                            f"(~${result.cost_usd:.2f})"
+                        )
+                    else:
+                        console.print(
+                            f"  {label} [green]Generated:[/green] "
+                            f"{result.topic_label[:50]} "
+                            f"({elapsed:.0f}s, ${result.cost_usd:.2f})"
+                        )
+                    if result.warnings:
+                        for w in result.warnings:
+                            console.print(f"         [yellow]⚠ {w}[/yellow]")
+
+                total_input += result.input_tokens
+                total_output += result.output_tokens
+                total_cost += result.cost_usd
 
     # Update run record with results
     complete_wiki_run(
@@ -391,9 +462,10 @@ def wiki_generate(
 
     total_elapsed = _time.time() - batch_start
     action = "Estimated" if dry_run else "Generated"
+    mode = f" (concurrency={concurrency})" if concurrency > 1 else ""
     console.print(
         f"\n[bold]{action} {generated} article(s)[/bold] "
-        f"(skipped {skipped}) in {total_elapsed:.1f}s\n"
+        f"(skipped {skipped}) in {total_elapsed:.1f}s{mode}\n"
         f"  Total tokens: {total_input:,} in / {total_output:,} out\n"
         f"  Total cost:   ${total_cost:.4f}\n"
         f"  Run ID:       {run_id}"
