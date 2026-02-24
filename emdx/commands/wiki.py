@@ -84,6 +84,9 @@ wiki_app = typer.Typer(help="Auto-wiki generation from knowledge base")
 def wiki_topics(
     resolution: float = typer.Option(0.005, "--resolution", "-r", help="Clustering resolution"),
     save: bool = typer.Option(False, "--save", help="Save discovered topics to DB"),
+    auto_label: bool = typer.Option(
+        False, "--auto-label", help="Use Claude CLI to generate human-readable topic names"
+    ),
     min_size: int = typer.Option(3, "--min-size", help="Minimum cluster size"),
     entity_types: list[str] = typer.Option(
         ["heading", "proper_noun"],
@@ -103,11 +106,12 @@ def wiki_topics(
     """Discover topic clusters using Leiden community detection.
 
     Examples:
-        emdx maintain wiki topics              # Preview topics
-        emdx maintain wiki topics --save       # Save to DB
-        emdx maintain wiki topics -r 0.01      # Finer resolution
-        emdx maintain wiki topics --verbose    # Show model overrides and editorial prompts
-        emdx maintain wiki topics -e heading -e proper_noun -e concept  # Custom entity types
+        emdx maintain wiki topics                     # Preview topics
+        emdx maintain wiki topics --save              # Save to DB
+        emdx maintain wiki topics --save --auto-label # Save with LLM names
+        emdx maintain wiki topics -r 0.01             # Finer resolution
+        emdx maintain wiki topics --verbose           # Show model overrides
+        emdx maintain wiki topics -e heading -e proper_noun -e concept
         emdx maintain wiki topics --entity-types heading  # Only headings
     """
     from rich.table import Table
@@ -157,7 +161,11 @@ def wiki_topics(
         console.print(table)
         return
 
-    from ..services.wiki_clustering_service import discover_topics, save_topics
+    from ..services.wiki_clustering_service import (
+        auto_label_clusters,
+        discover_topics,
+        save_topics,
+    )
 
     with Progress(
         SpinnerColumn(),
@@ -172,6 +180,19 @@ def wiki_topics(
             min_df=min_df,
         )
         progress.update(task, completed=True)
+
+    if auto_label and result.clusters:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task(
+                f"Auto-labeling {len(result.clusters)} topics via Claude CLI...",
+                total=None,
+            )
+            auto_label_clusters(result.clusters)
+            progress.update(task, completed=True)
 
     console.print(
         f"\n[bold]Found {len(result.clusters)} topics[/bold] "
@@ -1844,6 +1865,259 @@ def wiki_export(
             print(f"Error: mkdocs build failed:\n{proc.stderr}")
             raise typer.Exit(1)
         print(f"Built to {output_dir}/site/")
+
+
+@wiki_app.command(name="triage")
+def wiki_triage(
+    skip_below: float = typer.Option(
+        0.0,
+        "--skip-below",
+        help="Skip topics with coherence score below this threshold",
+    ),
+    auto_label: bool = typer.Option(
+        False,
+        "--auto-label",
+        help="Use Claude CLI to generate human-readable names for unlabeled topics",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would be changed without modifying DB"
+    ),
+) -> None:
+    """Bulk triage saved wiki topics: skip low-coherence, auto-label.
+
+    Non-interactive batch mode for cleaning up discovered topics.
+    Use --skip-below to skip low-coherence clusters, and --auto-label
+    to generate human-readable names via Claude CLI.
+
+    Examples:
+        emdx maintain wiki triage --skip-below 0.05             # Skip low coherence
+        emdx maintain wiki triage --auto-label                  # LLM-label all topics
+        emdx maintain wiki triage --skip-below 0.03 --auto-label  # Both
+        emdx maintain wiki triage --skip-below 0.05 --dry-run   # Preview only
+    """
+    from ..services.wiki_clustering_service import (
+        TopicCluster,
+        _has_claude_cli,
+        auto_label_cluster,
+        get_topics,
+        update_topic_label,
+    )
+
+    topics = get_topics()
+    if not topics:
+        print("No saved topics found. Run 'wiki topics --save' first.")
+        raise typer.Exit(1)
+
+    if not skip_below and not auto_label:
+        print("Specify --skip-below and/or --auto-label")
+        raise typer.Exit(1)
+
+    skipped_count = 0
+    labeled_count = 0
+
+    # Phase 1: Skip low-coherence topics
+    if skip_below > 0:
+        action = "Would skip" if dry_run else "Skipped"
+        for t in topics:
+            coherence = cast(float, t.get("coherence_score", 0.0))
+            status = str(t.get("status", ""))
+            if status == "skipped":
+                continue
+            if coherence < skip_below:
+                topic_id = t["id"]
+                assert isinstance(topic_id, int)
+                label = str(t.get("label", ""))
+                if not dry_run:
+                    from ..database import db as _db
+
+                    with _db.get_connection() as conn:
+                        conn.execute(
+                            "UPDATE wiki_topics SET status = 'skipped' WHERE id = ?",
+                            (topic_id,),
+                        )
+                        conn.commit()
+                print(f"  {action} topic {topic_id} ({label[:40]}) coherence={coherence:.3f}")
+                skipped_count += 1
+
+    # Phase 2: Auto-label remaining active topics
+    if auto_label:
+        if not _has_claude_cli():
+            print("Error: Claude CLI not found on PATH")
+            raise typer.Exit(1)
+
+        # Refresh topics after potential skips
+        if skip_below > 0 and not dry_run:
+            topics = get_topics()
+
+        action = "Would label" if dry_run else "Labeled"
+        for t in topics:
+            status = str(t.get("status", ""))
+            if status == "skipped":
+                continue
+            topic_id = t["id"]
+            assert isinstance(topic_id, int)
+            label = str(t.get("label", ""))
+
+            # Build a minimal TopicCluster for labeling
+            from ..database import db as _db
+
+            with _db.get_connection() as conn:
+                members = conn.execute(
+                    "SELECT document_id FROM wiki_topic_members WHERE topic_id = ?",
+                    (topic_id,),
+                ).fetchall()
+                doc_ids = [row[0] for row in members]
+
+                desc = t.get("description")
+                top_entities: list[tuple[str, float]] = []
+                if desc and isinstance(desc, str):
+                    try:
+                        import json
+
+                        entities_list = json.loads(desc)
+                        top_entities = [(e, 1.0) for e in entities_list]
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+            cluster = TopicCluster(
+                cluster_id=topic_id,
+                label=label,
+                slug="",
+                doc_ids=doc_ids,
+                top_entities=top_entities,
+                coherence_score=float(cast("int | float", t.get("coherence_score", 0)) or 0),
+            )
+
+            new_label = auto_label_cluster(cluster)
+            if new_label != label:
+                if not dry_run:
+                    update_topic_label(topic_id, new_label)
+                print(f"  {action} topic {topic_id}: '{label[:30]}' -> '{new_label}'")
+                labeled_count += 1
+
+    # Summary
+    action_past = "Would have" if dry_run else ""
+    parts: list[str] = []
+    if skip_below > 0:
+        parts.append(f"{action_past} skipped {skipped_count} low-coherence topics")
+    if auto_label:
+        parts.append(f"{action_past} labeled {labeled_count} topics")
+    summary = ", ".join(parts).strip()
+    if summary:
+        summary = summary[0].upper() + summary[1:]
+    print(f"\n{summary}")
+    if dry_run:
+        print("(dry run — no changes made)")
+
+
+@wiki_app.command(name="setup")
+def wiki_setup() -> None:
+    """Run the full wiki bootstrap sequence.
+
+    Checks and builds the embedding index, extracts entities,
+    discovers topics with auto-labeling, and shows a summary.
+
+    This is a convenience command that runs the equivalent of:
+        1. emdx maintain index       (build embedding index)
+        2. emdx maintain entities --all  (extract entities)
+        3. emdx maintain wiki topics --save --auto-label
+
+    Examples:
+        emdx maintain wiki setup
+    """
+    import shutil
+
+    print("Wiki Setup")
+    print("=" * 40)
+
+    # Step 1: Check/build embedding index
+    print("\n[1/4] Checking embedding index...")
+    try:
+        from ..services.embedding_service import EmbeddingService
+
+        service = EmbeddingService()
+        stats = service.stats()
+        if stats.indexed_documents < stats.total_documents:
+            unindexed = stats.total_documents - stats.indexed_documents
+            print(f"  Indexing {unindexed} documents...")
+            doc_count = service.index_all(force=False, batch_size=50)
+            print(f"  Indexed {doc_count} documents")
+            if stats.indexed_chunks == 0:
+                print("  Building chunk index...")
+                chunk_count = service.index_chunks(force=False, batch_size=50)
+                print(f"  Indexed {chunk_count} chunks")
+        else:
+            print(
+                f"  Embedding index up to date "
+                f"({stats.indexed_documents}/{stats.total_documents} docs)"
+            )
+    except ImportError:
+        print("  Skipped — embedding dependencies not installed")
+        print("  (optional, wiki works without embeddings)")
+
+    # Step 2: Extract entities
+    print("\n[2/4] Extracting entities...")
+    from ..services.entity_service import entity_wikify_all
+
+    total_entities, total_links, docs = entity_wikify_all()
+    print(f"  Extracted {total_entities} entities, created {total_links} links across {docs} docs")
+
+    # Step 3: Discover topics with auto-labeling
+    print("\n[3/4] Discovering topics...")
+    from ..services.wiki_clustering_service import (
+        auto_label_clusters,
+        discover_topics,
+        save_topics,
+    )
+
+    try:
+        result = discover_topics(
+            resolution=0.005,
+            min_cluster_size=3,
+            entity_types=["heading", "proper_noun"],
+        )
+    except ImportError:
+        print("  Error: Wiki clustering requires python-igraph and leidenalg")
+        print("  Install with: poetry add python-igraph leidenalg")
+        raise typer.Exit(1) from None
+
+    if not result.clusters:
+        print("  No topic clusters found (not enough entities or documents)")
+        print("\nSetup complete (no topics to save)")
+        return
+
+    print(f"  Found {len(result.clusters)} topics")
+
+    # Auto-label if Claude CLI is available
+    has_claude = shutil.which("claude") is not None
+    if has_claude:
+        print("\n[3b/4] Auto-labeling topics via Claude CLI...")
+        auto_label_clusters(result.clusters)
+        print(f"  Labeled {len(result.clusters)} topics")
+    else:
+        print("  Skipping auto-label (Claude CLI not found on PATH)")
+
+    # Step 4: Save topics
+    print("\n[4/4] Saving topics...")
+    count = save_topics(result)
+    print(f"  Saved {count} topics to database")
+
+    # Summary
+    print("\n" + "=" * 40)
+    print("Wiki Setup Complete")
+    print(f"  Topics:     {count}")
+    print(f"  Docs covered: {result.docs_clustered}/{result.total_docs}")
+    print(f"  Unclustered:  {result.docs_unclustered}")
+    if has_claude:
+        print("  Labels:     auto-generated via Claude CLI")
+    else:
+        print("  Labels:     entity-based (install Claude CLI for better names)")
+    print(
+        "\nNext steps:\n"
+        "  emdx maintain wiki triage --skip-below 0.03  # Skip low-quality topics\n"
+        "  emdx maintain wiki generate --dry-run         # Estimate article costs\n"
+        "  emdx maintain wiki generate --all             # Generate articles"
+    )
 
 
 def _init_wiki_repo(
