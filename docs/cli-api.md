@@ -636,7 +636,10 @@ Auto-wiki generation system using Leiden community detection for topic clusterin
 
 | Command | Description |
 |---------|-------------|
+| `setup` | Run the full wiki bootstrap sequence (index → entities → topics → auto-label) |
 | `topics` | Discover topic clusters using Leiden community detection |
+| `triage` | Bulk triage saved topics: skip low-coherence, auto-label via LLM |
+| `progress` | Show wiki generation progress: topics generated vs pending, costs |
 | `status` | Show wiki generation status and statistics |
 | `generate` | Generate wiki articles from topic clusters |
 | `entities` | Browse entity index pages |
@@ -645,21 +648,55 @@ Auto-wiki generation system using Leiden community detection for topic clusterin
 | `coverage` | Show which documents are NOT covered by any topic cluster |
 | `diff` | Show unified diff between previous and current article content |
 | `rate` | Rate a wiki article's quality (1-5 scale) |
+| `export` | Export wiki articles as a MkDocs site |
 | `rename` | Rename a wiki topic (label, slug, and associated document title) |
+| `retitle` | Batch-update topic labels from article H1 headings |
 | `skip` | Skip a topic during wiki generation |
 | `unskip` | Reset a skipped topic back to active |
 | `pin` | Pin a topic so it always regenerates during wiki generation |
 | `unpin` | Reset a pinned topic back to active |
+| `model` | Set or clear a per-topic model override for wiki generation |
+| `prompt` | Set or clear an editorial prompt for a wiki topic |
+| `merge` | Merge two wiki topics into one |
+| `split` | Split a wiki topic by extracting docs that mention an entity |
+| `sources` | List source documents for a wiki topic with weights and status |
+| `weight` | Set relevance weight for a source document within a topic |
+| `exclude` | Exclude a source document from a wiki topic's synthesis |
+| `include` | Re-include a previously excluded source document in a topic |
 
 ```bash
-# Discover topic clusters
+# Full bootstrap: index → entities → topics → auto-label
+emdx maintain wiki setup
+
+# Discover topic clusters (defaults to heading + proper_noun entities)
 emdx maintain wiki topics
+emdx maintain wiki topics --save --auto-label    # Save with LLM-generated names
+emdx maintain wiki topics -e heading -e concept  # Custom entity types
+emdx maintain wiki topics --min-df 3             # Prune rare entities
+
+# Bulk triage saved topics
+emdx maintain wiki triage --skip-below 0.05              # Skip low coherence
+emdx maintain wiki triage --auto-label                    # LLM-label all topics
+emdx maintain wiki triage --skip-below 0.03 --auto-label  # Both
+emdx maintain wiki triage --skip-below 0.05 --dry-run    # Preview only
+
+# Show generation progress
+emdx maintain wiki progress          # Rich output with progress bar
+emdx maintain wiki progress --json   # Machine-readable
+
+# Generate wiki articles
+emdx maintain wiki generate                  # Sequential (default)
+emdx maintain wiki generate -c 3             # 3 concurrent generations
+emdx maintain wiki generate --all --dry-run  # Preview costs
+
+# Export to MkDocs
+emdx maintain wiki export ./wiki-site              # All articles
+emdx maintain wiki export ./wiki-site --topic 42   # Single article
+emdx maintain wiki export ./wiki-site --build      # Build static site
+emdx maintain wiki export ./wiki-site --deploy     # Deploy to GitHub Pages
 
 # Show wiki generation status
 emdx maintain wiki status
-
-# Generate wiki articles from clusters
-emdx maintain wiki generate
 
 # List generated wiki articles
 emdx maintain wiki list
@@ -673,16 +710,25 @@ emdx maintain wiki diff
 # Rate a wiki article (1-5 scale)
 emdx maintain wiki rate
 
-# Rename a topic
-emdx maintain wiki rename
+# Topic management
+emdx maintain wiki rename    # Rename a topic
+emdx maintain wiki retitle   # Batch-update labels from article H1s
+emdx maintain wiki skip      # Skip topic during generation
+emdx maintain wiki unskip    # Reset skipped topic
+emdx maintain wiki pin       # Force regeneration
+emdx maintain wiki unpin     # Reset pinned topic
+emdx maintain wiki model     # Set per-topic model override
+emdx maintain wiki prompt    # Set editorial prompt
 
-# Skip/unskip topics during generation
-emdx maintain wiki skip
-emdx maintain wiki unskip
+# Topic splitting and merging
+emdx maintain wiki merge     # Merge two topics into one
+emdx maintain wiki split     # Split topic by entity
 
-# Pin/unpin topics for forced regeneration
-emdx maintain wiki pin
-emdx maintain wiki unpin
+# Source document control
+emdx maintain wiki sources   # List sources with weights
+emdx maintain wiki weight    # Set source relevance weight
+emdx maintain wiki exclude   # Exclude a source from synthesis
+emdx maintain wiki include   # Re-include an excluded source
 
 # Browse entity index pages
 emdx maintain wiki entities
@@ -1302,6 +1348,10 @@ emdx task cat list
 
 # Backfill existing tasks into the category system
 emdx task cat adopt SEC
+
+# Rename/merge a category
+emdx task cat rename SEC SECURITY          # Rename SEC → SECURITY
+emdx task cat rename OLD NEW               # Merge OLD into NEW (if NEW exists)
 
 # Delete a category (unlinks tasks)
 emdx task cat delete SEC
