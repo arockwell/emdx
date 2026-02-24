@@ -1574,6 +1574,12 @@ def wiki_export(
         "--repo-url",
         help="Repository URL for 'edit this page' links in the wiki",
     ),
+    topic: int | None = typer.Option(
+        None,
+        "--topic",
+        "-t",
+        help="Export only the article for this topic ID",
+    ),
 ) -> None:
     """Export wiki articles as a MkDocs site.
 
@@ -1581,12 +1587,16 @@ def wiki_export(
     generates mkdocs.yml with Material theme, and optionally builds or
     deploys to GitHub Pages.
 
+    Use --topic <id> to export a single topic's article, leaving existing
+    files untouched. Entity pages, index, and mkdocs.yml are not regenerated.
+
     Use --init-repo to bootstrap a separate git repo for your wiki, and
     --remote to deploy to it. This keeps your wiki output separate from
     your source KB repo.
 
     Examples:
         emdx maintain wiki export ./wiki-site
+        emdx maintain wiki export ./wiki-site --topic 42
         emdx maintain wiki export ./wiki-site --build
         emdx maintain wiki export ./wiki-site --deploy
         emdx maintain wiki export ./wiki-site --deploy --remote wiki
@@ -1602,7 +1612,9 @@ def wiki_export(
     if init_repo:
         _init_wiki_repo(output_dir, github_repo=github_repo, private=private)
 
-    result = export_mkdocs(output_dir, site_name=site_name, site_url=site_url, repo_url=repo_url)
+    result = export_mkdocs(
+        output_dir, site_name=site_name, site_url=site_url, repo_url=repo_url, topic_id=topic
+    )
 
     print(f"Exported to {result.output_dir}/")
     print(f"  Articles:     {result.articles_exported}")

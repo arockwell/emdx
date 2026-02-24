@@ -66,25 +66,35 @@ def _slugify(text: str) -> str:
     return slug[:80].strip("-")
 
 
-def get_exportable_articles() -> list[ExportedArticle]:
-    """Fetch all non-stale wiki articles with metadata.
+def get_exportable_articles(
+    topic_id: int | None = None,
+) -> list[ExportedArticle]:
+    """Fetch wiki articles with metadata, optionally filtered by topic.
+
+    Args:
+        topic_id: If provided, return only the article for this topic.
 
     Returns articles joined with their topic info, member counts,
     and source document titles.
     """
+    base_query = (
+        "SELECT wa.topic_id, t.topic_slug, t.topic_label, "
+        "d.content, wa.version, wa.generated_at, wa.model, wa.rating, "
+        "COUNT(DISTINCT m.document_id) as member_count "
+        "FROM wiki_articles wa "
+        "JOIN documents d ON wa.document_id = d.id "
+        "JOIN wiki_topics t ON wa.topic_id = t.id "
+        "LEFT JOIN wiki_topic_members m ON t.id = m.topic_id "
+        "WHERE d.is_deleted = 0 AND t.status != 'skipped'"
+    )
+    params: list[int] = []
+    if topic_id is not None:
+        base_query += " AND t.id = ?"
+        params.append(topic_id)
+    base_query += " GROUP BY wa.id ORDER BY t.topic_label"
+
     with db.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT wa.topic_id, t.topic_slug, t.topic_label, "
-            "d.content, wa.version, wa.generated_at, wa.model, wa.rating, "
-            "COUNT(DISTINCT m.document_id) as member_count "
-            "FROM wiki_articles wa "
-            "JOIN documents d ON wa.document_id = d.id "
-            "JOIN wiki_topics t ON wa.topic_id = t.id "
-            "LEFT JOIN wiki_topic_members m ON t.id = m.topic_id "
-            "WHERE d.is_deleted = 0 AND t.status != 'skipped' "
-            "GROUP BY wa.id "
-            "ORDER BY t.topic_label"
-        ).fetchall()
+        rows = conn.execute(base_query, params).fetchall()
 
     articles: list[ExportedArticle] = []
     for row in rows:
@@ -292,6 +302,7 @@ def export_mkdocs(
     site_name: str = "Knowledge Base Wiki",
     site_url: str = "",
     repo_url: str = "",
+    topic_id: int | None = None,
 ) -> ExportResult:
     """Export wiki articles and entity pages as a MkDocs site.
 
@@ -308,6 +319,7 @@ def export_mkdocs(
         site_name: Site name for mkdocs.yml.
         site_url: Base URL for the published site (e.g. https://you.github.io/wiki/).
         repo_url: Repository URL for "edit this page" links.
+        topic_id: If provided, export only this topic's article (skip entities/index/mkdocs).
 
     Returns:
         ExportResult with counts and any errors.
@@ -328,7 +340,7 @@ def export_mkdocs(
     entities_dir.mkdir(parents=True, exist_ok=True)
 
     # Export articles
-    articles = get_exportable_articles()
+    articles = get_exportable_articles(topic_id=topic_id)
     for article in articles:
         try:
             md = _render_article_md(article)
@@ -338,6 +350,10 @@ def export_mkdocs(
         except Exception as e:
             result.errors.append(f"Article {article.topic_slug}: {e}")
             logger.warning("Failed to export article %s: %s", article.topic_slug, e)
+
+    # When exporting a single topic, skip entities/index/mkdocs.yml
+    if topic_id is not None:
+        return result
 
     # Export entity pages (Tier A only — high-signal entities in 5+ docs)
     entity_pages: list[EntityPage] = get_entity_pages(tier="A")
