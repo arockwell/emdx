@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "emdx"
-version = "0.22.1"
+version = "0.23.0"
 description = "Send agents. Save everything. Track what's next."
 authors = ["Alex Rockwell <arockwell@gmail.com>"]
 readme = "README.md"
