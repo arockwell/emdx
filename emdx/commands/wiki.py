@@ -713,6 +713,107 @@ def wiki_coverage(
         console.print("\n[green]All user documents are covered by wiki topics![/green]")
 
 
+@wiki_app.command(name="progress")
+def wiki_progress(
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show wiki generation progress: topics generated vs pending.
+
+    Displays total topics, how many have generated articles, how many are
+    pending or skipped, total cost so far, and estimated remaining cost
+    based on the average cost per article.
+
+    Examples:
+        emdx maintain wiki progress              # Rich progress report
+        emdx maintain wiki progress --json       # Machine-readable output
+    """
+    from ..database import db
+    from ..utils.output import print_json
+
+    with db.get_connection() as conn:
+        # Total topics by status
+        total_row = conn.execute("SELECT COUNT(*) FROM wiki_topics").fetchone()
+        total_topics = total_row[0] if total_row else 0
+
+        skipped_row = conn.execute(
+            "SELECT COUNT(*) FROM wiki_topics WHERE status = 'skipped'"
+        ).fetchone()
+        skipped = skipped_row[0] if skipped_row else 0
+
+        # Topics that have a generated article (joined via wiki_articles)
+        generated_row = conn.execute(
+            "SELECT COUNT(DISTINCT a.topic_id) FROM wiki_articles a "
+            "JOIN wiki_topics t ON a.topic_id = t.id"
+        ).fetchone()
+        generated = generated_row[0] if generated_row else 0
+
+        # Pending = total - generated - skipped
+        pending = total_topics - generated - skipped
+
+        # Cost info from wiki_articles
+        cost_row = conn.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0), "
+            "COALESCE(SUM(input_tokens), 0), "
+            "COALESCE(SUM(output_tokens), 0) "
+            "FROM wiki_articles"
+        ).fetchone()
+        total_cost = cost_row[0] if cost_row else 0.0
+        total_input_tokens = cost_row[1] if cost_row else 0
+        total_output_tokens = cost_row[2] if cost_row else 0
+
+        # Average cost per article for estimation
+        avg_cost = total_cost / generated if generated > 0 else 0.0
+        est_remaining = avg_cost * pending
+
+    pct = (generated / total_topics * 100) if total_topics > 0 else 0.0
+
+    if json_output:
+        data = {
+            "total_topics": total_topics,
+            "generated": generated,
+            "pending": pending,
+            "skipped": skipped,
+            "percent_complete": round(pct, 1),
+            "cost_usd": round(total_cost, 4),
+            "avg_cost_per_article": round(avg_cost, 4),
+            "est_remaining_cost_usd": round(est_remaining, 2),
+            "total_input_tokens": total_input_tokens,
+            "total_output_tokens": total_output_tokens,
+        }
+        print_json(data)
+        return
+
+    # Rich output
+    pct_color = "green" if pct >= 80 else "yellow" if pct >= 50 else "red"
+
+    # Build progress bar (30 chars wide)
+    bar_width = 30
+    filled = int(bar_width * pct / 100) if total_topics > 0 else 0
+    bar = "\u2588" * filled + "\u2591" * (bar_width - filled)
+
+    summary = f"Topics: {generated}/{total_topics} generated ({pending} pending, {skipped} skipped)"
+
+    cost_line = f"Cost so far: ${total_cost:.2f}"
+    if generated > 0 and pending > 0:
+        cost_line += f"  Est. remaining: ${est_remaining:.2f}"
+
+    tokens_line = f"Tokens: {total_input_tokens:,} in / {total_output_tokens:,} out"
+
+    console.print(
+        f"\n[bold]Wiki Generation Progress[/bold]\n\n"
+        f"  {summary}\n"
+        f"  [{pct_color}]{bar}[/{pct_color}]"
+        f" [{pct_color}]{pct:.1f}%[/{pct_color}]\n\n"
+        f"  {cost_line}\n"
+        f"  {tokens_line}"
+    )
+
+    if generated > 0:
+        console.print(f"  Avg cost/article: ${avg_cost:.4f}")
+
+    console.print()
+
+
 @wiki_app.command(name="diff")
 def wiki_diff_command(
     topic_id: int = typer.Argument(..., help="Topic ID to show diff for"),
