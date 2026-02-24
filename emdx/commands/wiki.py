@@ -329,17 +329,25 @@ def wiki_generate(
         )
         elapsed = _time.time() - start
 
-        if result.skipped:
+        if result.skipped and result.skip_reason != "dry run":
             skipped += 1
             console.print(f"[dim]{result.skip_reason} ({elapsed:.1f}s)[/dim]")
         else:
             generated += 1
-            console.print(
-                f"[green]#{result.document_id}[/green] "
-                f"'{result.topic_label[:40]}' "
-                f"({result.input_tokens:,}+{result.output_tokens:,} tok, "
-                f"${result.cost_usd:.4f}, {elapsed:.1f}s)"
-            )
+            if dry_run:
+                console.print(
+                    f"[cyan]would generate[/cyan] "
+                    f"'{result.topic_label[:40]}' "
+                    f"(~{result.input_tokens:,}+{result.output_tokens:,} tok, "
+                    f"~${result.cost_usd:.4f}, {elapsed:.1f}s)"
+                )
+            else:
+                console.print(
+                    f"[green]#{result.document_id}[/green] "
+                    f"'{result.topic_label[:40]}' "
+                    f"({result.input_tokens:,}+{result.output_tokens:,} tok, "
+                    f"${result.cost_usd:.4f}, {elapsed:.1f}s)"
+                )
             if result.warnings:
                 for w in result.warnings:
                     console.print(f"    [yellow]⚠ {w}[/yellow]")
