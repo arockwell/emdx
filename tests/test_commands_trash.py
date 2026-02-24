@@ -1,7 +1,10 @@
 """Tests for trash management commands (list, restore, purge)."""
 
+from __future__ import annotations
+
 import re
 from datetime import datetime
+from typing import Any
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -144,3 +147,38 @@ class TestTrashPurge:
         result = runner.invoke(app, ["purge"], input="n\n")
         assert result.exit_code == 0
         assert "cancelled" in _out(result).lower()
+
+    @patch("emdx.commands.trash.purge_deleted_documents")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.is_non_interactive", return_value=True)
+    def test_purge_auto_confirms_non_interactive(
+        self, mock_ni: Any, mock_list: Any, mock_purge: Any
+    ) -> None:
+        """Purge skips confirmation when stdin is not a TTY (agent mode)."""
+        mock_list.return_value = [{"id": 1, "deleted_at": datetime(2026, 1, 1)}]
+        mock_purge.return_value = 1
+        result = runner.invoke(app, ["purge"])
+        assert result.exit_code == 0
+        assert "Permanently deleted 1 document" in _out(result)
+        mock_purge.assert_called_once()
+
+
+class TestTrashRestoreNonInteractive:
+    """Tests for non-interactive auto-confirmation in restore --all."""
+
+    @patch("emdx.commands.trash.restore_document")
+    @patch("emdx.commands.trash.list_deleted_documents")
+    @patch("emdx.commands.trash.is_non_interactive", return_value=True)
+    def test_restore_all_auto_confirms_non_interactive(
+        self, mock_ni: Any, mock_list: Any, mock_restore: Any
+    ) -> None:
+        """Restore --all skips confirmation when stdin is not a TTY."""
+        mock_list.return_value = [
+            {"id": 1, "title": "Doc 1", "deleted_at": datetime(2026, 1, 1)},
+            {"id": 2, "title": "Doc 2", "deleted_at": datetime(2026, 1, 2)},
+        ]
+        mock_restore.return_value = True
+        result = runner.invoke(app, ["restore", "--all"])
+        assert result.exit_code == 0
+        assert "Restored 2 document" in _out(result)
+        assert mock_restore.call_count == 2

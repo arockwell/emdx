@@ -1,7 +1,10 @@
 """Tests for tag management CLI commands."""
 
+from __future__ import annotations
+
 import re
 from datetime import datetime
+from typing import Any
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -250,9 +253,17 @@ class TestTagMergeCommand:
         ]
         mock_merge.return_value = 8
 
-        result = runner.invoke(app, [
-            "merge", "tag1", "tag2", "--into", "combined", "--force",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "merge",
+                "tag1",
+                "tag2",
+                "--into",
+                "combined",
+                "--force",
+            ],
+        )
         assert result.exit_code == 0
         assert "Merged" in _out(result)
 
@@ -261,8 +272,62 @@ class TestTagMergeCommand:
         """Merge with no valid source tags shows error."""
         mock_list_all.return_value = []
 
-        result = runner.invoke(app, [
-            "merge", "nope1", "nope2", "--into", "target", "--force",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "merge",
+                "nope1",
+                "nope2",
+                "--into",
+                "target",
+                "--force",
+            ],
+        )
         assert result.exit_code != 0
         assert "No valid source tags" in _out(result)
+
+
+# ---------------------------------------------------------------------------
+# Non-interactive auto-confirmation tests
+# ---------------------------------------------------------------------------
+class TestTagRenameNonInteractive:
+    """Tests for non-interactive auto-confirmation in tag rename."""
+
+    @patch("emdx.commands.tags.rename_tag")
+    @patch("emdx.commands.tags.list_all_tags")
+    @patch("emdx.commands.tags.is_non_interactive", return_value=True)
+    def test_rename_auto_confirms_non_interactive(
+        self, mock_ni: Any, mock_list_all: Any, mock_rename: Any
+    ) -> None:
+        """Rename skips confirmation when stdin is not a TTY."""
+        mock_list_all.return_value = [
+            {"name": "old-tag", "count": 3, "created_at": None, "last_used": None},
+        ]
+        mock_rename.return_value = True
+
+        result = runner.invoke(app, ["rename", "old-tag", "new-tag"])
+        assert result.exit_code == 0
+        assert "Renamed" in _out(result)
+        mock_rename.assert_called_once_with("old-tag", "new-tag")
+
+
+class TestTagMergeNonInteractive:
+    """Tests for non-interactive auto-confirmation in tag merge."""
+
+    @patch("emdx.commands.tags.merge_tags")
+    @patch("emdx.commands.tags.list_all_tags")
+    @patch("emdx.commands.tags.is_non_interactive", return_value=True)
+    def test_merge_auto_confirms_non_interactive(
+        self, mock_ni: Any, mock_list_all: Any, mock_merge: Any
+    ) -> None:
+        """Merge skips confirmation when stdin is not a TTY."""
+        mock_list_all.return_value = [
+            {"name": "tag1", "count": 3, "created_at": None, "last_used": None},
+            {"name": "tag2", "count": 5, "created_at": None, "last_used": None},
+        ]
+        mock_merge.return_value = 8
+
+        result = runner.invoke(app, ["merge", "tag1", "tag2", "--into", "combined"])
+        assert result.exit_code == 0
+        assert "Merged" in _out(result)
+        mock_merge.assert_called_once_with(["tag1", "tag2"], "combined")
