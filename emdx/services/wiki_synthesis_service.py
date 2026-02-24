@@ -978,7 +978,7 @@ def generate_wiki(
         )
         results.append(result)
 
-        if result.skipped:
+        if result.skipped and result.skip_reason != "dry run":
             skipped += 1
         else:
             generated += 1
