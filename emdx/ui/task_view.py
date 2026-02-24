@@ -13,7 +13,7 @@ from typing import Any
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Vertical
 from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, RichLog, Static
@@ -160,6 +160,7 @@ class TaskView(Widget):
         ("w", "mark_wontdo", "Won't Do"),
         ("slash", "show_filter", "Filter"),
         ("escape", "clear_filter", "Clear Filter"),
+        ("z", "toggle_zoom", "Zoom"),
     ]
 
     DEFAULT_CSS = """
@@ -186,8 +187,12 @@ class TaskView(Widget):
     }
 
     #task-list-panel {
-        width: 40%;
-        height: 100%;
+        height: 40%;
+        width: 100%;
+    }
+
+    #task-list-panel.zoom-hidden {
+        display: none;
     }
 
     #task-list-header {
@@ -202,9 +207,14 @@ class TaskView(Widget):
     }
 
     #task-detail-panel {
-        width: 60%;
+        height: 60%;
+        width: 100%;
+        border-top: solid $primary;
+    }
+
+    #task-detail-panel.zoom-full {
         height: 100%;
-        border-left: solid $primary;
+        border-top: none;
     }
 
     #task-detail-header {
@@ -238,11 +248,12 @@ class TaskView(Widget):
         self._status_filter: set[str] | None = None  # None = show all
         self._group_by: str = "status"  # "status" or "epic"
         self._epic_filter: str | None = None  # Filter to specific epic key
+        self._zoomed: bool = False
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
         yield Input(placeholder="Filter tasks...", id="task-filter-input")
-        with Horizontal(id="task-main"):
+        with Vertical(id="task-main"):
             with Vertical(id="task-list-panel"):
                 yield Static("TASKS", id="task-list-header")
                 table: DataTable[str | Text] = DataTable(
@@ -673,6 +684,7 @@ class TaskView(Widget):
                     "w",
                     "e",
                     "g",
+                    "z",
                     "slash",
                     "1",
                     "2",
@@ -980,12 +992,29 @@ class TaskView(Widget):
         else:
             table.focus()
 
+    def action_toggle_zoom(self) -> None:
+        """Toggle zoom: hide list panel, expand detail to full height."""
+        list_panel = self.query_one("#task-list-panel")
+        detail_panel = self.query_one("#task-detail-panel")
+        self._zoomed = not self._zoomed
+        if self._zoomed:
+            list_panel.add_class("zoom-hidden")
+            detail_panel.add_class("zoom-full")
+        else:
+            list_panel.remove_class("zoom-hidden")
+            detail_panel.remove_class("zoom-full")
+            self.query_one("#task-table", DataTable).focus()
+
     def action_focus_next(self) -> None:
         """Toggle focus between filter and table."""
+        if self._zoomed:
+            return
         self._toggle_filter_focus()
 
     def action_focus_prev(self) -> None:
         """Toggle focus between filter and table."""
+        if self._zoomed:
+            return
         self._toggle_filter_focus()
 
     # Status mutation actions
