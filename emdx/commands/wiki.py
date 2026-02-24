@@ -35,13 +35,17 @@ def slugify_label(label: str) -> str:
     return slug[:80].strip("-")
 
 
-def _format_ms(ms: int) -> str:
+def _format_ms(ms: float) -> str:
     """Format milliseconds into a human-readable string."""
     if ms >= 60_000:
         return f"{ms / 60_000:.1f}m"
     if ms >= 1_000:
         return f"{ms / 1_000:.1f}s"
-    return f"{ms}ms"
+    if ms == 0:
+        return "0ms"
+    if ms < 1:
+        return f"{ms:.2f}ms"
+    return f"{ms:.0f}ms"
 
 
 def _set_topic_status(topic_id: int, new_status: str) -> tuple[str, str]:

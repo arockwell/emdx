@@ -123,14 +123,18 @@ class DocumentLinkDetail(TypedDict):
 
 
 class WikiArticleTimingDict(TypedDict):
-    """Step-level timing (milliseconds) for wiki article generation."""
+    """Step-level timing (milliseconds) for wiki article generation.
 
-    prepare_ms: int
-    route_ms: int
-    outline_ms: int
-    write_ms: int
-    validate_ms: int
-    save_ms: int
+    Values are floats rounded to 2 decimal places so that sub-millisecond
+    phases (route, outline, validate) are not truncated to 0.
+    """
+
+    prepare_ms: float
+    route_ms: float
+    outline_ms: float
+    write_ms: float
+    validate_ms: float
+    save_ms: float
 
 
 class DatabaseStats(TypedDict, total=False):

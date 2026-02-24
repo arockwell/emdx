@@ -455,7 +455,7 @@ def _save_article(
     source_hash = _compute_source_hash(sources)
 
     timing_cols = ""
-    timing_vals: list[int] = []
+    timing_vals: list[float] = []
     if timing:
         timing_cols = (
             ", prepare_ms = ?, route_ms = ?, outline_ms = ?"
@@ -665,9 +665,13 @@ def generate_article(
     except (json.JSONDecodeError, TypeError):
         top_entities = []
 
-    def _ms_since(start: float) -> int:
-        """Return elapsed milliseconds since *start* (monotonic)."""
-        return int((time.monotonic() - start) * 1000)
+    def _ms_since(start: float) -> float:
+        """Return elapsed milliseconds since *start* (monotonic).
+
+        Returns a float rounded to 2 decimal places so sub-millisecond
+        phases (route, outline, validate) are not truncated to 0.
+        """
+        return round((time.monotonic() - start) * 1000, 2)
 
     # Step 1: PREPARE
     t0 = time.monotonic()
