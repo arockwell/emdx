@@ -71,6 +71,12 @@ class CategoryWithStatsDict(CategoryDict):
     total_count: int
 
 
+class CategoryRenameResultDict(TypedDict):
+    tasks_moved: int
+    epics_moved: int
+    old_category_deleted: bool
+
+
 class TagStatsDict(TypedDict):
     id: int
     name: str

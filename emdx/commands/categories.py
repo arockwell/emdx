@@ -123,3 +123,37 @@ def adopt(
         console.print(f"[yellow]Skipped {result['skipped']} (seq conflict)[/yellow]")
     if result["epics_found"]:
         console.print(f"[green]Found {result['epics_found']} parent epic(s)[/green]")
+
+
+@app.command()
+def rename(
+    old_key: str = typer.Argument(..., help="Source category key to rename/merge from"),
+    new_key: str = typer.Argument(..., help="Target category key to rename/merge into"),
+    name: str | None = typer.Option(None, "--name", "-n", help="Set target category name"),
+) -> None:
+    """Rename or merge a category, moving all tasks and renumbering as needed.
+
+    If the target category exists, tasks are merged in (renumbered to avoid conflicts).
+    If the target doesn't exist, it's created with the source's name.
+    The source category is deleted after all tasks are moved.
+
+    Examples:
+        emdx task cat rename COL COLO
+        emdx task cat rename COL COLO --name "Colony"
+    """
+    try:
+        result = categories.rename_category(old_key, new_key, name)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    total = result["tasks_moved"] + result["epics_moved"]
+    console.print(
+        f"[green]Moved {total} item(s) from {old_key.upper()} → {new_key.upper()}[/green]"
+    )
+    if result["tasks_moved"]:
+        console.print(f"  {result['tasks_moved']} task(s)")
+    if result["epics_moved"]:
+        console.print(f"  {result['epics_moved']} epic(s)")
+    if result["old_category_deleted"]:
+        console.print(f"[yellow]Deleted source category {old_key.upper()}[/yellow]")

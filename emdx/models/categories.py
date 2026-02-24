@@ -4,7 +4,7 @@ import re
 from typing import cast
 
 from emdx.database import db
-from emdx.models.types import CategoryDict, CategoryWithStatsDict
+from emdx.models.types import CategoryDict, CategoryRenameResultDict, CategoryWithStatsDict
 
 
 def create_category(key: str, name: str, description: str = "") -> str:
@@ -199,3 +199,89 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
         conn.commit()
 
     return {"adopted": adopted, "skipped": skipped, "epics_found": epics_found}
+
+
+def rename_category(
+    old_key: str, new_key: str, name: str | None = None
+) -> CategoryRenameResultDict:
+    """Move all tasks from old_key into new_key, renumbering to avoid conflicts.
+
+    If new_key doesn't exist, creates it (inheriting old_key's name unless overridden).
+    Retitles tasks from OLD-N: to NEW-N: with new sequence numbers.
+    Deletes the old category when done.
+
+    Raises ValueError if old_key not found, or old_key == new_key.
+    """
+    old_key = old_key.upper()
+    new_key = new_key.upper()
+
+    if old_key == new_key:
+        raise ValueError(f"Source and target are the same: {old_key!r}")
+
+    if not re.match(r"^[A-Z]{2,8}$", new_key):
+        raise ValueError(f"Category key must be 2-8 uppercase letters, got: {new_key!r}")
+
+    old_cat = get_category(old_key)
+    if not old_cat:
+        raise ValueError(f"Category {old_key!r} not found")
+
+    # Create target category if it doesn't exist
+    new_cat = get_category(new_key)
+    if not new_cat:
+        cat_name = name or old_cat["name"]
+        create_category(new_key, cat_name, old_cat["description"])
+    elif name:
+        # Update name if explicitly provided
+        with db.get_connection() as conn:
+            conn.execute("UPDATE categories SET name = ? WHERE key = ?", (name, new_key))
+            conn.commit()
+
+    title_pattern = re.compile(rf"^{re.escape(old_key)}-(\d+):\s*")
+
+    with db.get_connection() as conn:
+        # Find the max existing epic_seq in the target category
+        cursor = conn.execute(
+            "SELECT COALESCE(MAX(epic_seq), 0) FROM tasks WHERE epic_key = ?",
+            (new_key,),
+        )
+        next_seq = cursor.fetchone()[0] + 1
+
+        # Get all tasks in the old category (epics and regular tasks)
+        cursor = conn.execute(
+            "SELECT id, title, type FROM tasks WHERE epic_key = ? ORDER BY epic_seq",
+            (old_key,),
+        )
+        rows = cursor.fetchall()
+
+        tasks_moved = 0
+        epics_moved = 0
+
+        for row in rows:
+            seq = next_seq
+            next_seq += 1
+
+            # Retitle: replace OLD-N: prefix with NEW-seq:
+            new_title = row["title"]
+            m = title_pattern.match(new_title)
+            if m:
+                new_title = f"{new_key}-{seq}: {new_title[m.end() :]}"
+
+            conn.execute(
+                "UPDATE tasks SET epic_key = ?, epic_seq = ?, title = ? WHERE id = ?",
+                (new_key, seq, new_title, row["id"]),
+            )
+
+            if row["type"] == "epic":
+                epics_moved += 1
+            else:
+                tasks_moved += 1
+
+        # Delete the old category (now empty)
+        conn.execute("DELETE FROM categories WHERE key = ?", (old_key,))
+        conn.commit()
+
+    return {
+        "tasks_moved": tasks_moved,
+        "epics_moved": epics_moved,
+        "old_category_deleted": True,
+    }
