@@ -60,8 +60,14 @@ class ClusteringResult:
     resolution: float = 0.0
 
 
-def _get_entity_doc_matrix() -> tuple[dict[int, dict[str, float]], dict[str, int]]:
+def _get_entity_doc_matrix(
+    entity_types: list[str] | None = None,
+) -> tuple[dict[int, dict[str, float]], dict[str, int]]:
     """Build entity-document matrix with confidence scores.
+
+    Args:
+        entity_types: If given, only include entities of these types
+            (e.g. ["heading", "proper_noun"]).  ``None`` means all types.
 
     Returns:
         Tuple of (doc_entities, entity_doc_freq) where:
@@ -69,12 +75,22 @@ def _get_entity_doc_matrix() -> tuple[dict[int, dict[str, float]], dict[str, int
         - entity_doc_freq: {entity: doc_count}
     """
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT document_id, entity, confidence "
-            "FROM document_entities de "
-            "JOIN documents d ON de.document_id = d.id "
-            "WHERE d.is_deleted = 0"
-        )
+        if entity_types:
+            placeholders = ",".join("?" for _ in entity_types)
+            cursor = conn.execute(
+                "SELECT document_id, entity, confidence "
+                "FROM document_entities de "
+                "JOIN documents d ON de.document_id = d.id "
+                f"WHERE d.is_deleted = 0 AND de.entity_type IN ({placeholders})",
+                entity_types,
+            )
+        else:
+            cursor = conn.execute(
+                "SELECT document_id, entity, confidence "
+                "FROM document_entities de "
+                "JOIN documents d ON de.document_id = d.id "
+                "WHERE d.is_deleted = 0"
+            )
         rows = cursor.fetchall()
 
     doc_entities: dict[int, dict[str, float]] = {}
@@ -190,6 +206,8 @@ def _entity_fingerprint(doc_ids: list[int], doc_entities: dict[int, dict[str, fl
 def discover_topics(
     resolution: float = 0.05,
     min_cluster_size: int = MIN_CLUSTER_SIZE,
+    entity_types: list[str] | None = None,
+    min_df: int = MIN_ENTITY_DF,
 ) -> ClusteringResult:
     """Discover topic clusters using Leiden community detection.
 
@@ -205,6 +223,12 @@ def discover_topics(
             higher = smaller clusters. Default 0.05 gives ~15-40 clusters
             for a 700-doc KB.
         min_cluster_size: Minimum docs in a cluster to keep it.
+        entity_types: Entity types to include in clustering. Defaults to
+            ``None`` (all types). Pass ``["heading", "proper_noun"]`` to
+            avoid noisy tech_term/concept singletons in labels.
+        min_df: Minimum document frequency for an entity to be included
+            in the co-occurrence graph. Entities below this threshold
+            are pruned. Default 2.
 
     Returns:
         ClusteringResult with discovered clusters.
@@ -219,7 +243,7 @@ def discover_topics(
         ) from e
 
     # 1. Build entity-document matrix
-    doc_entities, entity_doc_freq = _get_entity_doc_matrix()
+    doc_entities, entity_doc_freq = _get_entity_doc_matrix(entity_types=entity_types)
     total_docs = len(doc_entities)
 
     if total_docs < min_cluster_size:
@@ -233,7 +257,7 @@ def discover_topics(
 
     # 2. Filter entities by document frequency
     max_df = max(int(total_docs * MAX_ENTITY_DF_RATIO), 5)
-    useful_entities = {e for e, df in entity_doc_freq.items() if MIN_ENTITY_DF <= df <= max_df}
+    useful_entities = {e for e, df in entity_doc_freq.items() if min_df <= df <= max_df}
 
     # Filter doc_entities to only useful entities
     filtered_doc_entities: dict[int, dict[str, float]] = {}

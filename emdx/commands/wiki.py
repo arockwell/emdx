@@ -81,6 +81,17 @@ def wiki_topics(
     resolution: float = typer.Option(0.005, "--resolution", "-r", help="Clustering resolution"),
     save: bool = typer.Option(False, "--save", help="Save discovered topics to DB"),
     min_size: int = typer.Option(3, "--min-size", help="Minimum cluster size"),
+    entity_types: list[str] = typer.Option(
+        ["heading", "proper_noun"],
+        "--entity-types",
+        "-e",
+        help="Entity types to use for clustering (default: heading, proper_noun)",
+    ),
+    min_df: int = typer.Option(
+        2,
+        "--min-df",
+        help="Minimum document frequency for an entity to be included",
+    ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show extra columns (model override, editorial prompt)"
     ),
@@ -92,6 +103,8 @@ def wiki_topics(
         emdx maintain wiki topics --save       # Save to DB
         emdx maintain wiki topics -r 0.01      # Finer resolution
         emdx maintain wiki topics --verbose    # Show model overrides and editorial prompts
+        emdx maintain wiki topics -e heading -e proper_noun -e concept  # Custom entity types
+        emdx maintain wiki topics --entity-types heading  # Only headings
     """
     from rich.table import Table
 
@@ -148,7 +161,12 @@ def wiki_topics(
         console=console,
     ) as progress:
         task = progress.add_task("Discovering topics...", total=None)
-        result = discover_topics(resolution=resolution, min_cluster_size=min_size)
+        result = discover_topics(
+            resolution=resolution,
+            min_cluster_size=min_size,
+            entity_types=entity_types or None,
+            min_df=min_df,
+        )
         progress.update(task, completed=True)
 
     console.print(
