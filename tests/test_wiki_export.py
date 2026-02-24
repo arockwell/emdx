@@ -414,6 +414,62 @@ class TestExportMkdocs:
         assert "[Auth](articles/auth.md)" in index_md
         assert "[Database](articles/db.md)" in index_md
 
+    def test_export_single_topic(self, clean_wiki_db: Any, tmp_path: Path) -> None:
+        """topic_id exports only that topic's article."""
+        with db.get_connection() as conn:
+            _setup_full_article(conn, 1, "auth", "Auth", "# Auth")
+            _setup_full_article(conn, 2, "database", "Database", "# Database")
+
+        out = tmp_path / "wiki-site"
+        result = export_mkdocs(out, topic_id=1)
+
+        assert result.articles_exported == 1
+        assert (out / "docs" / "articles" / "auth.md").exists()
+        assert not (out / "docs" / "articles" / "database.md").exists()
+
+    def test_export_single_topic_skips_index_and_mkdocs(
+        self, clean_wiki_db: Any, tmp_path: Path
+    ) -> None:
+        """Single-topic export skips index.md, mkdocs.yml, and entities."""
+        with db.get_connection() as conn:
+            _setup_full_article(conn, 1, "auth", "Auth", "# Auth")
+
+        out = tmp_path / "wiki-site"
+        result = export_mkdocs(out, topic_id=1)
+
+        assert result.articles_exported == 1
+        assert result.mkdocs_yml_generated is False
+        assert result.entity_pages_exported == 0
+        assert not (out / "mkdocs.yml").exists()
+        assert not (out / "docs" / "index.md").exists()
+
+    def test_export_single_topic_nonexistent(self, clean_wiki_db: Any, tmp_path: Path) -> None:
+        """Single-topic export with non-existent ID exports nothing."""
+        with db.get_connection() as conn:
+            _setup_full_article(conn, 1, "auth", "Auth", "# Auth")
+
+        out = tmp_path / "wiki-site"
+        result = export_mkdocs(out, topic_id=999)
+
+        assert result.articles_exported == 0
+
+    def test_export_single_topic_leaves_existing(self, clean_wiki_db: Any, tmp_path: Path) -> None:
+        """Single-topic export leaves pre-existing files untouched."""
+        with db.get_connection() as conn:
+            _setup_full_article(conn, 1, "auth", "Auth", "# Auth")
+            _setup_full_article(conn, 2, "database", "Database", "# Database")
+
+        out = tmp_path / "wiki-site"
+        # Full export first
+        export_mkdocs(out)
+        assert (out / "docs" / "articles" / "database.md").exists()
+        old_db_content = (out / "docs" / "articles" / "database.md").read_text()
+
+        # Single-topic re-export of topic 1 only
+        export_mkdocs(out, topic_id=1)
+        # database.md should still be there with original content
+        assert (out / "docs" / "articles" / "database.md").read_text() == old_db_content
+
 
 # ── CLI tests ────────────────────────────────────────────────────────
 
@@ -449,6 +505,20 @@ class TestWikiExportCli:
         assert "mkdocs" in clean.lower()
         assert "--build" in clean
         assert "--deploy" in clean
+
+    def test_export_command_topic_flag(self, clean_wiki_db: Any, tmp_path: Path) -> None:
+        """CLI export --topic exports only the specified topic."""
+        with db.get_connection() as conn:
+            _setup_full_article(conn, 1, "auth", "Auth", "# Auth")
+            _setup_full_article(conn, 2, "database", "Database", "# Database")
+
+        out = str(tmp_path / "wiki-site")
+        result = runner.invoke(app, ["maintain", "wiki", "export", out, "--topic", "1"])
+        assert result.exit_code == 0
+        assert "Articles:     1" in result.output
+        assert "mkdocs.yml:   no" in result.output
+        assert (tmp_path / "wiki-site" / "docs" / "articles" / "auth.md").exists()
+        assert not (tmp_path / "wiki-site" / "docs" / "articles" / "database.md").exists()
 
     def test_export_build_no_mkdocs(self, clean_wiki_db: Any, tmp_path: Path) -> None:
         """--build fails gracefully when mkdocs is not installed."""
