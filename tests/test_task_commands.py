@@ -1,6 +1,9 @@
 """Tests for task CLI commands (add, list, ready, done, delete)."""
 
+from __future__ import annotations
+
 import re
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -517,6 +520,18 @@ class TestTaskDelete:
     def test_delete_requires_task_id(self):
         result = runner.invoke(app, ["delete"])
         assert result.exit_code != 0
+
+    @patch("emdx.commands.tasks.is_non_interactive", return_value=True)
+    @patch("emdx.commands.tasks.tasks")
+    def test_delete_auto_confirms_non_interactive(self, mock_tasks: Any, mock_ni: Any) -> None:
+        """Delete skips confirmation when stdin is not a TTY (agent mode)."""
+        mock_tasks.resolve_task_id.return_value = 5
+        mock_tasks.get_task.return_value = {"id": 5, "title": "Agent delete"}
+        mock_tasks.delete_task.return_value = True
+        result = runner.invoke(app, ["delete", "5"])
+        assert result.exit_code == 0
+        assert "Deleted #5" in _out(result)
+        mock_tasks.delete_task.assert_called_once_with(5)
 
 
 class TestTaskView:
