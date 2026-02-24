@@ -5,6 +5,7 @@ Right pane: RichLog with selected task detail (description, deps, log, execution
 """
 
 import logging
+import textwrap
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
@@ -63,7 +64,7 @@ SEPARATOR_PREFIX = "sep:"
 
 
 def _format_time_ago(dt_str: str | None) -> str:
-    """Format a datetime string as relative time."""
+    """Format a datetime string as relative time, or absolute date if > 7 days."""
     if not dt_str:
         return ""
     try:
@@ -89,7 +90,12 @@ def _format_time_ago(dt_str: str | None) -> str:
         if seconds < 86400:
             return f"{int(seconds / 3600)}h ago"
         days = int(seconds / 86400)
-        return f"{days}d ago"
+        if days < 7:
+            return f"{days}d ago"
+        # Older than 7 days — show absolute date
+        if dt.year == now.year:
+            return dt.strftime("%b %d")
+        return dt.strftime("%b %d, %Y")
     except Exception:
         return ""
 
@@ -848,12 +854,31 @@ class TaskView(Widget):
             if log_entries:
                 detail_log.write("")
                 detail_log.write("[bold]Work Log:[/bold]")
-                for entry in log_entries:
-                    time_str = _format_time_ago(entry.get("created_at"))
-                    msg = entry["message"]
-                    if len(msg) > 120:
-                        msg = msg[:117] + "..."
-                    detail_log.write(f"  [dim]{time_str}[/dim] {msg}")
+                # Pre-wrap message lines so continuations stay inside gutter
+                gutter = "  [dim]│[/dim] "
+                gutter_width = 4  # "  │ " = 4 visible chars
+                wrap_width = max(30, detail_log.size.width - gutter_width - 1)
+                last = len(log_entries) - 1
+                for i, entry in enumerate(log_entries):
+                    # created_at may be datetime obj from sqlite — coerce to str
+                    raw_ts = entry.get("created_at")
+                    time_str = _format_time_ago(str(raw_ts) if raw_ts is not None else None)
+                    # Dot marker + timestamp
+                    ts_part = f" {time_str}" if time_str else ""
+                    detail_log.write(f"  [bold cyan]●[/bold cyan] [dim]{ts_part}[/dim]")
+                    # Message body with gutter line, pre-wrapped
+                    for line in entry["message"].split("\n"):
+                        if not line:
+                            detail_log.write(gutter)
+                            continue
+                        wrapped = textwrap.wrap(line, width=wrap_width)
+                        for subline in wrapped or [""]:
+                            detail_log.write(f"{gutter}{subline}")
+                    # Connector or terminal cap
+                    if i < last:
+                        detail_log.write("  [dim]│[/dim]")
+                    else:
+                        detail_log.write("  [dim]╵[/dim]")
         except Exception as e:
             logger.debug(f"Error loading task log: {e}")
 

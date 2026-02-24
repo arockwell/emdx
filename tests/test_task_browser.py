@@ -440,7 +440,7 @@ class TestDetailPane:
 
     @pytest.mark.asyncio
     async def test_shows_relative_timestamps(self, mock_task_data: MockDict) -> None:
-        """Detail pane shows relative timestamps."""
+        """Detail pane shows formatted timestamps (relative or absolute date)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, status="open", created_at="2020-01-01T00:00:00"),
         ]
@@ -450,9 +450,9 @@ class TestDetailPane:
             await _select_first_task(pilot)
             detail = app.query_one("#task-detail-log", RichLog)
             text = _richlog_text(detail)
-            # Should show "Created Xd ago" (very old date)
+            # Old date shows absolute format "Jan 01, 2020"
             assert "Created" in text
-            assert "ago" in text
+            assert "Jan 01, 2020" in text
 
     @pytest.mark.asyncio
     async def test_shows_dependencies(self, mock_task_data: MockDict) -> None:
@@ -537,6 +537,51 @@ class TestDetailPane:
             assert "Work Log:" in text
             assert "Started analysis" in text
             assert "Found root cause" in text
+
+    @pytest.mark.asyncio
+    async def test_work_log_timeline_format(self, mock_task_data: MockDict) -> None:
+        """Work log entries use ● marker, │ gutter, and ╵ terminal cap."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active"),
+        ]
+        mock_task_data["get_task_log"].return_value = [
+            make_log_entry(message="First note"),
+            make_log_entry(id=2, message="Second note"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Work Log:" in text
+            # Dot markers for each entry
+            assert "●" in text
+            # Body uses │ gutter
+            assert "│ First note" in text
+            assert "│ Second note" in text
+            # Terminal cap on last entry
+            assert "╵" in text
+
+    @pytest.mark.asyncio
+    async def test_work_log_shows_all_lines(self, mock_task_data: MockDict) -> None:
+        """Multiline notes show every line, no truncation."""
+        multiline_msg = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6"
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active"),
+        ]
+        mock_task_data["get_task_log"].return_value = [
+            make_log_entry(message=multiline_msg),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            for i in range(1, 7):
+                assert f"Line {i}" in text
+            assert "more lines" not in text
 
 
 # ===================================================================
@@ -781,6 +826,24 @@ class TestPureFunctions:
 
     def test_format_time_ago_invalid(self) -> None:
         assert _format_time_ago("not-a-date") == ""
+
+    def test_format_time_ago_recent_days(self) -> None:
+        """Days < 7 show relative like '3d ago'."""
+        from datetime import datetime, timedelta
+
+        three_days = datetime.now() - timedelta(days=3)
+        result = _format_time_ago(three_days.isoformat())
+        assert result == "3d ago"
+
+    def test_format_time_ago_old_shows_date(self) -> None:
+        """Days >= 7 show absolute date like 'Jan 15'."""
+        from datetime import datetime, timedelta
+
+        old = datetime.now() - timedelta(days=30)
+        result = _format_time_ago(old.isoformat())
+        # Should be a month abbreviation + day, not 'Xd ago'
+        assert "ago" not in result
+        assert old.strftime("%b") in result
 
     def test_task_label_short_title(self) -> None:
         task = make_task(title="Fix bug", status="open")
