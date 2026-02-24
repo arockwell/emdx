@@ -178,6 +178,98 @@ class TestAdoptCategory:
         assert cat["name"] == "Adopted Name"
 
 
+class TestRenameCategory:
+    """Tests for rename_category."""
+
+    def test_rename_simple(self):
+        """Rename with no target existing — creates target, moves tasks, deletes source."""
+        categories.create_category("RNOLD", "Old Name")
+        t1 = tasks.create_task("Task 1", epic_key="RNOLD")
+        t2 = tasks.create_task("Task 2", epic_key="RNOLD")
+
+        result = categories.rename_category("RNOLD", "RNNEW")
+        assert result["tasks_moved"] == 2
+        assert result["old_category_deleted"] is True
+
+        # Source gone, target exists
+        assert categories.get_category("RNOLD") is None
+        new_cat = categories.get_category("RNNEW")
+        assert new_cat is not None
+        assert new_cat["name"] == "Old Name"  # inherited
+
+        # Tasks moved and retitled
+        task1 = tasks.get_task(t1)
+        assert task1["epic_key"] == "RNNEW"
+        assert "RNNEW-" in task1["title"]
+
+        task2 = tasks.get_task(t2)
+        assert task2["epic_key"] == "RNNEW"
+        assert "RNNEW-" in task2["title"]
+
+    def test_rename_merge_renumbers(self):
+        """Merge into existing category — renumbers to avoid seq conflicts."""
+        categories.create_category("MROLD", "Old")
+        categories.create_category("MRNEW", "New")
+        t_old = tasks.create_task("Task A", epic_key="MROLD")
+        t_new = tasks.create_task("Task B", epic_key="MRNEW")
+
+        # t_new should have seq 1, t_old should get seq 2 after merge
+        result = categories.rename_category("MROLD", "MRNEW")
+        assert result["tasks_moved"] == 1
+
+        task_old = tasks.get_task(t_old)
+        assert task_old["epic_key"] == "MRNEW"
+        assert task_old["epic_seq"] == 2  # after existing seq 1
+
+        # Original target task unchanged
+        task_new = tasks.get_task(t_new)
+        assert task_new["epic_key"] == "MRNEW"
+        assert task_new["epic_seq"] == 1
+
+    def test_rename_with_name_override(self):
+        """--name overrides the target category name."""
+        categories.create_category("NMOLD", "Old Name")
+        tasks.create_task("Task", epic_key="NMOLD")
+
+        categories.rename_category("NMOLD", "NMNEW", name="Better Name")
+        cat = categories.get_category("NMNEW")
+        assert cat["name"] == "Better Name"
+
+    def test_rename_moves_epics(self):
+        """Epics are moved along with regular tasks."""
+        categories.create_category("EPOLD", "Old")
+        epic_id = tasks.create_epic("Test Epic", "EPOLD")
+        tasks.create_task("Task 1", epic_key="EPOLD")
+
+        result = categories.rename_category("EPOLD", "EPNEW")
+        assert result["epics_moved"] == 1
+        assert result["tasks_moved"] == 1
+
+        epic = tasks.get_task(epic_id)
+        assert epic["epic_key"] == "EPNEW"
+
+    def test_rename_same_key_raises(self):
+        categories.create_category("SAME", "Same")
+        with pytest.raises(ValueError, match="same"):
+            categories.rename_category("SAME", "SAME")
+
+    def test_rename_source_not_found(self):
+        with pytest.raises(ValueError, match="not found"):
+            categories.rename_category("NOPE", "DEST")
+
+    def test_rename_invalid_target_key(self):
+        categories.create_category("VOLD", "Valid Old")
+        with pytest.raises(ValueError, match="2-8 uppercase letters"):
+            categories.rename_category("VOLD", "X")
+
+    def test_rename_case_insensitive(self):
+        categories.create_category("CSOLD", "Case Test")
+        tasks.create_task("Task", epic_key="CSOLD")
+        result = categories.rename_category("csold", "csnew")
+        assert result["tasks_moved"] == 1
+        assert categories.get_category("CSNEW") is not None
+
+
 class TestCategoriesCLI:
     """Tests for category CLI commands."""
 
@@ -230,3 +322,25 @@ class TestCategoriesCLI:
         result = runner.invoke(app, ["adopt", "CADP"])
         assert result.exit_code == 0
         assert "Adopted" in _out(result)
+
+    def test_rename_command(self):
+        categories.create_category("CRNO", "CLI Rename Old")
+        tasks.create_task("Task", epic_key="CRNO")
+        result = runner.invoke(app, ["rename", "CRNO", "CRNN"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Moved" in out
+        assert "CRNO" in out
+        assert "CRNN" in out
+        assert "Deleted" in out
+
+    def test_rename_command_not_found(self):
+        result = runner.invoke(app, ["rename", "ZZZZ", "YYYY"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    def test_rename_command_same_key(self):
+        categories.create_category("CRSM", "Same Key")
+        result = runner.invoke(app, ["rename", "CRSM", "CRSM"])
+        assert result.exit_code == 1
+        assert "same" in _out(result)
