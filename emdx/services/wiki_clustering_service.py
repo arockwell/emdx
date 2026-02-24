@@ -13,6 +13,8 @@ import hashlib
 import json
 import logging
 import math
+import shutil
+import subprocess
 from dataclasses import dataclass
 
 from ..database import db
@@ -484,3 +486,136 @@ def get_topic_docs(topic_id: int) -> list[int]:
             (topic_id,),
         )
         return [row[0] for row in cursor.fetchall()]
+
+
+def _has_claude_cli() -> bool:
+    """Check if the Claude CLI is available on PATH."""
+    return shutil.which("claude") is not None
+
+
+def auto_label_cluster(cluster: TopicCluster) -> str:
+    """Generate a human-readable label for a cluster using Claude CLI.
+
+    Falls back to the existing entity-join label if Claude CLI is
+    unavailable or the call fails.
+
+    Args:
+        cluster: The topic cluster to label.
+
+    Returns:
+        A human-readable topic label string.
+    """
+    if not _has_claude_cli():
+        logger.warning("Claude CLI not found, using default entity-join label")
+        return cluster.label
+
+    entities = [e[0] for e in cluster.top_entities[:8]]
+    doc_titles = _get_doc_titles(cluster.doc_ids[:10])
+
+    prompt = (
+        "Generate a short, human-readable topic name (2-5 words) for a "
+        "knowledge base topic cluster. The name should be a clear, "
+        "descriptive title that captures what the cluster is about.\n\n"
+        f"Top entities: {', '.join(entities)}\n"
+        f"Document titles: {', '.join(doc_titles)}\n"
+        f"Number of documents: {len(cluster.doc_ids)}\n\n"
+        "Reply with ONLY the topic name, nothing else. "
+        "No quotes, no explanation, no punctuation at the end."
+    )
+
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--output-format", "text"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            label = result.stdout.strip().strip('"').strip("'")
+            # Sanity check: reject labels that are too long or empty
+            if 1 <= len(label) <= 80:
+                return label
+            logger.warning(
+                "Claude CLI returned invalid label length (%d): %s",
+                len(label),
+                label[:100],
+            )
+        else:
+            logger.warning(
+                "Claude CLI failed (rc=%d): %s",
+                result.returncode,
+                result.stderr[:200],
+            )
+    except subprocess.TimeoutExpired:
+        logger.warning("Claude CLI timed out generating label")
+    except OSError as e:
+        logger.warning("Claude CLI error: %s", e)
+
+    return cluster.label
+
+
+def auto_label_clusters(clusters: list[TopicCluster]) -> list[TopicCluster]:
+    """Generate human-readable labels for all clusters using Claude CLI.
+
+    Modifies clusters in place and returns them. Falls back to
+    original labels for any cluster where labeling fails.
+
+    Args:
+        clusters: List of topic clusters to label.
+
+    Returns:
+        The same list with updated labels and slugs.
+    """
+    if not _has_claude_cli():
+        logger.warning("Claude CLI not found, skipping auto-labeling")
+        return clusters
+
+    for cluster in clusters:
+        new_label = auto_label_cluster(cluster)
+        if new_label != cluster.label:
+            cluster.label = new_label
+            cluster.slug = _slugify(new_label)
+            logger.info(
+                "Auto-labeled cluster %d: %s",
+                cluster.cluster_id,
+                new_label,
+            )
+
+    return clusters
+
+
+def _get_doc_titles(doc_ids: list[int]) -> list[str]:
+    """Get document titles for a list of doc IDs."""
+    if not doc_ids:
+        return []
+    placeholders = ",".join("?" for _ in doc_ids)
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            f"SELECT title FROM documents WHERE id IN ({placeholders}) AND is_deleted = 0",
+            doc_ids,
+        )
+        return [row[0] for row in cursor.fetchall() if row[0]]
+
+
+def update_topic_label(topic_id: int, new_label: str) -> bool:
+    """Update a saved topic's label and slug in the database.
+
+    Args:
+        topic_id: The topic ID to update.
+        new_label: The new human-readable label.
+
+    Returns:
+        True if the topic was found and updated, False otherwise.
+    """
+    new_slug = _slugify(new_label)
+    with db.get_connection() as conn:
+        row = conn.execute("SELECT id FROM wiki_topics WHERE id = ?", (topic_id,)).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            "UPDATE wiki_topics SET topic_label = ?, topic_slug = ?, "
+            "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_label, new_slug, topic_id),
+        )
+        conn.commit()
+    return True
