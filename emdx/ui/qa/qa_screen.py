@@ -56,6 +56,37 @@ def _truncate(text: str, max_len: int = 35) -> str:
     return text[: max_len - 1] + "\u2026"
 
 
+def _format_timestamp(entry: QAEntry) -> str:
+    """Format entry timestamp as compact time string."""
+    return entry.timestamp.strftime("%H:%M")
+
+
+def _format_elapsed(entry: QAEntry) -> str:
+    """Format elapsed time as a compact string."""
+    if entry.is_loading:
+        return "\u2026"
+    if not entry.elapsed_ms:
+        return "\u2014"
+    secs = entry.elapsed_ms / 1000
+    if secs < 60:
+        return f"{secs:.1f}s"
+    return f"{secs / 60:.1f}m"
+
+
+def _format_method(entry: QAEntry) -> str:
+    """Format retrieval method as a short label."""
+    if entry.is_loading:
+        return "\u2026"
+    m = entry.method.lower()
+    if m == "semantic":
+        return "sem"
+    if m == "keyword":
+        return "kw"
+    if m == "hybrid":
+        return "hyb"
+    return m or "\u2014"
+
+
 class QAScreen(HelpMixin, Widget):
     """
     Conversational Q&A widget over your knowledge base.
@@ -159,6 +190,18 @@ class QAScreen(HelpMixin, Widget):
 
     #qa-answer-md {
         height: auto;
+        margin: 0 0;
+    }
+
+    #qa-answer-md MarkdownH3 {
+        margin: 1 0 0 0;
+        padding: 0 1;
+        color: $text;
+    }
+
+    #qa-answer-md MarkdownHorizontalRule {
+        margin: 0;
+        color: $primary-darken-2;
     }
 
     #qa-answer-stream {
@@ -211,7 +254,7 @@ class QAScreen(HelpMixin, Widget):
                 yield DataTable(
                     id="qa-history-table",
                     cursor_type="row",
-                    show_header=False,
+                    show_header=True,
                     zebra_stripes=True,
                 )
             with _ScrollFence(id="qa-answer-panel"):
@@ -246,7 +289,12 @@ class QAScreen(HelpMixin, Widget):
 
         table = self.query_one("#qa-history-table", DataTable)
         if not table.columns:
-            table.add_column("question", key="question")
+            table.add_column("", key="status", width=2)
+            table.add_column("Question", key="question")
+            table.add_column("Time", key="time", width=5)
+            table.add_column("Elapsed", key="elapsed", width=6)
+            table.add_column("Src", key="sources", width=3)
+            table.add_column("Mode", key="method", width=4)
 
         if entries:
             self._rebuild_history_table()
@@ -278,8 +326,16 @@ class QAScreen(HelpMixin, Widget):
             entries = self._presenter.state.entries
             for i, entry in enumerate(entries):
                 icon = "\u2026" if entry.is_loading else "\u2714"
-                label = f"{icon} {_truncate(entry.question)}"
-                row_key = table.add_row(label, key=f"entry-{i}")
+                question = _truncate(entry.question)
+                row_key = table.add_row(
+                    icon,
+                    question,
+                    _format_timestamp(entry),
+                    _format_elapsed(entry),
+                    str(len(entry.sources)) if entry.sources else "\u2014",
+                    _format_method(entry),
+                    key=f"entry-{i}",
+                )
                 self._row_key_to_entry_index[str(row_key)] = i
 
             header = self.query_one("#qa-history-header", Static)
@@ -345,25 +401,37 @@ class QAScreen(HelpMixin, Widget):
         self._show_markdown()
 
         parts: list[str] = []
-        parts.append(f"**Q:** {entry.question}\n")
 
+        # Question section
+        parts.append(f"### \u2753 Question\n\n{entry.question}\n")
+
+        # Sources section
         if entry.sources:
-            source_lines = "\n".join(f"- #{s.doc_id} {s.title}" for s in entry.sources)
-            parts.append(f"**Sources:**\n\n{source_lines}\n")
+            source_lines = "\n".join(f"- **#{s.doc_id}** {s.title}" for s in entry.sources)
+            parts.append(f"### \U0001f4da Sources ({len(entry.sources)})\n\n{source_lines}\n")
 
         parts.append("---\n")
-        parts.append(entry.answer.rstrip())
 
-        if entry.sources or entry.elapsed_ms or entry.error:
-            parts.append("\n\n---\n")
+        # Answer section
+        parts.append(f"### \u2705 Answer\n\n{entry.answer.rstrip()}\n")
+
+        # Footer with metadata badges
+        footer_parts: list[str] = []
+        if entry.elapsed_ms:
+            secs = entry.elapsed_ms / 1000
+            footer_parts.append(f"\u23f1 **{secs:.1f}s**")
+        if entry.method:
+            method_label = {"semantic": "Semantic", "keyword": "Keyword", "hybrid": "Hybrid"}
+            label = method_label.get(entry.method.lower(), entry.method)
+            footer_parts.append(f"\U0001f50d **{label}**")
         if entry.sources:
-            elapsed = f" *({entry.elapsed_ms / 1000:.1f}s)*" if entry.elapsed_ms else ""
-            ids = ", ".join(f"#{s.doc_id}" for s in entry.sources)
-            parts.append(f"**Sources:** {ids}{elapsed}")
-        elif entry.elapsed_ms:
-            parts.append(f"*{entry.elapsed_ms / 1000:.1f}s*")
+            footer_parts.append(f"\U0001f4c4 **{len(entry.sources)} sources**")
         if entry.error:
-            parts.append(f"\n*Error: {entry.error}*")
+            footer_parts.append(f"\u26a0\ufe0f *{entry.error}*")
+
+        if footer_parts:
+            parts.append("\n---\n")
+            parts.append(" \u00b7 ".join(footer_parts))
 
         content = "\n".join(parts)
         try:
