@@ -10,6 +10,7 @@ the same scroll container; completed answers swap to a Markdown widget.
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from textual import events
@@ -23,6 +24,13 @@ from ..modals import HelpMixin
 from .qa_presenter import QAEntry, QAPresenter, QAStateVM
 
 logger = logging.getLogger(__name__)
+
+_DOC_REF_RE = re.compile(r"(?<!\[)#(\d+)\b")
+
+
+def _linkify_doc_refs(text: str) -> str:
+    """Turn ``#N`` doc references into clickable markdown links."""
+    return _DOC_REF_RE.sub(r"[#\1](emdx://doc/\1)", text)
 
 
 class _ScrollFence(Vertical):
@@ -260,7 +268,7 @@ class QAScreen(HelpMixin, Widget):
             with _ScrollFence(id="qa-answer-panel"):
                 yield Static("ANSWER", id="qa-answer-header")
                 with _AnswerScroll(id="qa-answer-scroll"):
-                    yield Markdown("", id="qa-answer-md")
+                    yield Markdown("", id="qa-answer-md", open_links=False)
                     yield RichLog(
                         id="qa-answer-stream",
                         highlight=True,
@@ -433,7 +441,7 @@ class QAScreen(HelpMixin, Widget):
             parts.append("\n---\n")
             parts.append(" \u00b7 ".join(footer_parts))
 
-        content = "\n".join(parts)
+        content = _linkify_doc_refs("\n".join(parts))
         try:
             md_widget = self.query_one("#qa-answer-md", Markdown)
             md_widget.update(content)
@@ -703,6 +711,16 @@ class QAScreen(HelpMixin, Widget):
                     return
         except Exception:
             pass
+
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        """Intercept emdx:// links to open document previews."""
+        if event.href.startswith("emdx://doc/"):
+            event.prevent_default()
+            try:
+                doc_id = int(event.href.removeprefix("emdx://doc/"))
+                self._open_doc_preview(doc_id)
+            except ValueError:
+                pass
 
     def _open_doc_preview(self, doc_id: int) -> None:
         from ..modals import DocumentPreviewScreen

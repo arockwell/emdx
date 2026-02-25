@@ -11,7 +11,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Input, Markdown, RichLog, Static
 
 from emdx.ui.qa.qa_presenter import QAEntry, QASource, QAStateVM
-from emdx.ui.qa.qa_screen import QAScreen
+from emdx.ui.qa.qa_screen import QAScreen, _linkify_doc_refs
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -365,3 +365,26 @@ class TestQAZoom:
             await pilot.pause()
             assert not qa._zoomed
             assert not history.has_class("zoom-hidden")
+
+
+# ---------------------------------------------------------------------------
+# Tests: Linkify doc refs
+# ---------------------------------------------------------------------------
+
+
+class TestLinkifyDocRefs:
+    def test_basic_ref(self) -> None:
+        assert _linkify_doc_refs("See #42 for details") == "See [#42](emdx://doc/42) for details"
+
+    def test_multiple_refs(self) -> None:
+        result = _linkify_doc_refs("Sources: #42, #55")
+        assert "[#42](emdx://doc/42)" in result
+        assert "[#55](emdx://doc/55)" in result
+
+    def test_no_double_linkify(self) -> None:
+        already = "[#42](emdx://doc/42)"
+        assert _linkify_doc_refs(already) == already
+
+    def test_no_refs(self) -> None:
+        text = "No references here"
+        assert _linkify_doc_refs(text) == text
