@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Clickable doc refs in QA answers** — `#N` references in QA answers are now clickable, opening a fullscreen document preview (#887, Issue #FEAT-55)
 - **`delegate --tool`** — grant extra tool permissions to delegates beyond the defaults (repeatable, e.g. `--tool 'Bash(gh:*)'`) (#878, Issue #869)
 - **`task list --since` and `--today`** — filter completed tasks by date, useful for daily standups and progress reviews (#877, Issue #874)
+- **Task work log as markdown** — work log entries in the task detail pane now render as markdown instead of plain text (#890)
 
 ### 🐛 Bug Fixes
 
