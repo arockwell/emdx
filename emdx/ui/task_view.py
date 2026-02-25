@@ -174,7 +174,7 @@ def _linkify_text(raw: str) -> Text:
             continue
         # Text before the URL
         if match.start() > last_end:
-            text.append(raw[last_end:match.start()])
+            text.append(raw[last_end : match.start()])
         # The URL itself — clickable via Textual's @click action dispatch
         link_style = _LINK_STYLE + Style(
             meta={"@click": f"open_url({url!r})"},
@@ -183,7 +183,7 @@ def _linkify_text(raw: str) -> Text:
         # Trailing chars that were in the regex match but stripped from the URL
         leftover_start = match.start() + len(url)
         if leftover_start < match.end():
-            text.append(raw[leftover_start:match.end()])
+            text.append(raw[leftover_start : match.end()])
         last_end = match.end()
     # Remaining text after the last URL
     if last_end < len(raw):
@@ -1131,6 +1131,22 @@ class TaskView(Widget):
     # ------------------------------------------------------------------
     # URL opening (click + keyboard)
     # ------------------------------------------------------------------
+
+    def on_click(self, event: events.Click) -> None:
+        """Handle clicks on the detail pane — dispatch @click actions from Rich meta."""
+        try:
+            detail_log = self.query_one("#task-detail-log", RichLog)
+        except Exception:
+            return
+        if event.widget is not detail_log:
+            return
+        style = detail_log.get_style_at(event.x, event.y)
+        if style and hasattr(style, "meta") and style.meta:
+            action = style.meta.get("@click")
+            if action:
+                self.call_later(self.run_action, action)
+                event.prevent_default()
+                event.stop()
 
     def action_open_url(self, url: str) -> None:
         """Open a URL in the default browser (triggered by @click on links)."""
