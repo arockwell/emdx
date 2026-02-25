@@ -4,6 +4,8 @@ Agent-facing commands for creating and consuming work items.
 Delegate activity tracking is separate (shown via `emdx status`).
 """
 
+from datetime import date, datetime
+
 import typer
 from rich.table import Table
 from rich.text import Text
@@ -454,6 +456,10 @@ def list_cmd(
     limit: int = typer.Option(20, "-n", "--limit"),
     epic: str | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
+    since: str | None = typer.Option(
+        None, "--since", help="Show tasks completed on or after DATE (YYYY-MM-DD)"
+    ),
+    today: bool = typer.Option(False, "--today", help="Show tasks completed today"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List tasks.
@@ -463,15 +469,29 @@ def list_cmd(
     Examples:
         emdx task list
         emdx task list --done
+        emdx task list --done --today
+        emdx task list --done --since 2026-01-15
         emdx task list --all
         emdx task list -s open,active
         emdx task list --cat SEC
         emdx task list --epic 510
         emdx task list --epic SEC-1
     """
+    since_date: str | None = None
+    if today:
+        since_date = date.today().isoformat()
+    elif since:
+        try:
+            datetime.strptime(since, "%Y-%m-%d")
+        except ValueError:
+            console.print("[red]Invalid date format. Use YYYY-MM-DD.[/red]")
+            raise typer.Exit(code=1) from None
+        since_date = since
+
+    # --since/--today imply --done when no explicit status is given
     if status:
         status_list = [s.strip() for s in status.split(",")]
-    elif done:
+    elif done or since_date:
         status_list = ["done"]
     else:
         status_list = ["open", "active", "blocked"]
@@ -484,6 +504,7 @@ def list_cmd(
         exclude_delegate=exclude_delegate,
         epic_key=cat,
         parent_task_id=resolved_epic,
+        since=since_date,
     )
 
     if json_output:
