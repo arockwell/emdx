@@ -11,7 +11,14 @@ from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Input, RichLog, Static
 
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
-from emdx.ui.task_view import TaskView, _format_time_ago, _task_label
+from emdx.ui.task_view import (
+    TaskView,
+    _clean_url,
+    _extract_urls,
+    _format_time_ago,
+    _linkify_text,
+    _task_label,
+)
 
 # ---------------------------------------------------------------------------
 # Factories
@@ -1699,3 +1706,249 @@ class TestWontdoStatus:
             await pilot.pause()
 
             assert filter_input.value == "w"
+
+
+# ===================================================================
+# K. Clickable Links
+# ===================================================================
+
+
+class TestPureUrlFunctions:
+    """Unit tests for URL detection helpers (no pilot needed)."""
+
+    def test_clean_url_strips_trailing_period(self) -> None:
+        assert _clean_url("https://example.com.") == "https://example.com"
+
+    def test_clean_url_strips_trailing_comma(self) -> None:
+        assert _clean_url("https://example.com,") == "https://example.com"
+
+    def test_clean_url_strips_trailing_paren(self) -> None:
+        assert _clean_url("https://example.com)") == "https://example.com"
+
+    def test_clean_url_keeps_matched_parens(self) -> None:
+        assert (
+            _clean_url("https://en.wikipedia.org/wiki/Foo_(bar)")
+            == "https://en.wikipedia.org/wiki/Foo_(bar)"
+        )
+
+    def test_extract_urls_finds_single(self) -> None:
+        text = "See https://github.com/org/repo/pull/123 for details"
+        assert _extract_urls(text) == ["https://github.com/org/repo/pull/123"]
+
+    def test_extract_urls_finds_multiple(self) -> None:
+        text = (
+            "Check https://example.com and also https://other.com/path"
+        )
+        assert _extract_urls(text) == [
+            "https://example.com",
+            "https://other.com/path",
+        ]
+
+    def test_extract_urls_returns_empty_for_no_urls(self) -> None:
+        assert _extract_urls("No URLs here at all.") == []
+
+    def test_extract_urls_strips_trailing_punct(self) -> None:
+        text = "Visit https://example.com."
+        assert _extract_urls(text) == ["https://example.com"]
+
+    def test_linkify_text_no_urls(self) -> None:
+        result = _linkify_text("Plain text with no links.")
+        assert result.plain == "Plain text with no links."
+
+    def test_linkify_text_single_url(self) -> None:
+        result = _linkify_text("See https://example.com for info")
+        assert result.plain == "See https://example.com for info"
+        # The URL portion should have @click meta
+        assert "https://example.com" in result.plain
+
+    def test_linkify_text_preserves_surrounding_text(self) -> None:
+        raw = "before https://test.dev/path after"
+        result = _linkify_text(raw)
+        assert result.plain == raw
+
+    def test_linkify_text_url_with_trailing_period(self) -> None:
+        result = _linkify_text("See https://example.com.")
+        # The period should not be part of the link
+        assert result.plain == "See https://example.com."
+
+    def test_linkify_text_multiple_urls(self) -> None:
+        raw = "A: https://one.com B: https://two.com"
+        result = _linkify_text(raw)
+        assert result.plain == raw
+
+    def test_linkify_text_has_click_meta(self) -> None:
+        """The URL span should carry @click meta for Textual action dispatch."""
+        result = _linkify_text("link: https://example.com/test end")
+        # Check that at least one span has the @click meta
+        found_click = False
+        for _start, _end, style in result._spans:  # type: ignore[attr-defined]
+            meta = style.meta if hasattr(style, "meta") else {}
+            if "@click" in meta and "open_url" in meta["@click"]:
+                found_click = True
+                break
+        assert found_click, "Expected @click meta on URL span"
+
+
+class TestLinkRendering:
+    """TUI tests for clickable links in the detail pane."""
+
+    @pytest.mark.asyncio
+    async def test_description_url_rendered(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """URLs in description appear in the detail pane."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                status="open",
+                description="See https://github.com/org/repo/pull/42 for context",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "https://github.com/org/repo/pull/42" in text
+            assert "Description:" in text
+
+    @pytest.mark.asyncio
+    async def test_error_url_rendered(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """URLs in error text appear in the detail pane."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                status="failed",
+                error="Failed: see https://ci.example.com/build/99",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "https://ci.example.com/build/99" in text
+            assert "Error:" in text
+
+    @pytest.mark.asyncio
+    async def test_work_log_url_rendered(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """URLs in work log entries appear in the detail pane."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active"),
+        ]
+        mock_task_data["get_task_log"].return_value = [
+            make_log_entry(
+                message="PR: https://github.com/org/repo/pull/7",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "https://github.com/org/repo/pull/7" in text
+
+    @pytest.mark.asyncio
+    async def test_description_without_urls_still_renders(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Descriptions without URLs render normally (no regression)."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                status="open",
+                description="Plain text without any links",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Plain text without any links" in text
+
+
+class TestOpenUrlShortcut:
+    """Tests for the Shift+O keyboard shortcut to open URLs.
+
+    Note: _select_first_task (j then k) leaves cursor on the header row.
+    These tests use two tasks so pressing j twice lands on a real task row.
+    """
+
+    @staticmethod
+    async def _select_task_row(pilot: Any) -> None:
+        """Move cursor to the first real task row (skip header)."""
+        await pilot.press("j")
+        await pilot.pause()
+
+    @pytest.mark.asyncio
+    async def test_shift_o_with_no_urls_shows_notification(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Shift+O on a task with no URLs shows a notification."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open", description="No links here"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.pause()
+            await self._select_task_row(pilot)
+            await pilot.press("O")
+            await pilot.pause()
+            # Should notify that no URLs were found
+            notifications = list(app._notifications)
+            assert any("No URLs" in str(n.message) for n in notifications)
+
+    @pytest.mark.asyncio
+    async def test_shift_o_calls_webbrowser_open(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Shift+O on a task with a URL opens it in the browser."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                status="open",
+                description="Fix https://github.com/org/repo/issues/5",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(notifications=True) as pilot:
+            await pilot.pause()
+            await self._select_task_row(pilot)
+            with patch("webbrowser.open") as mock_open:
+                await pilot.press("O")
+                await pilot.pause()
+                mock_open.assert_called_once_with(
+                    "https://github.com/org/repo/issues/5"
+                )
+
+    @pytest.mark.asyncio
+    async def test_shift_o_blocked_during_filter(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Shift+O doesn't trigger when filter input is focused."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                status="open",
+                description="Has https://example.com link",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Open filter input
+            await pilot.press("slash")
+            await pilot.pause()
+            with patch("webbrowser.open") as mock_open:
+                await pilot.press("O")
+                await pilot.pause()
+                mock_open.assert_not_called()

@@ -5,11 +5,13 @@ Right pane: RichLog with selected task detail (description, deps, log, execution
 """
 
 import logging
+import re
 import textwrap
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
+from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
@@ -143,6 +145,60 @@ def _task_label(task: TaskDict) -> str:
     if len(title) > 50:
         title = title[:47] + "..."
     return f"{icon} {title}"
+
+
+# URL detection for clickable links in the detail pane
+_URL_RE = re.compile(r"https?://[^\s<>\[\]\"{}]+")
+
+_LINK_STYLE = Style(underline=True, color="bright_cyan")
+
+
+def _clean_url(raw: str) -> str:
+    """Strip trailing punctuation that is likely not part of the URL."""
+    url = raw
+    # First handle unmatched trailing parens (e.g. "http://example.com/path)")
+    while url.endswith(")") and url.count(")") > url.count("("):
+        url = url[:-1]
+    # Then strip generic trailing punctuation (but not parens — handled above)
+    url = url.rstrip(".,;:!?'\"")
+    return url
+
+
+def _linkify_text(raw: str) -> Text:
+    """Build a Rich Text with URLs rendered as clickable action links."""
+    text = Text()
+    last_end = 0
+    for match in _URL_RE.finditer(raw):
+        url = _clean_url(match.group(0))
+        if not url:
+            continue
+        # Text before the URL
+        if match.start() > last_end:
+            text.append(raw[last_end:match.start()])
+        # The URL itself — clickable via Textual's @click action dispatch
+        link_style = _LINK_STYLE + Style(
+            meta={"@click": f"open_url({url!r})"},
+        )
+        text.append(url, style=link_style)
+        # Trailing chars that were in the regex match but stripped from the URL
+        leftover_start = match.start() + len(url)
+        if leftover_start < match.end():
+            text.append(raw[leftover_start:match.end()])
+        last_end = match.end()
+    # Remaining text after the last URL
+    if last_end < len(raw):
+        text.append(raw[last_end:])
+    return text
+
+
+def _extract_urls(text: str) -> list[str]:
+    """Extract clean URLs from text."""
+    urls: list[str] = []
+    for match in _URL_RE.finditer(text):
+        url = _clean_url(match.group(0))
+        if url:
+            urls.append(url)
+    return urls
 
 
 class TaskView(Widget):
@@ -694,6 +750,7 @@ class TaskView(Widget):
                     "x",
                     "f",
                     "asterisk",
+                    "O",
                 }
                 if event.key in vim_keys:
                     return
@@ -732,6 +789,10 @@ class TaskView(Widget):
             self._group_by = "epic" if self._group_by == "status" else "status"
             self._render_task_table()
             self._update_status_bar()
+            event.prevent_default()
+            event.stop()
+        elif event.key == "O":
+            self._open_task_urls()
             event.prevent_default()
             event.stop()
 
@@ -850,15 +911,20 @@ class TaskView(Widget):
             logger.debug(f"Error loading dependents: {e}")
 
         # Description
-        if task.get("description"):
+        desc = task.get("description") or ""
+        if desc:
             detail_log.write("")
             detail_log.write("[bold]Description:[/bold]")
-            detail_log.write(task["description"])
+            detail_log.write(_linkify_text(desc))
 
         # Error info
-        if task.get("error"):
+        error_text = task.get("error") or ""
+        if error_text:
             detail_log.write("")
-            detail_log.write(f"[red bold]Error:[/red bold] {task['error']}")
+            error_line = Text()
+            error_line.append("Error: ", style="red bold")
+            error_line.append_text(_linkify_text(error_text))
+            detail_log.write(error_line)
 
         # Work log
         try:
@@ -885,7 +951,9 @@ class TaskView(Widget):
                             continue
                         wrapped = textwrap.wrap(line, width=wrap_width)
                         for subline in wrapped or [""]:
-                            detail_log.write(f"{gutter}{subline}")
+                            gutter_text = Text.from_markup(gutter)
+                            gutter_text.append_text(_linkify_text(subline))
+                            detail_log.write(gutter_text)
                     # Connector or terminal cap
                     if i < last:
                         detail_log.write("  [dim]│[/dim]")
@@ -931,10 +999,11 @@ class TaskView(Widget):
             detail_log.write(f"Status: [bold]{task['status']}[/bold]")
 
         # Description
-        if task.get("description"):
+        epic_desc = task.get("description") or ""
+        if epic_desc:
             detail_log.write("")
             detail_log.write("[bold]Description:[/bold]")
-            detail_log.write(task["description"])
+            detail_log.write(_linkify_text(epic_desc))
 
         # Load and display child tasks
         try:
@@ -1058,3 +1127,38 @@ class TaskView(Widget):
     async def action_mark_wontdo(self) -> None:
         """Mark selected task as won't do."""
         await self._set_task_status("wontdo")
+
+    # ------------------------------------------------------------------
+    # URL opening (click + keyboard)
+    # ------------------------------------------------------------------
+
+    def action_open_url(self, url: str) -> None:
+        """Open a URL in the default browser (triggered by @click on links)."""
+        import webbrowser
+
+        webbrowser.open(url)
+        self.notify(f"Opened {url[:60]}...", timeout=2)
+
+    def _open_task_urls(self) -> None:
+        """Open first URL found in the selected task (Shift+O shortcut)."""
+        task = self._get_selected_task()
+        if not task:
+            return
+        urls: list[str] = []
+        for field in ("description", "error"):
+            val = task.get(field)
+            if isinstance(val, str) and val:
+                urls.extend(_extract_urls(val))
+        if not urls:
+            self.notify("No URLs in this task", timeout=2)
+            return
+        import webbrowser
+
+        webbrowser.open(urls[0])
+        if len(urls) > 1:
+            self.notify(
+                f"Opened 1 of {len(urls)} URLs",
+                timeout=2,
+            )
+        else:
+            self.notify(f"Opened {urls[0][:60]}", timeout=2)
