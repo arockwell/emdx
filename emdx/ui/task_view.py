@@ -8,8 +8,10 @@ import logging
 import textwrap
 from collections import defaultdict
 from datetime import datetime, timezone
+from io import StringIO
 from typing import Any
 
+from rich.console import Console as RichConsole
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
@@ -806,12 +808,11 @@ class TaskView(Widget):
     def _detail_content_width(self, detail_log: RichLog) -> int:
         """Return the usable content width of the detail RichLog.
 
-        Uses ``content_region`` which subtracts CSS padding from ``size``,
-        then removes one more column as a safety margin for the scrollbar
-        (``scrollbar-gutter: stable`` reserves space, but an extra column
-        prevents edge-case overflow).
+        Uses ``scrollable_content_region`` which accounts for CSS padding,
+        borders, AND the scrollbar gutter — matching what ``RichLog.write()``
+        uses internally for its ``render_width``.
         """
-        return max(30, detail_log.content_region.width - 1)
+        return max(30, detail_log.scrollable_content_region.width)
 
     def _write_wrapped(
         self,
@@ -836,6 +837,62 @@ class TaskView(Widget):
             wrapped = textwrap.wrap(line, width=wrap_at) or [""]
             for subline in wrapped:
                 detail_log.write(f"{prefix}{subline}")
+
+    def _write_markdown_guttered(
+        self,
+        detail_log: RichLog,
+        text: str,
+        width: int,
+        *,
+        gutter: str = "  [dim]│[/dim] ",
+        gutter_width: int = 4,
+    ) -> None:
+        """Render *text* as markdown, prefixing every output line with *gutter*.
+
+        Renders the Markdown into a width-constrained Console, captures the
+        ANSI output, then re-emits each line prefixed with the gutter as a
+        ``Text`` object into the RichLog.  This preserves markdown styling
+        (headings, bold, code blocks, lists) while keeping lines aligned to
+        the right of the gutter — respecting the pre-wrap constraint from
+        PR #881.
+
+        Long unbreakable tokens (URLs) are hard-folded at *render_width* so
+        they never overflow the gutter.
+        """
+        from emdx.ui.markdown_config import MarkdownConfig
+
+        render_width = max(20, width - gutter_width)
+        md = MarkdownConfig.create_markdown(text)
+
+        # Render markdown into a string buffer with constrained width.
+        # Use overflow="fold" so long URLs are hard-broken at render_width
+        # instead of overflowing as a single unbroken line.
+        buf = StringIO()
+        console = RichConsole(file=buf, width=render_width, force_terminal=True, no_color=False)
+        console.print(md, highlight=False, overflow="fold")
+        rendered = buf.getvalue()
+
+        # Strip the trailing newline that console.print always adds
+        lines = rendered.rstrip("\n").split("\n")
+
+        # Build the gutter prefix as a Text object for consistent joining
+        gutter_text = Text.from_markup(gutter)
+
+        for line in lines:
+            content = Text.from_ansi(line)
+            # Safety: hard-break any line still wider than render_width
+            chunks: list[Text] = []
+            while content.cell_len > render_width:
+                left = content[:render_width]
+                content = content[render_width:]
+                chunks.append(left)
+            chunks.append(content)
+
+            for chunk in chunks:
+                prefixed = gutter_text.copy()
+                prefixed.append_text(chunk)
+                prefixed.overflow = "fold"
+                detail_log.write(prefixed)
 
     def _render_task_detail(self, task: TaskDict) -> None:
         """Render full task detail in the right pane."""
@@ -943,13 +1000,13 @@ class TaskView(Widget):
                     # Dot marker + timestamp
                     ts_part = f" {time_str}" if time_str else ""
                     detail_log.write(f"  [bold cyan]●[/bold cyan] [dim]{ts_part}[/dim]")
-                    # Message body with gutter line, pre-wrapped
-                    self._write_wrapped(
+                    # Message body with gutter line, rendered as markdown
+                    self._write_markdown_guttered(
                         detail_log,
                         entry["message"],
                         content_w,
-                        prefix=gutter,
-                        prefix_width=gutter_width,
+                        gutter=gutter,
+                        gutter_width=gutter_width,
                     )
                     # Connector or terminal cap
                     if i < last:
