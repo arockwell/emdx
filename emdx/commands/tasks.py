@@ -300,11 +300,12 @@ def view(
                 console.print(f"  [dim]Output:[/dim] #{output_id} [dim](deleted)[/dim]")
 
     # Description (render as markdown for readability)
-    if task.get("description"):
+    desc = task.get("description")
+    if desc:
         from emdx.ui.markdown_config import MarkdownConfig
 
         console.print()
-        console.print(MarkdownConfig.create_markdown(task["description"]))
+        console.print(MarkdownConfig.create_markdown(desc))
 
     # Dependencies
     deps = tasks.get_dependencies(task_id)
