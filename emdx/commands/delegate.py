@@ -890,6 +890,11 @@ def _run_parallel(
         if len(tasks) > 1:
             task_title = f"{task_title} [{idx + 1}/{len(tasks)}]"
 
+        # Progress: task starting
+        if not quiet and len(tasks) > 1:
+            sys.stderr.write(f"delegate: starting [{idx + 1}/{len(tasks)}] {task[:60]}\n")
+            sys.stderr.flush()
+
         # Create per-task worktree if requested
         task_worktree_path = None
         if worktree:
@@ -939,18 +944,31 @@ def _run_parallel(
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(run_task, i, task): i for i, task in enumerate(tasks)}
+        completed_count = 0
         for future in as_completed(futures):
             idx, single_result = future.result()
             results[idx] = single_result
+            completed_count += 1
+
+            # Progress: task completed (stderr for visibility in Claude Code)
+            if not quiet and len(tasks) > 1:
+                duration = (
+                    f" ({_format_duration(single_result.duration_seconds)})"
+                    if single_result.duration_seconds
+                    else ""
+                )
+                status = "done" if single_result.success else "FAILED"
+                sys.stderr.write(
+                    f"delegate: [{completed_count}/{len(tasks)}] {status}"
+                    f"{duration} {tasks[idx][:60]}\n"
+                )
+                sys.stderr.flush()
 
             # Stream output as each task completes (unless --quiet/--json)
             if not quiet:
                 task_label = tasks[idx] if idx < len(tasks) else "?"
                 if single_result.success:
-                    sys.stdout.write(
-                        f"\n=== Task {idx + 1}/{len(tasks)}: "
-                        f"{task_label} ===\n\n"
-                    )
+                    sys.stdout.write(f"\n=== Task {idx + 1}/{len(tasks)}: {task_label} ===\n\n")
                     if single_result.doc_id is not None:
                         _print_doc_content(single_result.doc_id)
                     elif single_result.raw_output:
@@ -960,8 +978,7 @@ def _run_parallel(
                     sys.stdout.flush()
                 else:
                     sys.stdout.write(
-                        f"\n=== Task {idx + 1}/{len(tasks)}: "
-                        f"{task_label} [FAILED] ===\n"
+                        f"\n=== Task {idx + 1}/{len(tasks)}: {task_label} [FAILED] ===\n"
                     )
                     if single_result.error_message:
                         sys.stdout.write(f"{single_result.error_message}\n")
