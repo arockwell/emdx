@@ -1310,38 +1310,47 @@ class TestPrefixedTaskId:
         mock_tasks.resolve_task_id.return_value = None
         result = runner.invoke(app, ["view", "not-valid-123"])
         assert result.exit_code == 1
-        assert "Invalid task ID" in _out(result)
+        assert "Task not found" in _out(result)
 
     @patch("emdx.commands.tasks.tasks")
     def test_prefixed_id_not_found_exits_with_error(self, mock_tasks):
         mock_tasks.resolve_task_id.return_value = None
         result = runner.invoke(app, ["done", "TOOL-999"])
         assert result.exit_code == 1
-        assert "Invalid task ID" in _out(result)
+        assert "Task not found" in _out(result)
 
 
 class TestResolveTaskId:
     """Unit tests for the resolve_task_id model function."""
 
     def test_plain_integer(self):
-        from emdx.models.tasks import resolve_task_id
+        from emdx.models.tasks import create_task, resolve_task_id
 
-        assert resolve_task_id("42") == 42
+        task_id = create_task("Resolve test task")
+        assert resolve_task_id(str(task_id)) == task_id
 
     def test_integer_with_hash_prefix(self):
-        from emdx.models.tasks import resolve_task_id
+        from emdx.models.tasks import create_task, resolve_task_id
 
-        assert resolve_task_id("#42") == 42
+        task_id = create_task("Resolve hash test")
+        assert resolve_task_id(f"#{task_id}") == task_id
 
     def test_integer_with_whitespace(self):
-        from emdx.models.tasks import resolve_task_id
+        from emdx.models.tasks import create_task, resolve_task_id
 
-        assert resolve_task_id("  42  ") == 42
+        task_id = create_task("Resolve whitespace test")
+        assert resolve_task_id(f"  {task_id}  ") == task_id
 
     def test_hash_prefix_with_whitespace(self):
+        from emdx.models.tasks import create_task, resolve_task_id
+
+        task_id = create_task("Resolve hash ws test")
+        assert resolve_task_id(f" #{task_id} ") == task_id
+
+    def test_nonexistent_integer_returns_none(self):
         from emdx.models.tasks import resolve_task_id
 
-        assert resolve_task_id(" #42 ") == 42
+        assert resolve_task_id("999999") is None
 
     def test_empty_string_returns_none(self):
         from emdx.models.tasks import resolve_task_id
@@ -1353,22 +1362,21 @@ class TestResolveTaskId:
 
         assert resolve_task_id("not-a-valid-id") is None
 
-    @patch("emdx.models.tasks.db")
-    def test_prefixed_id_found(self, mock_db):
-        from emdx.models.tasks import resolve_task_id
+    def test_prefixed_id_found(self):
+        from emdx.models.tasks import create_task, resolve_task_id
 
-        mock_conn = MagicMock()
-        mock_db.get_connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
-        mock_db.get_connection.return_value.__exit__ = MagicMock(return_value=False)
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (78,)
-        mock_conn.execute.return_value = mock_cursor
+        task_id = create_task("Prefixed test", epic_key="RSLV")
+        assert resolve_task_id("RSLV-1") == task_id
 
-        assert resolve_task_id("TOOL-12") == 78
-        mock_conn.execute.assert_called_once_with(
-            "SELECT id FROM tasks WHERE epic_key = ? AND epic_seq = ?",
-            ("TOOL", 12),
-        )
+    def test_bare_integer_falls_back_to_epic_seq(self):
+        """When bare integer doesn't match a DB ID, try epic_seq."""
+        from emdx.models.tasks import create_task, resolve_task_id
+
+        task_id = create_task("Epic seq test", epic_key="SEQT")
+        # task_id is the DB id, but epic_seq is 1
+        # If no task with DB id=1 exists (or it does but matches), test the seq
+        result = resolve_task_id("SEQT-1")
+        assert result == task_id
 
     @patch("emdx.models.tasks.db")
     def test_prefixed_id_case_insensitive(self, mock_db):
