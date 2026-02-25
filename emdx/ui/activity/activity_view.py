@@ -644,6 +644,7 @@ class ActivityView(HelpMixin, Widget):
         if self._zoomed:
             activity_panel.add_class("zoom-hidden")
             preview_panel.add_class("zoom-full")
+            self.query_one("#preview-content", RichLog).focus()
         else:
             activity_panel.remove_class("zoom-hidden")
             preview_panel.remove_class("zoom-full")
