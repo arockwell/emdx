@@ -42,16 +42,15 @@ def _save_terminal_state() -> list[Any] | None:
 def _restore_terminal_state(saved: list[Any] | None) -> None:
     """Restore terminal attributes saved by _save_terminal_state.
 
-    Also re-sends ANSI mouse tracking escape sequences.  termios only
-    covers Unix terminal attributes (raw/cooked mode).  Mouse tracking
-    is controlled by separate DEC private-mode escape sequences that
-    live in the terminal emulator, not the kernel tty layer.  If a
-    subprocess or heavy import resets the terminal, the escape state is
-    lost even though termios restore succeeds.
+    Only restores termios attributes (raw/cooked mode).  We do NOT
+    re-send mouse tracking escape sequences because writing raw bytes
+    to stderr bypasses Textual's driver output buffer and can corrupt
+    the escape sequence stream, breaking mouse handling.
 
-    In a tmux/multiplexer pane the multiplexer manages mouse tracking
-    independently, which is why the bug only manifests in a plain
-    (non-paned) terminal window.
+    Subprocess.Popen with stdin/stdout/stderr=PIPE should not affect
+    the parent's DEC private-mode escape state since the child has no
+    access to the terminal.  If termios attributes changed (e.g., a
+    library reset raw mode), restoring them is sufficient.
     """
     import sys
     import termios
@@ -70,37 +69,6 @@ def _restore_terminal_state(saved: list[Any] | None) -> None:
             termios.tcsetattr(fd, termios.TCSANOW, saved)
     except Exception as e:
         logger.warning("Failed to restore terminal state: %s", e)
-
-    # Re-enable mouse tracking escape sequences unconditionally.
-    # These are cheap no-ops if already active, but critical if a
-    # subprocess/import cleared them.
-    _reenable_mouse_tracking()
-
-
-def _reenable_mouse_tracking() -> None:
-    """Re-send DEC private-mode sequences that enable mouse tracking.
-
-    Textual's LinuxDriver writes output to sys.__stderr__ (not stdout).
-    We must write the mouse escape sequences to the same fd, otherwise
-    they go to the wrong place and have no effect.
-    """
-    import os
-    import sys
-
-    try:
-        if sys.__stderr__ is None:
-            return
-        fd = sys.__stderr__.fileno()
-        # Same sequences Textual's LinuxDriver._enable_mouse_support() writes
-        data = (
-            "\x1b[?1000h"  # SET_VT200_MOUSE
-            "\x1b[?1003h"  # SET_ANY_EVENT_MOUSE
-            "\x1b[?1015h"  # SET_VT200_HIGHLIGHT_MOUSE
-            "\x1b[?1006h"  # SET_SGR_EXT_MODE_MOUSE
-        )
-        os.write(fd, data.encode())
-    except Exception as e:
-        logger.debug("Could not re-enable mouse tracking: %s", e)
 
 
 @dataclass
@@ -174,28 +142,26 @@ class QAPresenter:
         """Pre-import sentence-transformers/torch in a background thread.
 
         This library corrupts terminal state (raw → cooked) on import.
-        By running in to_thread with terminal guards we avoid blocking
-        the event loop (~2-3s) and restore terminal state immediately
-        after.  Once imported, it's cached in sys.modules so later uses
-        (in _retrieve_semantic) are instant and harmless.
+        We save terminal state before dispatching to the thread, and
+        restore on the main thread after. Writing mouse-tracking escape
+        sequences from a background thread can race with Textual's
+        rendering and corrupt terminal state further.
         """
 
         def _preload_and_check() -> bool:
-            term_state = _save_terminal_state()
-            try:
-                has = self._has_embeddings()
-                if has:
-                    try:
-                        from sentence_transformers import SentenceTransformer  # noqa: F401
+            has = self._has_embeddings()
+            if has:
+                try:
+                    from sentence_transformers import SentenceTransformer  # noqa: F401
 
-                        logger.info("Pre-loaded sentence-transformers")
-                    except ImportError:
-                        pass
-                return has
-            finally:
-                _restore_terminal_state(term_state)
+                    logger.info("Pre-loaded sentence-transformers")
+                except ImportError:
+                    pass
+            return has
 
+        term_state = _save_terminal_state()
         self._state.has_embeddings = await asyncio.to_thread(_preload_and_check)
+        _restore_terminal_state(term_state)
 
         if self._state.has_claude_cli:
             method = "semantic" if self._state.has_embeddings else "keyword"
