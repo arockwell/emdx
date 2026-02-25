@@ -342,6 +342,7 @@ class TestTaskList:
             exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -355,6 +356,7 @@ class TestTaskList:
             exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -368,6 +370,7 @@ class TestTaskList:
             exclude_delegate=False,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -381,6 +384,7 @@ class TestTaskList:
             exclude_delegate=False,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -394,6 +398,7 @@ class TestTaskList:
             exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -407,6 +412,7 @@ class TestTaskList:
             exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -420,6 +426,7 @@ class TestTaskList:
             exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -433,6 +440,7 @@ class TestTaskList:
             exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
+            since=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
@@ -460,6 +468,90 @@ class TestTaskList:
         result = runner.invoke(app, ["list"])
         out = _out(result)
         assert "quite a bit" in out
+
+
+class TestTaskListDateFilters:
+    """Tests for task list --since and --today date filters."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_since_passes_date_to_model(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "--done", "--since", "2026-01-15"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["done"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
+            since="2026-01-15",
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_since_implies_done(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "--since", "2026-01-15"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["done"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
+            since="2026-01-15",
+        )
+
+    @patch("emdx.commands.tasks.date")
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_today_uses_current_date(self, mock_tasks, mock_date):
+        mock_date.today.return_value.isoformat.return_value = "2026-02-25"
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "--today"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["done"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
+            since="2026-02-25",
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_since_invalid_date_exits_with_error(self, mock_tasks):
+        result = runner.invoke(app, ["list", "--since", "not-a-date"])
+        assert result.exit_code == 1
+        assert "Invalid date format" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_since_with_status_override(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(
+            app, ["list", "--since", "2026-01-01", "-s", "done,wontdo"]
+        )
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["done", "wontdo"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
+            since="2026-01-01",
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_without_date_filters_passes_no_since(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "--done"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["done"],
+            limit=20,
+            exclude_delegate=True,
+            epic_key=None,
+            parent_task_id=None,
+            since=None,
+        )
 
 
 class TestTaskDelete:

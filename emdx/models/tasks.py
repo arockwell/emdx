@@ -243,6 +243,7 @@ def list_tasks(
     exclude_delegate: bool = False,
     epic_key: str | None = None,
     parent_task_id: int | None = None,
+    since: str | None = None,
 ) -> list[TaskDict]:
     """List tasks with filters.
 
@@ -250,6 +251,7 @@ def list_tasks(
         exclude_delegate: If True, exclude delegate-created tasks (prompt IS NULL).
         epic_key: Filter by category key.
         parent_task_id: Filter by parent task (epic) ID.
+        since: ISO date string (YYYY-MM-DD). Filter to tasks completed on or after this date.
     """
     conditions: list[str] = ["1=1"]
     params: list[str | int | None] = []
@@ -271,6 +273,9 @@ def list_tasks(
     if parent_task_id is not None:
         conditions.append("parent_task_id = ?")
         params.append(parent_task_id)
+    if since:
+        conditions.append("completed_at >= ?")
+        params.append(since)
 
     params.append(limit)
 
