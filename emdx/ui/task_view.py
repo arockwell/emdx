@@ -849,11 +849,13 @@ class TaskView(Widget):
         except Exception as e:
             logger.debug(f"Error loading dependents: {e}")
 
-        # Description
+        # Description (render as markdown)
         if task.get("description"):
             detail_log.write("")
             detail_log.write("[bold]Description:[/bold]")
-            detail_log.write(task["description"])
+            from emdx.ui.markdown_config import MarkdownConfig
+
+            detail_log.write(MarkdownConfig.create_markdown(task["description"]))
 
         # Error info
         if task.get("error"):
@@ -930,11 +932,13 @@ class TaskView(Widget):
         else:
             detail_log.write(f"Status: [bold]{task['status']}[/bold]")
 
-        # Description
+        # Description (render as markdown)
         if task.get("description"):
             detail_log.write("")
             detail_log.write("[bold]Description:[/bold]")
-            detail_log.write(task["description"])
+            from emdx.ui.markdown_config import MarkdownConfig
+
+            detail_log.write(MarkdownConfig.create_markdown(task["description"]))
 
         # Load and display child tasks
         try:
