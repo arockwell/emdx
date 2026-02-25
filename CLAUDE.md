@@ -195,7 +195,7 @@ emdx delegate --branch -b develop "add feature X"
 emdx delegate --doc 42 --pr "fix the bug"
 ```
 
-**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `--sonnet`, `--opus`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--epic`/`-e`, `--cat`/`-c`, `--cleanup`
+**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `--sonnet`, `--opus`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--epic`/`-e`, `--cat`/`-c`, `--tool` (extra allowed tools), `--cleanup`
 
 ### Quick Reference
 

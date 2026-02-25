@@ -1051,6 +1051,7 @@ emdx delegate --worktree --pr "fix X"
 | `--base-branch` | `-b` | Base branch for worktree (default: main) |
 | `--epic` | `-e` | Epic task ID to add tasks to |
 | `--cat` | `-c` | Category key for auto-numbered tasks |
+| `--tool` | | Extra allowed tool patterns (repeatable, e.g. `--tool 'Bash(gh:*)'`) |
 | `--cleanup` | | Remove stale delegate worktrees (>1 hour old) |
 | `--json` | | Structured JSON output (implies `--quiet`) |
 
@@ -1164,6 +1165,14 @@ emdx task view 1
 ```bash
 # List all tasks
 emdx task list
+
+# List by status or category
+emdx task list --done
+emdx task list --cat FEAT
+
+# Filter completed tasks by date
+emdx task list --done --today
+emdx task list --done --since 2026-02-15
 ```
 
 ### Updating Task Status
