@@ -226,6 +226,7 @@ class TaskView(Widget):
     #task-detail-log {
         height: 1fr;
         padding: 0 1;
+        scrollbar-gutter: stable;
     }
     """
 
@@ -802,6 +803,40 @@ class TaskView(Widget):
         if task:
             self._render_task_detail(task)
 
+    def _detail_content_width(self, detail_log: RichLog) -> int:
+        """Return the usable content width of the detail RichLog.
+
+        Uses ``content_region`` which subtracts CSS padding from ``size``,
+        then removes one more column as a safety margin for the scrollbar
+        (``scrollbar-gutter: stable`` reserves space, but an extra column
+        prevents edge-case overflow).
+        """
+        return max(30, detail_log.content_region.width - 1)
+
+    def _write_wrapped(
+        self,
+        detail_log: RichLog,
+        text: str,
+        width: int,
+        *,
+        prefix: str = "",
+        prefix_width: int = 0,
+    ) -> None:
+        """Write *text* to *detail_log*, pre-wrapped at *width*.
+
+        If *prefix* is given it is prepended to every wrapped line, and
+        *prefix_width* visible characters are subtracted from the available
+        wrap width so that ``prefix + subline`` never exceeds *width*.
+        """
+        wrap_at = max(20, width - prefix_width)
+        for line in text.split("\n"):
+            if not line:
+                detail_log.write(prefix if prefix else "")
+                continue
+            wrapped = textwrap.wrap(line, width=wrap_at) or [""]
+            for subline in wrapped:
+                detail_log.write(f"{prefix}{subline}")
+
     def _render_task_detail(self, task: TaskDict) -> None:
         """Render full task detail in the right pane."""
         # Epic tasks get a specialized view with child task listing
@@ -878,15 +913,18 @@ class TaskView(Widget):
             logger.debug(f"Error loading dependents: {e}")
 
         # Description
-        if task.get("description"):
+        content_w = self._detail_content_width(detail_log)
+        desc = task.get("description") or ""
+        if desc:
             detail_log.write("")
             detail_log.write("[bold]Description:[/bold]")
-            detail_log.write(task["description"])
+            self._write_wrapped(detail_log, desc, content_w)
 
         # Error info
-        if task.get("error"):
+        err = task.get("error") or ""
+        if err:
             detail_log.write("")
-            detail_log.write(f"[red bold]Error:[/red bold] {task['error']}")
+            self._write_wrapped(detail_log, err, content_w, prefix="[red bold]Error:[/red bold] ")
 
         # Work log
         try:
@@ -897,7 +935,6 @@ class TaskView(Widget):
                 # Pre-wrap message lines so continuations stay inside gutter
                 gutter = "  [dim]│[/dim] "
                 gutter_width = 4  # "  │ " = 4 visible chars
-                wrap_width = max(30, detail_log.size.width - gutter_width - 1)
                 last = len(log_entries) - 1
                 for i, entry in enumerate(log_entries):
                     # created_at may be datetime obj from sqlite — coerce to str
@@ -907,13 +944,13 @@ class TaskView(Widget):
                     ts_part = f" {time_str}" if time_str else ""
                     detail_log.write(f"  [bold cyan]●[/bold cyan] [dim]{ts_part}[/dim]")
                     # Message body with gutter line, pre-wrapped
-                    for line in entry["message"].split("\n"):
-                        if not line:
-                            detail_log.write(gutter)
-                            continue
-                        wrapped = textwrap.wrap(line, width=wrap_width)
-                        for subline in wrapped or [""]:
-                            detail_log.write(f"{gutter}{subline}")
+                    self._write_wrapped(
+                        detail_log,
+                        entry["message"],
+                        content_w,
+                        prefix=gutter,
+                        prefix_width=gutter_width,
+                    )
                     # Connector or terminal cap
                     if i < last:
                         detail_log.write("  [dim]│[/dim]")
@@ -959,10 +996,12 @@ class TaskView(Widget):
             detail_log.write(f"Status: [bold]{task['status']}[/bold]")
 
         # Description
-        if task.get("description"):
+        content_w = self._detail_content_width(detail_log)
+        epic_desc = task.get("description") or ""
+        if epic_desc:
             detail_log.write("")
             detail_log.write("[bold]Description:[/bold]")
-            detail_log.write(task["description"])
+            self._write_wrapped(detail_log, epic_desc, content_w)
 
         # Load and display child tasks
         try:

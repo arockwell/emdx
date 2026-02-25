@@ -1795,3 +1795,115 @@ class TestCrossGroupEpicClustering:
             icons = _table_cell_texts(table, "icon")
             # No tree connectors for true orphans
             assert not any("├─" in i or "└─" in i for i in icons)
+
+
+# ===================================================================
+# Long-line wrapping (Issue #868)
+# ===================================================================
+
+
+class TestLongLineWrapping:
+    """Verify that long lines wrap within the panel and preserve the gutter."""
+
+    LONG_URL = "https://example.com/" + "a" * 200
+
+    @pytest.mark.asyncio
+    async def test_long_description_stays_within_panel(self, mock_task_data: MockDict) -> None:
+        """A long unbreakable description line is pre-wrapped, not raw."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open", description=self.LONG_URL),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(80, 30)) as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Description:" in text
+            # The full URL must NOT appear on a single RichLog line — it
+            # should be broken across multiple lines by _write_wrapped.
+            for line in detail.lines:
+                assert len(line.text) <= 80
+
+    @pytest.mark.asyncio
+    async def test_long_work_log_preserves_gutter(self, mock_task_data: MockDict) -> None:
+        """Work-log lines with long URLs keep the │ gutter on every line."""
+        long_msg = "See " + self.LONG_URL
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active"),
+        ]
+        mock_task_data["get_task_log"].return_value = [
+            make_log_entry(message=long_msg),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(80, 30)) as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Work Log:" in text
+            # Every content line between ● and ╵ must contain the gutter
+            in_log = False
+            for line in detail.lines:
+                lt = line.text
+                if "●" in lt:
+                    in_log = True
+                    continue
+                if "╵" in lt:
+                    break
+                if in_log and lt.strip():
+                    assert "│" in lt, f"Gutter missing on line: {lt!r}"
+
+    @pytest.mark.asyncio
+    async def test_long_work_log_lines_fit_panel_width(self, mock_task_data: MockDict) -> None:
+        """No pre-wrapped work-log line exceeds the terminal width."""
+        long_msg = "x" * 300
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="active"),
+        ]
+        mock_task_data["get_task_log"].return_value = [
+            make_log_entry(message=long_msg),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(80, 30)) as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            for line in detail.lines:
+                assert len(line.text) <= 80, f"Line exceeds panel width: {len(line.text)} chars"
+
+    @pytest.mark.asyncio
+    async def test_long_error_text_wraps(self, mock_task_data: MockDict) -> None:
+        """A long error message is wrapped, not rendered raw."""
+        long_err = "Error: " + "e" * 300
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="failed", error=long_err),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(80, 30)) as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Error:" in text
+            for line in detail.lines:
+                assert len(line.text) <= 80
+
+    @pytest.mark.asyncio
+    async def test_multiline_description_wraps_each_line(self, mock_task_data: MockDict) -> None:
+        """Multi-line descriptions wrap each paragraph independently."""
+        desc = "Short line.\n" + "b" * 200 + "\nAnother short line."
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, status="open", description=desc),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(80, 30)) as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            text = _richlog_text(detail)
+            assert "Short line." in text
+            assert "Another short line." in text
+            for line in detail.lines:
+                assert len(line.text) <= 80
+
