@@ -1000,6 +1000,7 @@ class TaskView(Widget):
         if self._zoomed:
             list_panel.add_class("zoom-hidden")
             detail_panel.add_class("zoom-full")
+            self.query_one("#task-detail-log", RichLog).focus()
         else:
             list_panel.remove_class("zoom-hidden")
             detail_panel.remove_class("zoom-full")

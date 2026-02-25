@@ -597,6 +597,7 @@ class QAScreen(HelpMixin, Widget):
         if self._zoomed:
             history_panel.add_class("zoom-hidden")
             answer_panel.add_class("zoom-full")
+            self.query_one("#qa-answer-panel").focus()
         else:
             history_panel.remove_class("zoom-hidden")
             answer_panel.remove_class("zoom-full")
