@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-02-25
+
+**TUI polish and delegate improvements.** The QA screen got a visual overhaul — answers now render in structured sections with metadata badges, and the history table shows timestamps, elapsed time, source counts, and retrieval method. Clickable `#N` document references now work in QA answers. The task list gained date filters, and delegates can now grant extra tool permissions.
+
+### 🔧 Improvements
+
+- **QA screen visual polish** — answer panel renders with `### ❓ Question`, `### 📚 Sources`, `### ✅ Answer` section headers and a footer badge line showing elapsed time, retrieval method, and source count. History table now has columns for time, elapsed, sources, and mode (#886, Issue #TUI-14)
+- **Clickable doc refs in QA answers** — `#N` references in QA answers are now clickable, opening a fullscreen document preview (#887, Issue #FEAT-55)
+- **`delegate --tool`** — grant extra tool permissions to delegates beyond the defaults (repeatable, e.g. `--tool 'Bash(gh:*)'`) (#878, Issue #869)
+- **`task list --since` and `--today`** — filter completed tasks by date, useful for daily standups and progress reviews (#877, Issue #874)
+- **Task work log as markdown** — work log entries in the task detail pane now render as markdown instead of plain text (#890)
+
+### 🐛 Bug Fixes
+
+- **QA answer panel rewrite** — replaced RichLog-based answer rendering with VerticalScroll+Markdown pattern, fixing sizing issues and improving scroll behavior (#885, Issue #844)
+- **Zoom toggle regression** — `z` key now correctly unzooms on all three TUI screens. The bug was caused by Textual dropping focus when the DataTable was hidden (#884, Issue #TUI-35)
+- **Unified task/epic ID resolution** — task commands now consistently resolve both numeric IDs and `CAT-N` keys, and `task epic attach` works correctly (#879, Issues #870-#873)
+- **TUI long line wrapping** — pre-wrap long lines in detail panes to prevent terminal gutter corruption (#881, Issue #868)
+- **Epic clustering in status view** — cross-group epic children now cluster correctly instead of appearing as orphans (#880, Issue #866)
+- **Delegate stderr progress** — parallel delegates now emit `starting` and `done` progress lines to stderr, making execution visible even when stdout is buffered (#888, Issue #FIX-19)
+
+[0.23.1]: https://github.com/arockwell/emdx/compare/v0.23.0...v0.23.1
+
 ## [0.23.0] - 2026-02-24
 
 **The wiki quality release.** Seven GitHub issues closed in one session — the entire Wiki Quality & Workflow Improvements epic (FEAT-73). Topic clustering now produces readable labels instead of raw code identifiers, a new `wiki setup` command bootstraps the full pipeline in one shot, and `wiki triage` lets you bulk-skip or auto-label topics without 70+ individual commands. Generation got backpressure support and a progress dashboard.
