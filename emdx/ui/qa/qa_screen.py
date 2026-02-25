@@ -1,7 +1,7 @@
 """
 QA Screen - Conversational Q&A over your knowledge base.
 
-Layout: Input bar | History panel (left) + Answer panel (right) | Status | Nav
+Layout: Input bar | History panel (top) + Answer panel (bottom) | Status | Nav
 
 History panel shows a DataTable of past questions. Answer panel shows the
 selected entry's full answer with inline sources. Clicking a #N doc ref
@@ -57,7 +57,7 @@ class QAScreen(HelpMixin, Widget):
     """
     Conversational Q&A widget over your knowledge base.
 
-    Layout: Input bar | History (left) + Answer (right) | Status bar | Nav bar
+    Layout: Input bar | History (top) + Answer (bottom) | Status bar | Nav bar
     """
 
     HELP_TITLE = "Q&A"
@@ -65,8 +65,8 @@ class QAScreen(HelpMixin, Widget):
     BINDINGS = [
         Binding("enter", "submit_question", "Ask", show=True),
         Binding("escape", "exit_qa", "Exit"),
-        Binding("tab", "toggle_input_focus", "Input", show=False),
-        Binding("shift+tab", "toggle_input_focus", "Input", show=False),
+        Binding("tab", "cycle_focus", "Next Pane", show=False),
+        Binding("shift+tab", "cycle_focus_reverse", "Prev Pane", show=False),
         Binding("slash", "focus_input", "Focus Input"),
         Binding("j", "history_down", "Next", show=False),
         Binding("k", "history_up", "Prev", show=False),
@@ -74,6 +74,8 @@ class QAScreen(HelpMixin, Widget):
         Binding("c", "clear_history", "Clear"),
         Binding("question_mark", "show_help", "Help"),
         Binding("z", "toggle_zoom", "Zoom", show=False),
+        Binding("space", "scroll_answer_down", "Page Down", show=False),
+        Binding("shift+space", "scroll_answer_up", "Page Up", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -221,8 +223,8 @@ class QAScreen(HelpMixin, Widget):
         yield Static(
             "[dim]1[/dim] Docs | [dim]2[/dim] Tasks | [bold]3[/bold] Q&A | "
             "[dim]/[/dim] type | [dim]j/k[/dim] history | "
-            "[dim]Enter[/dim] ask | [dim]s[/dim] save | [dim]c[/dim] clear | "
-            "[dim]z[/dim] zoom",
+            "[dim]Tab[/dim] pane | [dim]Space[/dim] scroll | "
+            "[dim]s[/dim] save | [dim]z[/dim] zoom",
             id="qa-nav",
         )
 
@@ -341,7 +343,11 @@ class QAScreen(HelpMixin, Widget):
     def _show_md_scroll(self) -> None:
         """Show the Markdown scroll, hide the streaming RichLog."""
         self.query_one("#qa-answer-stream-scroll").display = False
-        self.query_one("#qa-answer-md-scroll").display = True
+        md_scroll = self.query_one(
+            "#qa-answer-md-scroll", ScrollableContainer
+        )
+        md_scroll.display = True
+        md_scroll.scroll_home(animate=False)
 
     def _render_answer_panel(self, entry: QAEntry) -> None:
         """Render a completed entry in the answer panel Markdown widget."""
@@ -571,13 +577,71 @@ class QAScreen(HelpMixin, Widget):
         """Focus the question input."""
         self.query_one("#qa-input", Input).focus()
 
-    def action_toggle_input_focus(self) -> None:
-        """Toggle focus between input and history table."""
+    def _focus_answer_panel(self) -> None:
+        """Focus the visible answer scroll container."""
+        md_scroll = self.query_one("#qa-answer-md-scroll")
+        stream_scroll = self.query_one("#qa-answer-stream-scroll")
+        if md_scroll.display:
+            md_scroll.focus()
+        elif stream_scroll.display:
+            stream_scroll.focus()
+
+    def _answer_panel_has_focus(self) -> bool:
+        """Check if either answer scroll container has focus."""
+        try:
+            md_scroll = self.query_one("#qa-answer-md-scroll")
+            stream_scroll = self.query_one("#qa-answer-stream-scroll")
+            return md_scroll.has_focus or stream_scroll.has_focus
+        except Exception:
+            return False
+
+    def _get_visible_answer_scroll(self) -> ScrollableContainer | None:
+        """Return the currently visible answer scroll container."""
+        md_scroll = self.query_one(
+            "#qa-answer-md-scroll", ScrollableContainer
+        )
+        stream_scroll = self.query_one(
+            "#qa-answer-stream-scroll", ScrollableContainer
+        )
+        if md_scroll.display:
+            return md_scroll
+        if stream_scroll.display:
+            return stream_scroll
+        return None
+
+    def action_cycle_focus(self) -> None:
+        """Cycle focus: input -> table -> answer panel -> input."""
         inp = self.query_one("#qa-input", Input)
+        table = self.query_one("#qa-history-table", DataTable)
         if inp.has_focus:
-            self.query_one("#qa-history-table", DataTable).focus()
+            table.focus()
+        elif table.has_focus:
+            self._focus_answer_panel()
         else:
             inp.focus()
+
+    def action_cycle_focus_reverse(self) -> None:
+        """Reverse cycle: input -> answer panel -> table -> input."""
+        inp = self.query_one("#qa-input", Input)
+        table = self.query_one("#qa-history-table", DataTable)
+        if inp.has_focus:
+            self._focus_answer_panel()
+        elif table.has_focus:
+            inp.focus()
+        else:
+            table.focus()
+
+    def action_scroll_answer_down(self) -> None:
+        """Scroll the answer panel down one page."""
+        scroll = self._get_visible_answer_scroll()
+        if scroll:
+            scroll.scroll_page_down()
+
+    def action_scroll_answer_up(self) -> None:
+        """Scroll the answer panel up one page."""
+        scroll = self._get_visible_answer_scroll()
+        if scroll:
+            scroll.scroll_page_up()
 
     def action_history_down(self) -> None:
         """Move down in history table."""
@@ -597,6 +661,7 @@ class QAScreen(HelpMixin, Widget):
         if self._zoomed:
             history_panel.add_class("zoom-hidden")
             answer_panel.add_class("zoom-full")
+            self._focus_answer_panel()
         else:
             history_panel.remove_class("zoom-hidden")
             answer_panel.remove_class("zoom-full")
@@ -670,7 +735,9 @@ class QAScreen(HelpMixin, Widget):
         try:
             search_input = self.query_one("#qa-input", Input)
             if search_input.has_focus:
-                pass_through_keys = {"s", "c", "j", "k", "z", "1", "2", "slash"}
+                pass_through_keys = {
+                    "s", "c", "j", "k", "z", "1", "2", "slash", "space",
+                }
                 if event.key in pass_through_keys:
                     return
         except Exception:
