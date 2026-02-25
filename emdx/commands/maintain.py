@@ -1140,5 +1140,10 @@ from emdx.commands.stale import app as stale_app  # noqa: E402
 
 app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
 
+# Register backup as a subcommand group
+from emdx.commands.backup import app as backup_app  # noqa: E402
+
+app.add_typer(backup_app, name="backup", help="Cloud backup and restore")
+
 if __name__ == "__main__":
     app()
