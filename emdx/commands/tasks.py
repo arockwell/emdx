@@ -71,7 +71,7 @@ def _resolve_id(
     """
     task_id = tasks.resolve_task_id(identifier)
     if task_id is None:
-        msg = f"Invalid task ID: {identifier}"
+        msg = f"Task not found: {identifier}"
         if json_output:
             print_json({"error": msg})
         else:
@@ -85,7 +85,7 @@ def add(
     title: str = typer.Argument(..., help="Task title"),
     doc: int | None = typer.Option(None, "-d", "--doc", help="Link to document ID"),
     description: str | None = typer.Option(None, "-D", "--description", help="Task description"),
-    epic: int | None = typer.Option(None, "-e", "--epic", help="Add to epic (task ID)"),
+    epic: str | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Category key (e.g. SEC)"),
     after: list[int] | None = typer.Option(
         None, "--after", help="Task IDs this depends on (repeatable)"
@@ -98,6 +98,7 @@ def add(
         emdx task add "Implement this" --doc 42
         emdx task add "Refactor tests" -D "Split into unit and integration"
         emdx task add "Test task" --epic 510
+        emdx task add "Test task" --epic SEC-1
         emdx task add "Another task" --cat SEC
         emdx task add "Deploy" --after 10 --after 11
     """
@@ -105,11 +106,12 @@ def add(
     epic_key = cat.upper() if cat else None
 
     if epic:
-        parent_task = tasks.get_task(epic)
+        epic_id = _resolve_id(epic)
+        parent_task = tasks.get_task(epic_id)
         if not parent_task:
-            console.print(f"[red]Epic #{epic} not found[/red]")
+            console.print(f"[red]Epic #{epic_id} not found[/red]")
             raise typer.Exit(1)
-        parent_task_id = epic
+        parent_task_id = epic_id
         # Inherit epic_key from the parent epic if not explicitly set
         if not epic_key and parent_task.get("epic_key"):
             epic_key = parent_task["epic_key"]
@@ -450,7 +452,7 @@ def list_cmd(
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
     done: bool = typer.Option(False, "--done", help="Show done tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
-    epic: int | None = typer.Option(None, "-e", "--epic", help="Filter by epic ID"),
+    epic: str | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -465,6 +467,7 @@ def list_cmd(
         emdx task list -s open,active
         emdx task list --cat SEC
         emdx task list --epic 510
+        emdx task list --epic SEC-1
     """
     if status:
         status_list = [s.strip() for s in status.split(",")]
@@ -473,13 +476,14 @@ def list_cmd(
     else:
         status_list = ["open", "active", "blocked"]
 
+    resolved_epic = _resolve_id(epic) if epic else None
     exclude_delegate = not all
     task_list = tasks.list_tasks(
         status=status_list,
         limit=limit,
         exclude_delegate=exclude_delegate,
         epic_key=cat,
-        parent_task_id=epic,
+        parent_task_id=resolved_epic,
     )
 
     if json_output:

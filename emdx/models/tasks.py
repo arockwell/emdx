@@ -195,13 +195,28 @@ def resolve_task_id(identifier: str) -> int | None:
       - Category-prefixed IDs like "TOOL-12" (looks up by epic_key + epic_seq)
       - Raw integer IDs like "42" or "#42"
 
+    For bare integers, first checks if a task with that database ID exists.
+    If not, falls back to searching by epic_seq (e.g. "49" might match TOOL-49).
+    When the epic_seq fallback finds exactly one match, returns it.
+
     Returns the database ID, or None if the format is invalid or task not found.
     """
     identifier = identifier.strip().lstrip("#")
 
     # Try plain integer first
     if identifier.isdigit():
-        return int(identifier)
+        int_id = int(identifier)
+        with db.get_connection() as conn:
+            # Check if a task with this database ID exists
+            cursor = conn.execute("SELECT id FROM tasks WHERE id = ?", (int_id,))
+            if cursor.fetchone():
+                return int_id
+            # Fall back: look for a task with this epic_seq number
+            cursor = conn.execute("SELECT id FROM tasks WHERE epic_seq = ?", (int_id,))
+            rows = cursor.fetchall()
+            if len(rows) == 1:
+                return int(rows[0][0])
+        return None
 
     # Try category-prefixed format (e.g. TOOL-12)
     match = _PREFIXED_ID_RE.match(identifier)
@@ -613,6 +628,61 @@ def get_epic_view(epic_id: int) -> EpicViewDict | None:
         raw["children"] = [cast(TaskDict, dict(row)) for row in child_cursor.fetchall()]
 
         return cast(EpicViewDict, raw)
+
+
+def attach_to_epic(task_ids: list[int], epic_id: int) -> int:
+    """Attach existing tasks to an epic.
+
+    Sets parent_task_id and inherits the epic's category key.
+    Assigns next epic_seq for tasks that don't already have one in this category.
+
+    Returns the number of tasks attached.
+    Raises ValueError if the epic doesn't exist or isn't an epic.
+    """
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT * FROM tasks WHERE id = ? AND type = 'epic'",
+            (epic_id,),
+        )
+        epic_row = cursor.fetchone()
+        if not epic_row:
+            raise ValueError(f"Epic #{epic_id} not found or is not an epic")
+
+        epic_key = epic_row["epic_key"]
+        attached = 0
+
+        for tid in task_ids:
+            task_cursor = conn.execute("SELECT * FROM tasks WHERE id = ?", (tid,))
+            task_row = task_cursor.fetchone()
+            if not task_row:
+                continue
+
+            # Skip if already attached to this epic
+            if task_row["parent_task_id"] == epic_id:
+                continue
+
+            updates = {"parent_task_id": epic_id}
+
+            # Assign epic_key and next epic_seq if needed
+            if epic_key and task_row["epic_key"] != epic_key:
+                seq_cursor = conn.execute(
+                    "SELECT COALESCE(MAX(epic_seq), 0) + 1 FROM tasks WHERE epic_key = ?",
+                    (epic_key,),
+                )
+                next_seq = seq_cursor.fetchone()[0]
+                updates["epic_key"] = epic_key
+                updates["epic_seq"] = next_seq
+
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            params = list(updates.values()) + [tid]
+            conn.execute(
+                f"UPDATE tasks SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                params,
+            )
+            attached += 1
+
+        conn.commit()
+        return attached
 
 
 def get_tasks_in_window(hours: int) -> list[TaskDict]:
