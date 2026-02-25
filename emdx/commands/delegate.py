@@ -47,6 +47,7 @@ from ..config.cli_config import (
     resolve_model_version,
 )
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
+from ..config.delegate_config import build_allowed_tools
 from ..database.documents import get_document
 from ..utils.git import generate_delegate_branch_name, validate_pr_preconditions
 
@@ -548,6 +549,7 @@ def _run_single(
     timeout: int | None = None,
     task_flag: int | None = None,
     print_content: bool = True,
+    extra_tools: list[str] | None = None,
 ) -> SingleResult:
     """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
     doc_title = title or f"Delegate: {prompt[:60]}"
@@ -636,16 +638,7 @@ def _run_single(
     # --print mode can't prompt for permission, so we must pre-authorize tools.
     # Use comma separator — space separator breaks patterns containing spaces
     # like "Bash(gh pr:*)" which gets split into "Bash(gh" + "pr:*)".
-    allowed = [
-        "Bash(git:*)",
-        "Bash(poetry:*)",
-        "Bash(ruff:*)",
-        "Bash(mypy:*)",
-        "Bash(pytest:*)",
-        "Bash(emdx:*)",
-    ]
-    if pr or branch:
-        allowed.append("Bash(gh:*)")
+    allowed = build_allowed_tools(pr=pr, branch=branch, extra_tools=extra_tools)
     cmd += ["--allowedTools", ",".join(allowed)]
 
     # Run the subprocess — hooks handle priming, saving, and task tracking
@@ -867,6 +860,7 @@ def _run_parallel(
     epic_key: str | None = None,
     epic_parent_id: int | None = None,
     task_flag: int | None = None,
+    extra_tools: list[str] | None = None,
 ) -> ParallelResult:
     """Run multiple tasks in parallel via ThreadPoolExecutor."""
     max_workers = min(jobs or len(tasks), len(tasks), 10)
@@ -931,6 +925,7 @@ def _run_parallel(
                     epic_key=epic_key,
                     task_flag=task_flag,
                     print_content=False,  # caller handles output streaming
+                    extra_tools=extra_tools,
                 ),
             )
             return result
@@ -1222,6 +1217,11 @@ def delegate(
         "-c",
         help="Category key for auto-numbered tasks",
     ),
+    tool: list[str] | None = typer.Option(
+        None,
+        "--tool",
+        help="Extra allowed tool patterns (repeatable, e.g. --tool 'Bash(gh:*)' --tool Read)",
+    ),
     cleanup: bool = typer.Option(
         False,
         "--cleanup",
@@ -1349,6 +1349,7 @@ def delegate(
         "-e",
         "--cat",
         "-c",
+        "--tool",
         "--cleanup",
         "--json",
     }
@@ -1382,6 +1383,12 @@ def delegate(
     if tags:
         for t in tags:
             flat_tags.extend(t.split(","))
+
+    # Flatten --tool flags (each value may be comma-separated)
+    extra_tools: list[str] = []
+    if tool and isinstance(tool, list):
+        for t in tool:
+            extra_tools.extend(t.split(","))
 
     # Resolve --epic and --cat to parent_task_id and epic_key
     epic_parent_id = None
@@ -1439,6 +1446,7 @@ def delegate(
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
                 task_flag=task,
+                extra_tools=extra_tools or None,
             )
             if json_output:
                 sys.stdout.write(json.dumps(single_result.to_dict(), indent=2) + "\n")
@@ -1467,6 +1475,7 @@ def delegate(
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
                 task_flag=task,
+                extra_tools=extra_tools or None,
             )
             if json_output:
                 sys.stdout.write(json.dumps(parallel_result.to_dict(), indent=2) + "\n")

@@ -2185,3 +2185,242 @@ class TestAllowedToolsSeparator:
         tools_idx = cmd.index("--allowedTools")
         tools_value = cmd[tools_idx + 1]
         assert "Bash(gh:*)" in tools_value
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_extra_tools_appended(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """extra_tools should be appended to the allowed tools list."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
+
+        _run_single(
+            prompt="analyze PR",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+            extra_tools=["Read", "Grep", "Bash(gh:*)"],
+        )
+
+        cmd = mock_subprocess.run.call_args[0][0]
+        tools_idx = cmd.index("--allowedTools")
+        tools_value = cmd[tools_idx + 1]
+        assert "Read" in tools_value.split(",")
+        assert "Grep" in tools_value.split(",")
+        assert "Bash(gh:*)" in tools_value.split(",")
+        # Base tools still present
+        assert "Bash(git:*)" in tools_value.split(",")
+
+    @patch("emdx.commands.delegate._read_batch_doc_id")
+    @patch("emdx.commands.delegate._safe_update_execution_status")
+    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_update_task")
+    @patch("emdx.commands.delegate._safe_create_task")
+    @patch("emdx.commands.delegate.subprocess")
+    def test_extra_tools_deduplicates(
+        self,
+        mock_subprocess,
+        mock_create,
+        mock_update,
+        mock_create_exec,
+        mock_update_exec,
+        mock_read_batch,
+    ):
+        """Duplicate tool patterns should not appear twice."""
+        mock_create.return_value = 1
+        mock_create_exec.return_value = 100
+        mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
+        mock_read_batch.return_value = 42
+
+        _run_single(
+            prompt="test dedup",
+            tags=[],
+            title=None,
+            model=None,
+            quiet=True,
+            extra_tools=["Bash(git:*)", "Read"],  # Bash(git:*) is already in base
+        )
+
+        cmd = mock_subprocess.run.call_args[0][0]
+        tools_idx = cmd.index("--allowedTools")
+        tools_value = cmd[tools_idx + 1]
+        tools_list = tools_value.split(",")
+        assert tools_list.count("Bash(git:*)") == 1
+        assert "Read" in tools_list
+
+
+# =============================================================================
+# Tests for build_allowed_tools (delegate_config.py)
+# =============================================================================
+
+
+class TestBuildAllowedTools:
+    """Test build_allowed_tools combines base, config, and extra tools."""
+
+    def test_base_tools_always_present(self):
+        """Base Bash tools are always included."""
+        from emdx.config.delegate_config import BASE_ALLOWED_TOOLS, build_allowed_tools
+
+        result = build_allowed_tools()
+        for tool in BASE_ALLOWED_TOOLS:
+            assert tool in result
+
+    def test_pr_adds_gh(self):
+        """pr=True adds Bash(gh:*)."""
+        from emdx.config.delegate_config import build_allowed_tools
+
+        result = build_allowed_tools(pr=True)
+        assert "Bash(gh:*)" in result
+
+    def test_branch_adds_gh(self):
+        """branch=True adds Bash(gh:*)."""
+        from emdx.config.delegate_config import build_allowed_tools
+
+        result = build_allowed_tools(branch=True)
+        assert "Bash(gh:*)" in result
+
+    def test_extra_tools_appended(self):
+        """Extra tools are appended to the list."""
+        from emdx.config.delegate_config import build_allowed_tools
+
+        result = build_allowed_tools(extra_tools=["Read", "Grep"])
+        assert "Read" in result
+        assert "Grep" in result
+
+    def test_deduplication(self):
+        """Duplicate tools are not repeated."""
+        from emdx.config.delegate_config import build_allowed_tools
+
+        result = build_allowed_tools(extra_tools=["Bash(git:*)", "Read"])
+        assert result.count("Bash(git:*)") == 1
+        assert "Read" in result
+
+    @patch("emdx.config.delegate_config.load_delegate_config")
+    def test_config_file_tools_loaded(self, mock_config):
+        """Tools from config file are included."""
+        from emdx.config.delegate_config import build_allowed_tools
+
+        mock_config.return_value = {"allowed_tools": ["Bash(npm:*)", "WebFetch"]}
+        result = build_allowed_tools()
+        assert "Bash(npm:*)" in result
+        assert "WebFetch" in result
+
+    @patch("emdx.config.delegate_config.load_delegate_config")
+    def test_config_plus_extra_deduplicates(self, mock_config):
+        """Config and extra tools are deduplicated against each other."""
+        from emdx.config.delegate_config import build_allowed_tools
+
+        mock_config.return_value = {"allowed_tools": ["Read"]}
+        result = build_allowed_tools(extra_tools=["Read", "Grep"])
+        assert result.count("Read") == 1
+        assert "Grep" in result
+
+
+# =============================================================================
+# Tests for --tool CLI flag
+# =============================================================================
+
+
+class TestToolFlag:
+    """Test --tool flag passes extra_tools to _run_single."""
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_tool_flag_passed_to_run_single(self, mock_run_single):
+        """--tool list should be flattened and passed as extra_tools."""
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["analyze the PR"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            json_output=False,
+            tool=["Read", "Bash(gh:*)"],
+        )
+
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["extra_tools"] == ["Read", "Bash(gh:*)"]
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_tool_flag_comma_separated(self, mock_run_single):
+        """--tool with comma-separated values should be flattened."""
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["analyze code"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            json_output=False,
+            tool=["Read,Grep,Glob"],
+        )
+
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["extra_tools"] == ["Read", "Grep", "Glob"]
+
+    @patch("emdx.commands.delegate._run_single")
+    def test_no_tool_flag_passes_none(self, mock_run_single):
+        """Without --tool, extra_tools should be None."""
+        mock_run_single.return_value = SingleResult(doc_id=42, task_id=1)
+        ctx = MagicMock()
+        ctx.invoked_subcommand = None
+
+        delegate(
+            ctx=ctx,
+            tasks=["analyze code"],
+            tags=None,
+            title=None,
+            synthesize=False,
+            jobs=None,
+            model=None,
+            quiet=False,
+            doc=None,
+            pr=False,
+            branch=False,
+            draft=False,
+            worktree=False,
+            base_branch="main",
+            json_output=False,
+            tool=None,
+        )
+
+        call_kwargs = mock_run_single.call_args[1]
+        assert call_kwargs["extra_tools"] is None
