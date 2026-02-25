@@ -432,7 +432,11 @@ class TestDetailPane:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            await _select_first_task(pilot)
+            # Navigate past status header + cross-group epic header to task row
+            await pilot.press("j")
+            await pilot.pause()
+            await pilot.press("j")
+            await pilot.pause()
             detail = app.query_one("#task-detail-log", RichLog)
             text = _richlog_text(detail)
             assert "AUTH" in text
@@ -1699,3 +1703,95 @@ class TestWontdoStatus:
             await pilot.pause()
 
             assert filter_input.value == "w"
+
+
+# ===================================================================
+# I. Cross-Group Epic Clustering
+# ===================================================================
+
+
+class TestCrossGroupEpicClustering:
+    """Tests for visual epic grouping when epic is in a different status group."""
+
+    @pytest.mark.asyncio
+    async def test_cross_group_children_show_epic_header(self, mock_task_data: MockDict) -> None:
+        """Children whose epic is in another status group show a reference header."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Child A", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Child B", status="open", epic_key="AUTH", parent_task_id=100),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="AUTH", child_count=5, children_done=3),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            # Should show a cross-group epic header with progress
+            assert any("AUTH" in t and "3/5 done" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_cross_group_children_have_tree_connectors(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Children under a cross-group epic use tree connectors."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Child A", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Child B", status="open", epic_key="AUTH", parent_task_id=100),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="AUTH"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            icons = _table_cell_texts(table, "icon")
+            # Should have tree connectors (├─ and └─)
+            assert any("├─" in i for i in icons)
+            assert any("└─" in i for i in icons)
+
+    @pytest.mark.asyncio
+    async def test_same_group_children_still_cluster_under_epic(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Children whose epic IS in the same status group cluster normally."""
+        epic_task = make_task(id=100, title="Auth Epic", status="open", epic_key="AUTH")
+        epic_task["type"] = "epic"
+        mock_task_data["list_tasks"].return_value = [
+            epic_task,
+            make_task(id=1, title="Child A", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Child B", status="open", epic_key="AUTH", parent_task_id=100),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="AUTH"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            icons = _table_cell_texts(table, "icon")
+            # Epic task should be rendered (no cross-group header needed)
+            assert any("Auth Epic" in t for t in titles)
+            # Children should have tree connectors
+            assert any("├─" in i for i in icons)
+            assert any("└─" in i for i in icons)
+            # No cross-group header (no "done" in title rows since epic is present)
+            assert not any("done" in t.lower() for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_true_orphans_render_flat(self, mock_task_data: MockDict) -> None:
+        """Tasks with no parent_task_id render as flat items (no connectors)."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Orphan A", status="open"),
+            make_task(id=2, title="Orphan B", status="open"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            icons = _table_cell_texts(table, "icon")
+            # No tree connectors for true orphans
+            assert not any("├─" in i or "└─" in i for i in icons)

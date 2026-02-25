@@ -445,11 +445,14 @@ class TaskView(Widget):
             )
 
             # Cluster children under their epic parent.
-            # Epic tasks render first, then their children with tree connectors,
-            # then orphan tasks (no parent) render normally.
+            # Epic tasks render first, then their children with tree connectors.
+            # Children whose epic is in another status group are clustered
+            # together with tree connectors (cross-group siblings).
+            # Tasks with no parent render normally.
             epic_ids_in_group = {t["id"] for t in tasks if t.get("type") == "epic"}
             children_by_parent: dict[int, list[TaskDict]] = defaultdict(list)
-            orphans: list[TaskDict] = []
+            cross_group_by_parent: dict[int, list[TaskDict]] = defaultdict(list)
+            true_orphans: list[TaskDict] = []
             epics_in_order: list[TaskDict] = []
 
             for task in tasks:
@@ -458,8 +461,11 @@ class TaskView(Widget):
                     epics_in_order.append(task)
                 elif parent_id and parent_id in epic_ids_in_group:
                     children_by_parent[parent_id].append(task)
+                elif parent_id:
+                    # Child whose epic is in a different status group
+                    cross_group_by_parent[parent_id].append(task)
                 else:
-                    orphans.append(task)
+                    true_orphans.append(task)
 
             # Render epics with their children
             for epic_task in epics_in_order:
@@ -470,8 +476,30 @@ class TaskView(Widget):
                     connector = "└─" if is_last else "├─"
                     self._render_task_row(table, child, tree_prefix=connector)
 
-            # Render orphan tasks (no epic parent in this group)
-            for task in orphans:
+            # Render cross-group children clustered under their epic
+            for parent_id, children in cross_group_by_parent.items():
+                epic_data = self._epics.get(parent_id)
+                if epic_data:
+                    ek = epic_data.get("epic_key", "")
+                    done = epic_data.get("children_done", 0)
+                    total = epic_data.get("child_count", 0)
+                    ref_text = f"{ek} ({done}/{total} done)"
+                else:
+                    ref_text = f"epic #{parent_id}"
+                table.add_row(
+                    "",
+                    "",
+                    Text(ref_text, style="dim cyan"),
+                    "",
+                    key=f"{HEADER_PREFIX}xepic:{parent_id}:{status}",
+                )
+                for i, child in enumerate(children):
+                    is_last = i == len(children) - 1
+                    connector = "└─" if is_last else "├─"
+                    self._render_task_row(table, child, tree_prefix=connector)
+
+            # Render true orphan tasks (no epic parent at all)
+            for task in true_orphans:
                 self._render_task_row(table, task)
 
     def _render_groups_by_epic(self, table: "DataTable[str | Text]") -> None:
