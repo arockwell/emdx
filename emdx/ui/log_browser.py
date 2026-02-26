@@ -16,6 +16,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -49,11 +50,7 @@ class LogBrowserSubscriber(LogStreamSubscriber):
 
 
 class LogBrowser(
-    HelpMixin,
-    LogBrowserDisplayMixin,
-    LogBrowserFilteringMixin,
-    LogBrowserNavigationMixin,
-    Widget
+    HelpMixin, LogBrowserDisplayMixin, LogBrowserFilteringMixin, LogBrowserNavigationMixin, Widget
 ):
     """Log browser widget for viewing execution logs with event-driven streaming.
 
@@ -121,6 +118,15 @@ class LogBrowser(
         padding: 0 1;
     }
 
+    /* Narrow (<120 cols): sidebar hidden, preview fills width */
+    .log-browser-content.sidebar-hidden #log-sidebar {
+        display: none;
+    }
+
+    .log-browser-content.sidebar-hidden #log-preview-container {
+        width: 100%;
+    }
+
     #log-content {
         padding: 1;
     }
@@ -141,6 +147,7 @@ class LogBrowser(
         self.current_stream: LogStream | None = None
         self.is_live_mode = False
         self.stream_subscriber = LogBrowserSubscriber(self)
+        self._sidebar_visible: bool = True
 
     def compose(self) -> ComposeResult:
         """Compose the log browser layout."""
@@ -170,12 +177,7 @@ class LogBrowser(
                     details_container.styles.padding = 0
                     details_container.styles.border_top = ("heavy", "gray")
 
-                    yield RichLog(
-                        id="log-details",
-                        wrap=True,
-                        markup=True,
-                        auto_scroll=False
-                    )
+                    yield RichLog(id="log-details", wrap=True, markup=True, auto_scroll=False)
 
             # Right preview panel (50% width) - equal split
             with Vertical(id="log-preview-container") as preview_container:
@@ -184,13 +186,17 @@ class LogBrowser(
                 preview_container.styles.padding = (0, 1)
 
                 yield ScrollableContainer(
-                    RichLog(id="log-content", wrap=True, highlight=True, markup=True,
-                            auto_scroll=False),
-                    id="log-preview"
+                    RichLog(
+                        id="log-content", wrap=True, highlight=True, markup=True, auto_scroll=False
+                    ),
+                    id="log-preview",
                 )
 
         # Status bar
         yield Static("Loading executions...", classes="log-status")
+
+    # Width threshold for showing/hiding sidebar
+    SIDEBAR_WIDTH_THRESHOLD = 120
 
     async def on_mount(self) -> None:
         """Initialize the log browser."""
@@ -201,11 +207,31 @@ class LogBrowser(
         table.add_column("", width=3)  # Status emoji column, no header
         table.add_column("Title", width=50)
 
+        # Apply initial sidebar visibility based on current width
+        self._update_sidebar_visibility()
+
         # Focus the table
         table.focus()
 
         # Load executions
         await self.load_executions()
+
+    def on_resize(self, event: events.Resize) -> None:
+        """Toggle sidebar visibility based on terminal width."""
+        self._update_sidebar_visibility()
+
+    def _update_sidebar_visibility(self) -> None:
+        """Show/hide sidebar based on current width."""
+        try:
+            content = self.query_one(".log-browser-content")
+        except Exception:
+            return
+        if self.size.width < self.SIDEBAR_WIDTH_THRESHOLD:
+            content.add_class("sidebar-hidden")
+            self._sidebar_visible = False
+        else:
+            content.remove_class("sidebar-hidden")
+            self._sidebar_visible = True
 
     async def on_focus(self) -> None:
         """Refresh executions when the log browser gains focus."""
@@ -232,11 +258,9 @@ class LogBrowser(
             table.clear()
 
             for execution in self.executions:
-                status_icon = {
-                    'running': '🔄',
-                    'completed': '✅',
-                    'failed': '❌'
-                }.get(execution.status, '❓')
+                status_icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(
+                    execution.status, "❓"
+                )
 
                 # Format title with ID prefix
                 title_with_id = f"#{execution.id} - {execution.doc_title}"
@@ -244,14 +268,10 @@ class LogBrowser(
                 if len(title_with_id) > 47:
                     title_with_id = title_with_id[:44] + "..."
 
-                table.add_row(
-                    status_icon,
-                    title_with_id
-                )
+                table.add_row(status_icon, title_with_id)
 
             status_text = (
-                f"📋 {len(self.executions)} executions | "
-                "j/k=navigate | s=select | l=live | q=back"
+                f"📋 {len(self.executions)} executions | j/k=navigate | s=select | l=live | q=back"
             )
             self.update_status(status_text)
 
@@ -313,7 +333,7 @@ class LogBrowser(
             # Update status to show live mode hint for running executions
             if self.is_live_mode:
                 self.update_status("🔴 LIVE MODE | l=toggle off | Event-driven streaming")
-            elif execution.status == 'running' and not self.selection_mode:
+            elif execution.status == "running" and not self.selection_mode:
                 self.update_status("📋 Execution running | Press 'l' for live mode | q=back")
 
     async def action_refresh(self) -> None:

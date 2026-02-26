@@ -119,14 +119,28 @@ def prepare_document_content(content: str, title: str) -> str:
     return f"# {title}\n\n{content}"
 
 
-def render_markdown_to_richlog(richlog: RichLog, content: str, title: str = "Untitled") -> str:
+def render_markdown_to_richlog(
+    richlog: RichLog,
+    content: str,
+    title: str = "Untitled",
+    *,
+    clear: bool = True,
+) -> str:
     """Render document content as markdown into a RichLog widget.
 
     Handles title prepending, truncation, and fallback on render errors.
     Returns the raw content (before markdown rendering) for copy mode.
+
+    Args:
+        richlog: Target RichLog widget.
+        content: Markdown content to render.
+        title: Document title (prepended as heading if missing).
+        clear: Whether to clear the RichLog before writing. Set to False
+            when appending after a metadata preamble.
     """
     prepared = prepare_document_content(content, title)
-    richlog.clear()
+    if clear:
+        richlog.clear()
 
     if not prepared.strip():
         richlog.write("[dim]Empty document[/dim]")

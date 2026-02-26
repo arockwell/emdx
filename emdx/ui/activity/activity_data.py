@@ -61,6 +61,19 @@ class ActivityDataLoader:
             logger.error(f"Error listing recent documents: {e}", exc_info=True)
             return items
 
+        # Bulk-load tags for all docs in one pass
+        doc_tags: dict[int, list[str]] = {}
+        try:
+            from emdx.models.tags import get_document_tags
+
+            for doc in docs:
+                doc_id = doc["id"]
+                doc_tags[doc_id] = get_document_tags(doc_id)
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Error bulk-loading tags: {e}")
+
         for doc in docs:
             try:
                 doc_id = doc["id"]
@@ -72,6 +85,10 @@ class ActivityDataLoader:
                 if doc_type_filter != "all" and doc_type != doc_type_filter:
                     continue
 
+                # Compute word count from content
+                content = doc.get("content", "")
+                word_count = len(content.split()) if content else 0
+
                 item = DocumentItem(
                     item_id=doc_id,
                     title=title or "Untitled",
@@ -79,6 +96,13 @@ class ActivityDataLoader:
                     timestamp=parse_datetime(created) or datetime.now(),
                     doc_id=doc_id,
                     doc_type=doc_type,
+                    project=doc.get("project", "") or "",
+                    tags=doc_tags.get(doc_id),
+                    access_count=doc.get("access_count", 0) or 0,
+                    word_count=word_count,
+                    updated_at=parse_datetime(doc.get("updated_at")),
+                    accessed_at=parse_datetime(doc.get("accessed_at")),
+                    parent_id=doc.get("parent_id"),
                 )
 
                 items.append(item)

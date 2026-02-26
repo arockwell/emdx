@@ -15,7 +15,7 @@ from rich.console import Console as RichConsole
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, RichLog, Static
@@ -190,14 +190,70 @@ class TaskView(Widget):
         height: 1fr;
     }
 
+    /* ── Top band: task list (+ future sidebar) ───────── */
+
     #task-list-panel {
         height: 40%;
         width: 100%;
     }
 
+    /* Wide (>=120 cols, default): list section 70%, sidebar 30% */
+    #task-list-section {
+        width: 70%;
+    }
+
+    #task-sidebar-section {
+        width: 30%;
+        border-left: solid $secondary;
+    }
+
+    /* Narrow (<120 cols): sidebar hidden, list fills band */
+    #task-list-panel.sidebar-hidden #task-sidebar-section {
+        display: none;
+    }
+
+    #task-list-panel.sidebar-hidden #task-list-section {
+        width: 100%;
+    }
+
+    /* ── Content pane: task detail ─────────────────────── */
+
+    #task-detail-panel {
+        height: 60%;
+        width: 100%;
+        border-top: solid $primary;
+    }
+
+    /* ── Zoom: content full-screen (list hidden) ──────── */
+    #task-list-panel.zoom-content {
+        display: none;
+    }
+
+    #task-detail-panel.zoom-content {
+        height: 100%;
+        border-top: none;
+    }
+
+    /* ── Zoom: list full-screen (content hidden) ──────── */
+    #task-detail-panel.zoom-list {
+        display: none;
+    }
+
+    #task-list-panel.zoom-list {
+        height: 100%;
+    }
+
+    /* ── Backward-compat aliases (existing zoom classes) ─ */
     #task-list-panel.zoom-hidden {
         display: none;
     }
+
+    #task-detail-panel.zoom-full {
+        height: 100%;
+        border-top: none;
+    }
+
+    /* ── Table and headers ────────────────────────────── */
 
     #task-list-header {
         height: 1;
@@ -210,15 +266,14 @@ class TaskView(Widget):
         scrollbar-size: 1 1;
     }
 
-    #task-detail-panel {
-        height: 60%;
-        width: 100%;
-        border-top: solid $primary;
+    #task-sidebar-header {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
     }
 
-    #task-detail-panel.zoom-full {
-        height: 100%;
-        border-top: none;
+    #task-sidebar-content {
+        padding: 0 1;
     }
 
     #task-detail-header {
@@ -254,20 +309,35 @@ class TaskView(Widget):
         self._group_by: str = "status"  # "status" or "epic"
         self._epic_filter: str | None = None  # Filter to specific epic key
         self._zoomed: bool = False
+        self._sidebar_visible: bool = True
+        self._current_task: TaskDict | None = None
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
         yield Input(placeholder="Filter tasks...", id="task-filter-input")
         with Vertical(id="task-main"):
-            with Vertical(id="task-list-panel"):
-                yield Static("TASKS", id="task-list-header")
-                table: DataTable[str | Text] = DataTable(
-                    id="task-table",
-                    cursor_type="row",
-                    zebra_stripes=True,
-                    show_header=False,
-                )
-                yield table
+            with Horizontal(id="task-list-panel"):
+                # Left: task list
+                with Vertical(id="task-list-section"):
+                    yield Static("TASKS", id="task-list-header")
+                    table: DataTable[str | Text] = DataTable(
+                        id="task-table",
+                        cursor_type="row",
+                        zebra_stripes=True,
+                        show_header=False,
+                    )
+                    yield table
+                # Right: metadata sidebar (hidden at narrow widths)
+                with Vertical(id="task-sidebar-section"):
+                    yield Static("DETAILS", id="task-sidebar-header")
+                    with ScrollableContainer(id="task-sidebar-scroll"):
+                        yield RichLog(
+                            id="task-sidebar-content",
+                            highlight=True,
+                            markup=True,
+                            wrap=True,
+                            auto_scroll=False,
+                        )
             with Vertical(id="task-detail-panel"):
                 yield Static("DETAIL", id="task-detail-header")
                 yield RichLog(
@@ -278,6 +348,9 @@ class TaskView(Widget):
                     auto_scroll=False,
                 )
 
+    # Width threshold for showing/hiding sidebar
+    SIDEBAR_WIDTH_THRESHOLD = 120
+
     async def on_mount(self) -> None:
         """Load tasks on mount."""
         table = self.query_one("#task-table", DataTable)
@@ -285,8 +358,44 @@ class TaskView(Widget):
         table.add_column("epic", key="epic", width=7)
         table.add_column("title", key="title")
         table.add_column("age", key="age", width=4)
+
+        # Apply initial sidebar visibility based on current width
+        self._update_sidebar_visibility()
+
         await self._load_tasks()
         table.focus()
+
+        # After layout is complete, move the cursor to the first actual task
+        # row (skipping section headers) and re-render the detail pane.
+        # On first mount, RowHighlighted fires during _load_tasks before layout
+        # is done, and the cursor lands on a header row — both issues cause
+        # an empty detail pane.
+        def _deferred_select_first_task() -> None:
+            self._update_sidebar_visibility()
+            self._select_first_task_row()
+
+        self.call_after_refresh(_deferred_select_first_task)
+
+    def on_resize(self, event: events.Resize) -> None:
+        """Toggle sidebar visibility based on terminal width."""
+        self._update_sidebar_visibility()
+
+    def _update_sidebar_visibility(self) -> None:
+        """Show/hide sidebar based on current width."""
+        try:
+            panel = self.query_one("#task-list-panel")
+        except Exception:
+            return
+        was_visible = self._sidebar_visible
+        if self.size.width < self.SIDEBAR_WIDTH_THRESHOLD:
+            panel.add_class("sidebar-hidden")
+            self._sidebar_visible = False
+        else:
+            panel.remove_class("sidebar-hidden")
+            self._sidebar_visible = True
+        # Re-render detail if sidebar visibility changed
+        if was_visible != self._sidebar_visible and self._current_task:
+            self._render_task_detail(self._current_task)
 
     async def _load_tasks(self, *, restore_row: int | None = None) -> None:
         """Load all manual tasks from the database."""
@@ -593,6 +702,15 @@ class TaskView(Widget):
                     self._render_task_row(table, task, tree_prefix=connector)
                 else:
                     self._render_task_row(table, task)
+
+    def _select_first_task_row(self) -> None:
+        """Move cursor to the first actual task row (skip headers/separators)."""
+        table = self.query_one("#task-table", DataTable)
+        for i, row in enumerate(table.ordered_rows):
+            key = str(row.key.value)
+            if not key.startswith(HEADER_PREFIX) and not key.startswith(SEPARATOR_PREFIX):
+                table.move_cursor(row=i)
+                return
 
     def _select_row_by_key(self, key: str) -> None:
         """Move cursor to a row by its key string."""
@@ -913,14 +1031,20 @@ class TaskView(Widget):
                 detail_log.write(prefixed)
 
     def _render_task_detail(self, task: TaskDict) -> None:
-        """Render full task detail in the right pane."""
+        """Render full task detail — routes metadata to sidebar or inline."""
+        self._current_task = task
+
         # Epic tasks get a specialized view with child task listing
         if task.get("type") == "epic":
             self._render_epic_detail(task)
             return
 
-        detail_log = self.query_one("#task-detail-log", RichLog)
-        header = self.query_one("#task-detail-header", Static)
+        try:
+            detail_log = self.query_one("#task-detail-log", RichLog)
+            header = self.query_one("#task-detail-header", Static)
+        except Exception as e:
+            logger.warning("_render_task_detail: detail widgets not found: %s", e)
+            return
 
         detail_log.clear()
 
@@ -931,23 +1055,52 @@ class TaskView(Widget):
         detail_log.write(f"[bold]{task['title']}[/bold]")
         detail_log.write("")
 
+        if self._sidebar_visible:
+            # Wide: metadata in sidebar, content in detail pane
+            try:
+                sidebar_log = self.query_one("#task-sidebar-content", RichLog)
+                sidebar_header = self.query_one("#task-sidebar-header", Static)
+                sidebar_log.clear()
+                sidebar_header.update(f"{icon} #{task['id']}")
+                self._render_task_metadata(sidebar_log, task)
+            except Exception as e:
+                logger.warning("Sidebar not ready: %s", e)
+        else:
+            # Narrow: metadata inline in detail pane
+            self._render_task_metadata(detail_log, task)
+            detail_log.write("")
+            detail_log.write("[dim]───[/dim]")
+
+        self._render_task_content(detail_log, task)
+
+    def _render_task_metadata(self, target: RichLog, task: TaskDict) -> None:
+        """Write task metadata (status, deps, blocks) to a RichLog target.
+
+        Works for both the sidebar (30 cols) and the detail pane (full width).
+        """
         # Status / Priority / Epic
-        meta_parts = []
+        meta_parts: list[str] = []
         meta_parts.append(f"Status: [bold]{task['status']}[/bold]")
-        meta_parts.append(f"Priority: {task['priority']}")
+        pri = task.get("priority", 3)
+        if pri <= 1:
+            meta_parts.append(f"Priority: [bold red]{pri} !!![/bold red]")
+        elif pri <= 2:
+            meta_parts.append(f"Priority: [yellow]{pri} !![/yellow]")
+        else:
+            meta_parts.append(f"Priority: {pri}")
         if task.get("epic_key"):
             parent_id = task.get("parent_task_id")
             epic = self._epics.get(parent_id) if parent_id else None
             if epic:
                 done = epic.get("children_done", 0)
                 total = epic.get("child_count", 0)
-                meta_parts.append(f"Epic: {task['epic_key']} ({done}/{total} done)")
+                meta_parts.append(f"Epic: [cyan]{task['epic_key']}[/cyan] ({done}/{total} done)")
             else:
-                meta_parts.append(f"Epic: {task['epic_key']}")
-        detail_log.write("  ".join(meta_parts))
+                meta_parts.append(f"Epic: [cyan]{task['epic_key']}[/cyan]")
+        target.write("  ".join(meta_parts))
 
         # Timestamps
-        time_parts = []
+        time_parts: list[str] = []
         if task.get("created_at"):
             time_parts.append(f"Created {_format_time_ago(task['created_at'])}")
         if task.get("updated_at"):
@@ -955,91 +1108,85 @@ class TaskView(Widget):
         if task.get("completed_at"):
             time_parts.append(f"Completed {_format_time_ago(task['completed_at'])}")
         if time_parts:
-            detail_log.write(f"[dim]{' · '.join(time_parts)}[/dim]")
+            target.write(f"[dim]{' · '.join(time_parts)}[/dim]")
 
         if task.get("tags"):
-            detail_log.write(f"Tags: {task['tags']}")
+            target.write(f"Tags: {task['tags']}")
 
         # Dependencies
         try:
             deps = get_dependencies(task["id"])
             if deps:
-                detail_log.write("")
-                detail_log.write("[bold]Depends on:[/bold]")
+                target.write("")
+                target.write("[bold]Depends on:[/bold]")
                 for dep in deps:
                     dep_icon = STATUS_ICONS.get(dep["status"], "?")
-                    detail_log.write(
-                        f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]"
-                    )
+                    target.write(f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]")
         except Exception as e:
             logger.debug(f"Error loading dependencies: {e}")
 
         try:
             dependents = get_dependents(task["id"])
             if dependents:
-                detail_log.write("")
-                detail_log.write("[bold]Blocks:[/bold]")
+                target.write("")
+                target.write("[bold]Blocks:[/bold]")
                 for dep in dependents:
                     dep_icon = STATUS_ICONS.get(dep["status"], "?")
-                    detail_log.write(
-                        f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]"
-                    )
+                    target.write(f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]")
         except Exception as e:
             logger.debug(f"Error loading dependents: {e}")
 
+        # Execution info
+        if task.get("execution_id"):
+            target.write("")
+            target.write(f"[bold]Execution:[/bold] #{task['execution_id']}")
+        if task.get("output_doc_id"):
+            target.write(f"Output doc: #{task['output_doc_id']}")
+
+    def _render_task_content(self, target: RichLog, task: TaskDict) -> None:
+        """Write task content (description, error, work log) to a RichLog target."""
+        content_w = self._detail_content_width(target)
+
         # Description
-        content_w = self._detail_content_width(detail_log)
         desc = task.get("description") or ""
         if desc:
-            detail_log.write("")
-            detail_log.write("[bold]Description:[/bold]")
-            self._write_wrapped(detail_log, desc, content_w)
+            target.write("")
+            target.write("[bold]Description:[/bold]")
+            self._write_wrapped(target, desc, content_w)
 
         # Error info
         err = task.get("error") or ""
         if err:
-            detail_log.write("")
-            self._write_wrapped(detail_log, err, content_w, prefix="[red bold]Error:[/red bold] ")
+            target.write("")
+            self._write_wrapped(target, err, content_w, prefix="[red bold]Error:[/red bold] ")
 
         # Work log
         try:
             log_entries: list[TaskLogEntryDict] = get_task_log(task["id"], limit=20)
             if log_entries:
-                detail_log.write("")
-                detail_log.write("[bold]Work Log:[/bold]")
-                # Pre-wrap message lines so continuations stay inside gutter
+                target.write("")
+                target.write("[bold]Work Log:[/bold]")
                 gutter = "  [dim]│[/dim] "
-                gutter_width = 4  # "  │ " = 4 visible chars
+                gutter_width = 4
                 last = len(log_entries) - 1
                 for i, entry in enumerate(log_entries):
-                    # created_at may be datetime obj from sqlite — coerce to str
                     raw_ts = entry.get("created_at")
                     time_str = _format_time_ago(str(raw_ts) if raw_ts is not None else None)
-                    # Dot marker + timestamp
                     ts_part = f" {time_str}" if time_str else ""
-                    detail_log.write(f"  [bold cyan]●[/bold cyan] [dim]{ts_part}[/dim]")
-                    # Message body with gutter line, rendered as markdown
+                    target.write(f"  [bold cyan]●[/bold cyan] [dim]{ts_part}[/dim]")
                     self._write_markdown_guttered(
-                        detail_log,
+                        target,
                         entry["message"],
                         content_w,
                         gutter=gutter,
                         gutter_width=gutter_width,
                     )
-                    # Connector or terminal cap
                     if i < last:
-                        detail_log.write("  [dim]│[/dim]")
+                        target.write("  [dim]│[/dim]")
                     else:
-                        detail_log.write("  [dim]╵[/dim]")
+                        target.write("  [dim]╵[/dim]")
         except Exception as e:
             logger.debug(f"Error loading task log: {e}")
-
-        # Execution info
-        if task.get("execution_id"):
-            detail_log.write("")
-            detail_log.write(f"[bold]Execution:[/bold] #{task['execution_id']}")
-        if task.get("output_doc_id"):
-            detail_log.write(f"Output doc: #{task['output_doc_id']}")
 
     def _render_epic_detail(self, task: TaskDict) -> None:
         """Render epic detail with child task listing in the right pane."""
@@ -1135,17 +1282,28 @@ class TaskView(Widget):
             table.focus()
 
     def action_toggle_zoom(self) -> None:
-        """Toggle zoom: hide list panel, expand detail to full height."""
+        """Cycle zoom: normal -> content full-screen -> list full-screen -> normal."""
         list_panel = self.query_one("#task-list-panel")
         detail_panel = self.query_one("#task-detail-panel")
-        self._zoomed = not self._zoomed
-        if self._zoomed:
-            list_panel.add_class("zoom-hidden")
-            detail_panel.add_class("zoom-full")
+
+        if not self._zoomed:
+            # Normal -> zoom content (list hidden, detail full)
+            self._zoomed = True
+            list_panel.add_class("zoom-content")
+            detail_panel.add_class("zoom-content")
             self.query_one("#task-detail-log", RichLog).focus()
+        elif list_panel.has_class("zoom-content"):
+            # Zoom content -> zoom list (detail hidden, list full)
+            list_panel.remove_class("zoom-content")
+            detail_panel.remove_class("zoom-content")
+            list_panel.add_class("zoom-list")
+            detail_panel.add_class("zoom-list")
+            self.query_one("#task-table", DataTable).focus()
         else:
-            list_panel.remove_class("zoom-hidden")
-            detail_panel.remove_class("zoom-full")
+            # Zoom list -> normal
+            self._zoomed = False
+            list_panel.remove_class("zoom-list")
+            detail_panel.remove_class("zoom-list")
             self.query_one("#task-table", DataTable).focus()
 
     def action_focus_next(self) -> None:

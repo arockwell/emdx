@@ -5,7 +5,8 @@ Features:
 - Persistent search bar at top
 - Live search with mode-specific debouncing
 - Search-engine style results with rich snippets
-- Enter to view document in modal
+- Adaptive preview panel at wide widths (>=120 cols)
+- Enter to view document in modal at narrow widths
 """
 
 import asyncio
@@ -15,11 +16,11 @@ from typing import Any
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widget import Widget
-from textual.widgets import Input, OptionList, Static
+from textual.widgets import Input, OptionList, RichLog, Static
 from textual.widgets.option_list import Option
 
 from ..modals import HelpMixin
@@ -62,9 +63,8 @@ class SearchScreen(HelpMixin, Widget):
 
     DEFAULT_CSS = """
     SearchScreen {
-        layout: grid;
-        grid-size: 1;
-        grid-rows: 3 1fr 1 1;
+        layout: vertical;
+        height: 100%;
     }
 
     #search-bar {
@@ -103,6 +103,16 @@ class SearchScreen(HelpMixin, Widget):
         color: $text;
     }
 
+    /* ── Results panel: list + preview side-by-side ───── */
+
+    #search-results-panel {
+        height: 1fr;
+    }
+
+    #results-list-section {
+        width: 50%;
+    }
+
     #results-list {
         height: 1fr;
         width: 100%;
@@ -111,6 +121,35 @@ class SearchScreen(HelpMixin, Widget):
 
     #results-list > .option-list--option {
         padding: 1 2;
+    }
+
+    /* Wide (>=120 cols, default): list 50%, preview 50% */
+    #search-preview-panel {
+        width: 50%;
+        border-left: solid $secondary;
+    }
+
+    #search-preview-header {
+        height: 1;
+        background: $surface;
+        padding: 0 1;
+    }
+
+    #search-preview-scroll {
+        height: 1fr;
+    }
+
+    #search-preview-content {
+        padding: 0 1;
+    }
+
+    /* Narrow (<120 cols): preview hidden, list fills width */
+    #search-results-panel.preview-hidden #search-preview-panel {
+        display: none;
+    }
+
+    #search-results-panel.preview-hidden #results-list-section {
+        width: 100%;
     }
 
     #search-status {
@@ -130,11 +169,16 @@ class SearchScreen(HelpMixin, Widget):
     current_mode = reactive(SearchMode.FTS)
     is_empty_state = reactive(True)
 
+    # Width threshold for showing/hiding preview panel
+    PREVIEW_WIDTH_THRESHOLD = 120
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.presenter = SearchPresenter(on_state_update=self._on_state_update)
         self._debounce_timer: Timer | None = None
         self._current_vm: SearchStateVM | None = None
+        self._preview_visible: bool = True
+        self._last_preview_doc_id: int | None = None
 
     def compose(self) -> ComposeResult:
         # Search bar
@@ -148,8 +192,20 @@ class SearchScreen(HelpMixin, Widget):
                 yield Static("Tags", id="mode-tags", classes="mode-btn")
                 yield Static("AI", id="mode-semantic", classes="mode-btn")
 
-        # Results list (Google-style with rich content)
-        yield OptionList(id="results-list")
+        # Results panel: list (left) + preview (right, adaptive)
+        with Horizontal(id="search-results-panel"):
+            with Vertical(id="results-list-section"):
+                yield OptionList(id="results-list")
+            with Vertical(id="search-preview-panel"):
+                yield Static("PREVIEW", id="search-preview-header")
+                with ScrollableContainer(id="search-preview-scroll"):
+                    yield RichLog(
+                        id="search-preview-content",
+                        highlight=True,
+                        markup=True,
+                        wrap=True,
+                        auto_scroll=False,
+                    )
 
         # Status bar (dynamic)
         yield Static("Type to search...", id="search-status")
@@ -164,11 +220,31 @@ class SearchScreen(HelpMixin, Widget):
         """Initialize the search screen."""
         logger.info("SearchScreen mounted")
 
+        # Apply initial preview visibility based on current width
+        self._update_preview_visibility()
+
         # Focus search input
         self.query_one("#search-input", Input).focus()
 
         # Load initial state
         await self.presenter.load_initial_state()
+
+    def on_resize(self, event: events.Resize) -> None:
+        """Toggle preview panel visibility based on terminal width."""
+        self._update_preview_visibility()
+
+    def _update_preview_visibility(self) -> None:
+        """Show/hide preview panel based on current width."""
+        try:
+            panel = self.query_one("#search-results-panel")
+        except Exception:
+            return
+        if self.size.width < self.PREVIEW_WIDTH_THRESHOLD:
+            panel.add_class("preview-hidden")
+            self._preview_visible = False
+        else:
+            panel.remove_class("preview-hidden")
+            self._preview_visible = True
 
     async def _on_state_update(self, state: SearchStateVM) -> None:
         """Handle state updates from presenter."""
@@ -222,6 +298,7 @@ class SearchScreen(HelpMixin, Widget):
 
             if not results_to_show:
                 self.query_one("#search-status", Static).update("No results | Type to search")
+                self._clear_preview()
                 return
 
             # Add options with rich multi-line content
@@ -238,6 +315,46 @@ class SearchScreen(HelpMixin, Widget):
             )
         except Exception as e:
             logger.error(f"Error rendering results: {e}")
+
+    def _clear_preview(self) -> None:
+        """Clear the preview panel."""
+        self._last_preview_doc_id = None
+        try:
+            preview = self.query_one("#search-preview-content", RichLog)
+            header = self.query_one("#search-preview-header", Static)
+            preview.clear()
+            preview.write("[dim]Select a result to preview[/dim]")
+            header.update("PREVIEW")
+        except Exception:
+            pass
+
+    def _load_preview(self, doc_id: int) -> None:
+        """Load document content into the preview RichLog."""
+        try:
+            preview = self.query_one("#search-preview-content", RichLog)
+            header = self.query_one("#search-preview-header", Static)
+        except Exception:
+            return
+
+        try:
+            from emdx.database import documents as doc_db
+
+            doc = doc_db.get_document(doc_id)
+            if doc:
+                content = doc.get("content", "")
+                title = doc.get("title", "Untitled")
+                header.update(f"📄 #{doc_id}")
+                from emdx.ui.markdown_config import render_markdown_to_richlog
+
+                render_markdown_to_richlog(preview, content, title)
+            else:
+                preview.clear()
+                preview.write(f"[dim]Document #{doc_id} not found[/dim]")
+                header.update("PREVIEW")
+        except Exception as e:
+            logger.warning(f"Error loading preview for #{doc_id}: {e}")
+            preview.clear()
+            preview.write("[dim]Preview unavailable[/dim]")
 
     def _format_result_card(self, result: SearchResultItem) -> str:
         """Format a single result as a rich multi-line card (Google-style)."""
@@ -379,6 +496,18 @@ class SearchScreen(HelpMixin, Widget):
             from ..modals import DocumentPreviewScreen
 
             self.app.push_screen(DocumentPreviewScreen(doc_id))
+
+    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        """Load document content into the preview panel when highlighted."""
+        if event.option_list.id != "results-list":
+            return
+        if not self._preview_visible:
+            return
+        if event.option and event.option.id:
+            doc_id = int(event.option.id)
+            if doc_id != self._last_preview_doc_id:
+                self._last_preview_doc_id = doc_id
+                self._load_preview(doc_id)
 
     def action_cursor_down(self) -> None:
         """Move cursor down and focus results list."""

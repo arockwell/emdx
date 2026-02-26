@@ -8,14 +8,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Log, RichLog, Static
-
-from emdx.utils.datetime_utils import parse_datetime
 
 from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
@@ -134,15 +133,14 @@ class ActivityView(HelpMixin, Widget):
         height: 1fr;
     }
 
+    /* ── Top band: list + sidebar ─────────────────────── */
+
     #activity-panel {
         height: 40%;
         width: 100%;
     }
 
-    #activity-panel.zoom-hidden {
-        display: none;
-    }
-
+    /* Wide (>=120 cols, default): list 70%, sidebar 30% */
     #activity-list-section {
         width: 70%;
     }
@@ -150,6 +148,15 @@ class ActivityView(HelpMixin, Widget):
     #context-section {
         width: 30%;
         border-left: solid $secondary;
+    }
+
+    /* Narrow (<120 cols): sidebar hidden, list fills band */
+    #activity-panel.sidebar-hidden #context-section {
+        display: none;
+    }
+
+    #activity-panel.sidebar-hidden #activity-list-section {
+        width: 100%;
     }
 
     #context-header {
@@ -166,16 +173,44 @@ class ActivityView(HelpMixin, Widget):
         padding: 0 1;
     }
 
+    /* ── Bottom pane: content preview ─────────────────── */
+
     #preview-panel {
         height: 60%;
         width: 100%;
         border-top: solid $primary;
     }
 
+    /* ── Zoom: content full-screen (list hidden) ──────── */
+    #activity-panel.zoom-content {
+        display: none;
+    }
+
+    #preview-panel.zoom-content {
+        height: 100%;
+        border-top: none;
+    }
+
+    /* ── Zoom: list full-screen (content hidden) ──────── */
+    #preview-panel.zoom-list {
+        display: none;
+    }
+
+    #activity-panel.zoom-list {
+        height: 100%;
+    }
+
+    /* ── Backward-compat aliases (existing zoom classes) ─ */
+    #activity-panel.zoom-hidden {
+        display: none;
+    }
+
     #preview-panel.zoom-full {
         height: 100%;
         border-top: none;
     }
+
+    /* ── Table and headers ────────────────────────────── */
 
     #activity-header {
         height: 1;
@@ -207,6 +242,8 @@ class ActivityView(HelpMixin, Widget):
         padding: 0 1;
         display: none;
     }
+
+    /* ── Notification bar ─────────────────────────────── */
 
     .notification {
         height: 1;
@@ -248,6 +285,7 @@ class ActivityView(HelpMixin, Widget):
         self._refresh_in_progress = False
         self._data_loader = ActivityDataLoader()
         self._zoomed: bool = False
+        self._sidebar_visible: bool = True
 
     def _get_selected_item(self) -> ActivityItem | None:
         """Get the currently selected ActivityItem from the table."""
@@ -301,15 +339,43 @@ class ActivityView(HelpMixin, Widget):
                     auto_scroll=False,
                 )
 
+    # Width threshold for showing/hiding sidebar
+    SIDEBAR_WIDTH_THRESHOLD = 120
+
     async def on_mount(self) -> None:
         """Initialize the view."""
         table = self.query_one("#activity-table", ActivityTable)
+
+        # Apply initial sidebar visibility based on current width
+        self._update_sidebar_visibility()
 
         await self.load_data()
         table.focus()
 
         # Start refresh timer
         self.set_interval(1.0, self._refresh_data_tick)
+
+    def on_resize(self, event: events.Resize) -> None:
+        """Toggle sidebar visibility based on terminal width."""
+        self._update_sidebar_visibility()
+
+    def _update_sidebar_visibility(self) -> None:
+        """Show/hide sidebar based on current width."""
+        try:
+            panel = self.query_one("#activity-panel")
+        except Exception:
+            return
+        was_visible = self._sidebar_visible
+        if self.size.width < self.SIDEBAR_WIDTH_THRESHOLD:
+            panel.add_class("sidebar-hidden")
+            self._sidebar_visible = False
+        else:
+            panel.remove_class("sidebar-hidden")
+            self._sidebar_visible = True
+        # Re-render preview if sidebar visibility changed (preamble toggle)
+        if was_visible != self._sidebar_visible:
+            self._last_preview_key = None  # force re-render
+            self.run_worker(self._update_preview(force=True), exclusive=True)
 
     async def load_data(self, update_preview: bool = True) -> None:
         """Load activity data."""
@@ -398,13 +464,73 @@ class ActivityView(HelpMixin, Widget):
 
         return counts
 
-    def _render_markdown_preview(self, content: str, title: str = "Untitled") -> None:
-        """Render markdown content to the preview RichLog."""
+    def _build_metadata_preamble(self, item: ActivityItem) -> str:
+        """Build a Rich markup string of document metadata for the preview preamble.
+
+        Used when the sidebar is hidden (narrow mode) to show metadata
+        inline above the document content.
+        """
+        from .activity_items import DocumentItem
+
+        lines: list[str] = []
+
+        if isinstance(item, DocumentItem):
+            # Line 1: type badge + project + age
+            parts: list[str] = []
+            if item.doc_type == "wiki":
+                parts.append("[bold magenta]wiki[/bold magenta]")
+            if item.project:
+                parts.append(f"[cyan]{item.project}[/cyan]")
+            parts.append(f"[dim]{format_time_ago(item.timestamp)}[/dim]")
+            lines.append(" · ".join(parts))
+
+            # Line 2: stats
+            stats: list[str] = []
+            if item.word_count:
+                stats.append(f"{item.word_count:,} words")
+            if item.access_count > 1:
+                stats.append(f"{item.access_count} views")
+            if stats:
+                lines.append(f"[dim]{' · '.join(stats)}[/dim]")
+
+            # Tags
+            if item.tags:
+                lines.append(f"[dim]Tags:[/dim] {' '.join(item.tags)}")
+
+        return "\n".join(lines)
+
+    def _render_markdown_preview(
+        self,
+        content: str,
+        title: str = "Untitled",
+        metadata_preamble: str = "",
+    ) -> None:
+        """Render markdown content to the preview RichLog.
+
+        Args:
+            content: Markdown content to render.
+            title: Document title.
+            metadata_preamble: Optional metadata block to prepend when sidebar
+                is hidden (narrow mode). Written as Rich markup before the
+                markdown body.
+        """
         from emdx.ui.link_helpers import linkify_richlog
         from emdx.ui.markdown_config import render_markdown_to_richlog
 
         preview = self.query_one("#preview-content", RichLog)
-        self._preview_raw_content = render_markdown_to_richlog(preview, content, title)
+
+        if metadata_preamble:
+            # Write preamble as Rich markup, then separator, then markdown
+            preview.clear()
+            for line in metadata_preamble.splitlines():
+                preview.write(line)
+            preview.write("[dim]───[/dim]")
+            # Render markdown after preamble (append mode — don't clear)
+            self._preview_raw_content = render_markdown_to_richlog(
+                preview, content, title, clear=False
+            )
+        else:
+            self._preview_raw_content = render_markdown_to_richlog(preview, content, title)
 
         # Post-process URLs after the RichLog has rendered its content
         if "http" in content:
@@ -476,6 +602,11 @@ class ActivityView(HelpMixin, Widget):
 
         self._last_preview_key = current_key
 
+        # Build metadata preamble if sidebar is hidden
+        preamble = ""
+        if not self._sidebar_visible:
+            preamble = self._build_metadata_preamble(item)
+
         # Show document content
         if item.doc_id and HAS_DOCS:
             try:
@@ -483,7 +614,7 @@ class ActivityView(HelpMixin, Widget):
                 if doc:
                     content = doc.get("content", "")
                     title = doc.get("title", "Untitled")
-                    self._render_markdown_preview(content, title)
+                    self._render_markdown_preview(content, title, metadata_preamble=preamble)
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
                     return
@@ -530,50 +661,69 @@ class ActivityView(HelpMixin, Widget):
     async def _show_document_context(
         self, item: ActivityItem, content: RichLog, header: Static
     ) -> None:
-        """Show document metadata in context panel."""
+        """Show document metadata in context panel.
+
+        Uses data already loaded on the DocumentItem to avoid re-fetching.
+        Falls back to DB lookup for linked documents (knowledge graph).
+        """
         if not HAS_DOCS or not item.doc_id:
             header.update("DOCUMENT")
             return
 
         try:
-            doc = doc_db.get_document(item.doc_id)
-            if not doc:
-                header.update(f"📄 #{item.doc_id}")
-                return
+            from .activity_items import DocumentItem
 
-            header.update(f"📄 #{doc['id']}")
+            header.update(f"📄 #{item.doc_id}")
 
+            # Line 1: type badge + project + age
+            meta_line1: list[str] = []
+            if isinstance(item, DocumentItem):
+                if item.doc_type == "wiki":
+                    meta_line1.append("[bold magenta]wiki[/bold magenta]")
+                if item.project:
+                    meta_line1.append(f"[cyan]{item.project}[/cyan]")
+            meta_line1.append(f"[dim]{format_time_ago(item.timestamp)}[/dim]")
+            content.write(" · ".join(meta_line1))
+
+            # Line 2: word count + access count + timestamps
+            if isinstance(item, DocumentItem):
+                meta_line2: list[str] = []
+                if item.word_count:
+                    meta_line2.append(f"{item.word_count:,} words")
+                if item.access_count > 1:
+                    meta_line2.append(f"{item.access_count} views")
+                if item.updated_at:
+                    meta_line2.append(f"Updated {format_time_ago(item.updated_at)}")
+                if meta_line2:
+                    content.write(f"[dim]{' · '.join(meta_line2)}[/dim]")
+
+                # Tags
+                if item.tags:
+                    content.write(f"[dim]Tags:[/dim] {' '.join(item.tags)}")
+
+            # Linked documents (knowledge graph)
             try:
-                from emdx.models.tags import get_document_tags
+                from emdx.database.document_links import get_links_for_document
 
-                tags = get_document_tags(item.doc_id)
+                links = get_links_for_document(item.doc_id)
+                if links:
+                    content.write("")
+                    content.write("[bold]Related:[/bold]")
+                    for link in links[:5]:
+                        if link["source_doc_id"] == item.doc_id:
+                            other_id = link["target_doc_id"]
+                            other_title = link["target_title"]
+                        else:
+                            other_id = link["source_doc_id"]
+                            other_title = link["source_title"]
+                        score = link.get("similarity_score", 0)
+                        pct = f" [dim]{int(score * 100)}%[/dim]" if score else ""
+                        title_trunc = (other_title or "")[:40]
+                        content.write(f"  [bold]#{other_id}[/bold] {title_trunc}{pct}")
             except ImportError:
-                tags = []
-
-            meta_line1 = []
-            doc_type = doc.get("doc_type", "user") or "user"
-            if doc_type == "wiki":
-                meta_line1.append("[bold magenta]wiki[/bold magenta]")
-            if doc.get("project"):
-                meta_line1.append(f"[cyan]{doc['project']}[/cyan]")
-            if doc.get("created_at"):
-                created_dt = parse_datetime(doc["created_at"])
-                if created_dt:
-                    meta_line1.append(f"[dim]{format_time_ago(created_dt)}[/dim]")
-            if meta_line1:
-                content.write(" · ".join(meta_line1))
-
-            meta_line2 = []
-            doc_content = doc.get("content", "")
-            word_count = len(doc_content.split())
-            meta_line2.append(f"{word_count} words")
-            access_count = doc.get("access_count", 0)
-            if access_count and access_count > 1:
-                meta_line2.append(f"{access_count} views")
-            content.write(f"[dim]{' · '.join(meta_line2)}[/dim]")
-
-            if tags:
-                content.write(f"[dim]Tags:[/dim] {' '.join(tags)}")
+                pass
+            except Exception as e:
+                logger.debug(f"Error loading linked docs: {e}")
 
         except Exception as e:
             logger.error(f"Error showing document context: {e}")
@@ -642,17 +792,28 @@ class ActivityView(HelpMixin, Widget):
         await self._refresh_data()
 
     def action_toggle_zoom(self) -> None:
-        """Toggle zoom: hide list panel, expand preview to full height."""
+        """Cycle zoom: normal -> content full-screen -> list full-screen -> normal."""
         activity_panel = self.query_one("#activity-panel")
         preview_panel = self.query_one("#preview-panel")
-        self._zoomed = not self._zoomed
-        if self._zoomed:
-            activity_panel.add_class("zoom-hidden")
-            preview_panel.add_class("zoom-full")
+
+        if not self._zoomed:
+            # Normal -> zoom content (list hidden, preview full)
+            self._zoomed = True
+            activity_panel.add_class("zoom-content")
+            preview_panel.add_class("zoom-content")
             self.query_one("#preview-content", RichLog).focus()
+        elif activity_panel.has_class("zoom-content"):
+            # Zoom content -> zoom list (preview hidden, list full)
+            activity_panel.remove_class("zoom-content")
+            preview_panel.remove_class("zoom-content")
+            activity_panel.add_class("zoom-list")
+            preview_panel.add_class("zoom-list")
+            self.query_one("#activity-table", ActivityTable).focus()
         else:
-            activity_panel.remove_class("zoom-hidden")
-            preview_panel.remove_class("zoom-full")
+            # Zoom list -> normal
+            self._zoomed = False
+            activity_panel.remove_class("zoom-list")
+            preview_panel.remove_class("zoom-list")
             self.query_one("#activity-table", ActivityTable).focus()
 
     def action_focus_next(self) -> None:
