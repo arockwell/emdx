@@ -15,11 +15,20 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+/** Default cache TTL in milliseconds (10 seconds). */
+const CACHE_TTL_MS = 10_000;
+
 // Commands where --json is not applicable (e.g. status updates that produce no output)
 const NO_JSON_COMMANDS = new Set(["task done", "task active", "task blocked"]);
 
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
 class EmdxClient {
   private outputChannel: vscode.OutputChannel;
+  private cache = new Map<string, CacheEntry<unknown>>();
 
   constructor() {
     this.outputChannel = vscode.window.createOutputChannel("EMDX");
@@ -34,6 +43,28 @@ class EmdxClient {
     const execPath = this.getExecutablePath();
     const parts = execPath.split(/\s+/);
     return { command: parts[0], baseArgs: parts.slice(1) };
+  }
+
+  /** Get a cached value if it exists and hasn't expired. */
+  private getCached<T>(key: string): T | undefined {
+    const entry = this.cache.get(key);
+    if (entry && Date.now() < entry.expiresAt) {
+      return entry.data as T;
+    }
+    if (entry) {
+      this.cache.delete(key);
+    }
+    return undefined;
+  }
+
+  /** Store a value in cache with TTL. */
+  private setCache<T>(key: string, data: T, ttlMs: number = CACHE_TTL_MS): void {
+    this.cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  }
+
+  /** Invalidate all cache entries (call after mutations). */
+  invalidateCache(): void {
+    this.cache.clear();
   }
 
   private async exec<T>(args: string[], parseJson: true): Promise<T>;
@@ -88,6 +119,21 @@ class EmdxClient {
     }
   }
 
+  /** Execute with caching. Reuses result within TTL window. */
+  private async execCached<T>(
+    cacheKey: string,
+    args: string[],
+    ttlMs: number = CACHE_TTL_MS
+  ): Promise<T> {
+    const cached = this.getCached<T>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const result = await this.exec<T>(args, true);
+    this.setCache(cacheKey, result, ttlMs);
+    return result;
+  }
+
   /** Execute a command with content piped to stdin. Returns stdout text. */
   private execWithStdin(args: string[], stdin: string): Promise<string> {
     const { command, baseArgs } = this.getExecParts();
@@ -135,15 +181,22 @@ class EmdxClient {
   // Documents
 
   async listRecentDocuments(limit: number = 20): Promise<Document[]> {
-    return this.exec<Document[]>(["find", "--recent", String(limit)], true);
+    return this.execCached<Document[]>(
+      `recent:${limit}`,
+      ["find", "--recent", String(limit)]
+    );
   }
 
   async searchDocuments(query: string): Promise<SearchResult[]> {
+    // Don't cache searches — user expects fresh results per keystroke
     return this.exec<SearchResult[]>(["find", query], true);
   }
 
   async getDocument(id: number): Promise<DocumentDetail> {
-    return this.exec<DocumentDetail>(["view", String(id)], true);
+    return this.execCached<DocumentDetail>(
+      `doc:${id}`,
+      ["view", String(id)]
+    );
   }
 
   async saveDocument(
@@ -158,6 +211,7 @@ class EmdxClient {
     }
 
     const output = await this.execWithStdin(args, content);
+    this.invalidateCache(); // New doc — bust all caches
 
     // Parse "✅ Saved as #18: title" from output (with ANSI codes stripped)
     const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
@@ -169,6 +223,7 @@ class EmdxClient {
   // Tasks
 
   async listTasks(status?: string, epicKey?: string): Promise<Task[]> {
+    const key = `tasks:${status ?? "all"}:${epicKey ?? "all"}`;
     const args = ["task", "list"];
     if (status) {
       args.push("--status", status);
@@ -176,11 +231,11 @@ class EmdxClient {
     if (epicKey) {
       args.push("--epic", epicKey);
     }
-    return this.exec<Task[]>(args, true);
+    return this.execCached<Task[]>(key, args);
   }
 
   async getReadyTasks(): Promise<Task[]> {
-    return this.exec<Task[]>(["task", "ready"], true);
+    return this.execCached<Task[]>("tasks:ready", ["task", "ready"]);
   }
 
   async updateTaskStatus(
@@ -188,18 +243,19 @@ class EmdxClient {
     status: "done" | "active" | "blocked"
   ): Promise<void> {
     await this.exec(["task", status, String(id)], false);
+    this.invalidateCache(); // Status changed — bust caches
   }
 
   // Tags
 
   async listTags(): Promise<Tag[]> {
-    return this.exec<Tag[]>(["tag", "list"], true);
+    return this.execCached<Tag[]>("tags", ["tag", "list"]);
   }
 
   // Status
 
   async getStatus(): Promise<StatusData> {
-    return this.exec<StatusData>(["status"], true);
+    return this.execCached<StatusData>("status", ["status"]);
   }
 
   // Q&A
