@@ -365,17 +365,16 @@ class TaskView(Widget):
         await self._load_tasks()
         table.focus()
 
-        # Defer a re-render of the selected task detail so RichLog has proper
-        # dimensions.  On first mount the RowHighlighted event fires during
-        # _load_tasks, but the RichLog hasn't been through layout yet and
-        # write() renders at zero width — producing invisible output.
-        def _deferred_detail_rerender() -> None:
-            task = self._get_selected_task()
-            if task:
-                self._update_sidebar_visibility()
-                self._render_task_detail(task)
+        # After layout is complete, move the cursor to the first actual task
+        # row (skipping section headers) and re-render the detail pane.
+        # On first mount, RowHighlighted fires during _load_tasks before layout
+        # is done, and the cursor lands on a header row — both issues cause
+        # an empty detail pane.
+        def _deferred_select_first_task() -> None:
+            self._update_sidebar_visibility()
+            self._select_first_task_row()
 
-        self.call_after_refresh(_deferred_detail_rerender)
+        self.call_after_refresh(_deferred_select_first_task)
 
     def on_resize(self, event: events.Resize) -> None:
         """Toggle sidebar visibility based on terminal width."""
@@ -703,6 +702,15 @@ class TaskView(Widget):
                     self._render_task_row(table, task, tree_prefix=connector)
                 else:
                     self._render_task_row(table, task)
+
+    def _select_first_task_row(self) -> None:
+        """Move cursor to the first actual task row (skip headers/separators)."""
+        table = self.query_one("#task-table", DataTable)
+        for i, row in enumerate(table.ordered_rows):
+            key = str(row.key.value)
+            if not key.startswith(HEADER_PREFIX) and not key.startswith(SEPARATOR_PREFIX):
+                table.move_cursor(row=i)
+                return
 
     def _select_row_by_key(self, key: str) -> None:
         """Move cursor to a row by its key string."""
@@ -1035,7 +1043,7 @@ class TaskView(Widget):
             detail_log = self.query_one("#task-detail-log", RichLog)
             header = self.query_one("#task-detail-header", Static)
         except Exception as e:
-            logger.warning("📋 _render_task_detail: detail widgets not found: %s", e)
+            logger.warning("_render_task_detail: detail widgets not found: %s", e)
             return
 
         detail_log.clear()
@@ -1056,7 +1064,7 @@ class TaskView(Widget):
                 sidebar_header.update(f"{icon} #{task['id']}")
                 self._render_task_metadata(sidebar_log, task)
             except Exception as e:
-                logger.warning("📋 Sidebar not ready: %s", e)
+                logger.warning("Sidebar not ready: %s", e)
         else:
             # Narrow: metadata inline in detail pane
             self._render_task_metadata(detail_log, task)
