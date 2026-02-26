@@ -196,9 +196,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           "emdx.documentPreview",
           `EMDX: ${doc.title}`,
           vscode.ViewColumn.One,
-          { enableScripts: false },
+          { enableScripts: true },
         );
         panel.webview.html = buildDocumentPreviewHtml(doc.title, doc.content, doc.tags);
+        panel.webview.onDidReceiveMessage((msg: { type: string; url: string }) => {
+          if (msg.type === "openLink") {
+            vscode.env.openExternal(vscode.Uri.parse(msg.url));
+          }
+        });
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to load document: ${String(err)}`);
       }
@@ -218,8 +223,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         "emdx.taskPreview",
         `Task #${task.id}: ${task.title}`,
         vscode.ViewColumn.One,
-        { enableScripts: false },
+        { enableScripts: true },
       );
+      panel.webview.onDidReceiveMessage((msg: { type: string; url: string }) => {
+        if (msg.type === "openLink") {
+          vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        }
+      });
       // Show immediately with description, then enrich with work log
       panel.webview.html = buildTaskPreviewHtml(task, []);
       try {
@@ -585,6 +595,13 @@ function markdownToHtml(md: string): string {
   let codeBlockContent = "";
   let inList = false;
   let listType: "ul" | "ol" = "ul";
+  let inTable = false;
+  let tableHeaderDone = false;
+
+  function closeOpenBlocks(): void {
+    if (inList) { html += listType === "ul" ? "</ul>\n" : "</ol>\n"; inList = false; }
+    if (inTable) { html += "</tbody></table>\n"; inTable = false; tableHeaderDone = false; }
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -596,7 +613,7 @@ function markdownToHtml(md: string): string {
         codeBlockContent = "";
         inCodeBlock = false;
       } else {
-        if (inList) { html += listType === "ul" ? "</ul>\n" : "</ol>\n"; inList = false; }
+        closeOpenBlocks();
         inCodeBlock = true;
       }
       continue;
@@ -604,6 +621,45 @@ function markdownToHtml(md: string): string {
     if (inCodeBlock) {
       codeBlockContent += line + "\n";
       continue;
+    }
+
+    // Table separator row (e.g. |---|---|)
+    if (/^\s*\|[\s:-]+\|[\s:|-]*$/.test(line)) {
+      // This is the separator after the header — mark header done
+      tableHeaderDone = true;
+      continue;
+    }
+
+    // Table rows (lines starting and ending with |)
+    const isTableRow = /^\s*\|(.+)\|\s*$/.test(line);
+    if (isTableRow) {
+      const cells = line.trim().slice(1, -1).split("|").map((c) => c.trim());
+      if (!inTable) {
+        // Start table — this is the header row
+        closeOpenBlocks();
+        inTable = true;
+        tableHeaderDone = false;
+        html += "<table>\n<thead><tr>";
+        for (const cell of cells) {
+          html += `<th>${inlineMarkdown(escapeHtml(cell))}</th>`;
+        }
+        html += "</tr></thead>\n<tbody>\n";
+        continue;
+      }
+      // Body row
+      html += "<tr>";
+      for (const cell of cells) {
+        html += `<td>${inlineMarkdown(escapeHtml(cell))}</td>`;
+      }
+      html += "</tr>\n";
+      continue;
+    }
+
+    // Close table if we hit a non-table line
+    if (inTable) {
+      html += "</tbody></table>\n";
+      inTable = false;
+      tableHeaderDone = false;
     }
 
     // Close list if current line isn't a list item
@@ -667,6 +723,9 @@ function markdownToHtml(md: string): string {
   if (inList) {
     html += listType === "ul" ? "</ul>\n" : "</ol>\n";
   }
+  if (inTable) {
+    html += "</tbody></table>\n";
+  }
 
   return html;
 }
@@ -683,7 +742,9 @@ function inlineMarkdown(escaped: string): string {
     // italic
     .replace(/\*(.+?)\*/g, "<em>$1</em>")
     // links [text](url)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+    // bare URLs (not already inside an href)
+    .replace(/(?<!="|'|&gt;)(https?:\/\/[^\s<)]+)/g, '<a href="$1">$1</a>');
 }
 
 function buildDocumentPreviewHtml(title: string, content: string, tags: string[]): string {
@@ -733,6 +794,20 @@ function buildDocumentPreviewHtml(title: string, content: string, tags: string[]
     .content h3 { font-size: 1.1em; margin: 12px 0 6px; }
     .content ul, .content ol { padding-left: 24px; }
     .content li { margin: 2px 0; }
+    table {
+      border-collapse: collapse;
+      margin: 8px 0;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.3));
+      padding: 6px 10px;
+      text-align: left;
+    }
+    th {
+      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.1));
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -740,6 +815,16 @@ function buildDocumentPreviewHtml(title: string, content: string, tags: string[]
   ${tagsHtml}
   <hr />
   <div class="content">${markdownToHtml(content)}</div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest('a');
+      if (link && link.href) {
+        e.preventDefault();
+        vscode.postMessage({ type: 'openLink', url: link.href });
+      }
+    });
+  </script>
 </body>
 </html>`;
 }
@@ -821,6 +906,20 @@ function buildTaskPreviewHtml(
     }
     .log-msg { margin: 0; }
     .log-msg p { margin: 2px 0; }
+    table {
+      border-collapse: collapse;
+      margin: 8px 0;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.3));
+      padding: 6px 10px;
+      text-align: left;
+    }
+    th {
+      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.1));
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -829,6 +928,16 @@ function buildTaskPreviewHtml(
   <hr />
   ${description}
   ${logHtml}
+  <script>
+    const vscode = acquireVsCodeApi();
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest('a');
+      if (link && link.href) {
+        e.preventDefault();
+        vscode.postMessage({ type: 'openLink', url: link.href });
+      }
+    });
+  </script>
 </body>
 </html>`;
 }

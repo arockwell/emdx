@@ -101,6 +101,11 @@
         "command": "emdx.viewTask",
         "title": "EMDX: View Task",
         "icon": "$(eye)"
+      },
+      {
+        "command": "emdx.filterByTag",
+        "title": "EMDX: Filter by Tag",
+        "icon": "$(filter)"
       }
     ],
     "menus": {
