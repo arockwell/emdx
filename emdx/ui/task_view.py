@@ -175,7 +175,7 @@ def _linkify_text(raw: str) -> Text:
         if match.start() > last_end:
             text.append(raw[last_end : match.start()])
         link_style = _LINK_STYLE + Style(
-            meta={"@click": f"open_url({url!r})"},
+            meta={"@click": f"app.open_url({url!r})"},
         )
         text.append(url, style=link_style)
         leftover_start = match.start() + len(url)
@@ -1251,15 +1251,8 @@ class TaskView(Widget):
         await self._set_task_status("wontdo")
 
     # ------------------------------------------------------------------
-    # URL opening (click + keyboard)
+    # URL opening (keyboard Shift+O)
     # ------------------------------------------------------------------
-
-    def action_open_url(self, url: str) -> None:
-        """Open a URL in the default browser (triggered by @click on links)."""
-        import webbrowser
-
-        webbrowser.open(url)
-        self.notify(f"Opened {url[:60]}...", timeout=2)
 
     def _open_task_urls(self) -> None:
         """Open first URL found in the selected task (Shift+O shortcut)."""
