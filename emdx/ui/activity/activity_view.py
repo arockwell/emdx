@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from rich.style import Style
+from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -717,9 +719,19 @@ class ActivityView(HelpMixin, Widget):
                             other_id = link["source_doc_id"]
                             other_title = link["source_title"]
                         score = link.get("similarity_score", 0)
-                        pct = f" [dim]{int(score * 100)}%[/dim]" if score else ""
                         title_trunc = (other_title or "")[:40]
-                        content.write(f"  [bold]#{other_id}[/bold] {title_trunc}{pct}")
+                        line = Text("  ")
+                        click_style = Style(
+                            bold=True,
+                            underline=True,
+                            color="bright_cyan",
+                            meta={"@click": f"app.select_doc({other_id})"},
+                        )
+                        line.append(f"#{other_id}", style=click_style)
+                        line.append(f" {title_trunc}")
+                        if score:
+                            line.append(f" {int(score * 100)}%", style="dim")
+                        content.write(line)
             except ImportError:
                 pass
             except Exception as e:

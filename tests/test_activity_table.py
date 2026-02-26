@@ -117,7 +117,7 @@ class TestPopulate:
 
     @pytest.mark.asyncio
     async def test_title_truncation(self) -> None:
-        """Long titles are truncated based on available width."""
+        """Long titles are dynamically truncated based on available width."""
         long_title = "A" * 100
         items: list[ActivityItem] = [make_doc(item_id=1, title=long_title)]
         app = ActivityTestApp()
@@ -127,8 +127,9 @@ class TestPopulate:
             table.populate(items)
             titles = _table_cell_texts(table, "title")
             assert len(titles) == 1
-            assert len(str(titles[0])) < 100  # truncated from original
-            assert str(titles[0]).endswith("...")
+            title_str = str(titles[0])
+            assert title_str.endswith("...")
+            assert len(title_str) < len(long_title)  # truncated below original
 
     @pytest.mark.asyncio
     async def test_id_column_document(self) -> None:
