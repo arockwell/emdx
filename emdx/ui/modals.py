@@ -379,6 +379,11 @@ class DocumentPreviewScreen(Screen):
             rendered = self.query_one("#preview-rendered", RichLog)
             self._raw_content = render_markdown_to_richlog(rendered, content, title)
 
+            if "http" in content:
+                from .link_helpers import linkify_richlog
+
+                self.call_after_refresh(linkify_richlog, rendered)
+
         except Exception as e:
             logger.error(f"Error loading document preview: {e}")
             self.query_one("#preview-title", Static).update(f"Error: {e}")
