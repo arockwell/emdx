@@ -192,6 +192,13 @@ class EmdxClient {
     return this.exec<SearchResult[]>(["find", query], true);
   }
 
+  async findByTag(tag: string): Promise<Document[]> {
+    return this.execCached<Document[]>(
+      `tag:${tag}`,
+      ["find", "--tags", tag]
+    );
+  }
+
   async getDocument(id: number): Promise<DocumentDetail> {
     return this.execCached<DocumentDetail>(
       `doc:${id}`,
@@ -244,6 +251,31 @@ class EmdxClient {
   ): Promise<void> {
     await this.exec(["task", status, String(id)], false);
     this.invalidateCache(); // Status changed — bust caches
+  }
+
+  /** Fetch the work log for a task. Parses text output (no --json support). */
+  async getTaskLog(id: number): Promise<Array<{ timestamp: string; message: string }>> {
+    const cacheKey = `tasklog:${id}`;
+    const cached = this.getCached<Array<{ timestamp: string; message: string }>>(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    // task log has no --json flag; must be fetched as raw text
+    const raw = await this.exec(["task", "log", String(id)], false);
+    const clean = (raw as string).replace(/\x1b\[[0-9;]*m/g, "");
+    const entries: Array<{ timestamp: string; message: string }> = [];
+
+    // Each log line: "  2026-02-26 09:45:42 The message text..."
+    for (const line of clean.split("\n")) {
+      const match = line.match(/^\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(.+)/);
+      if (match) {
+        entries.push({ timestamp: match[1], message: match[2] });
+      }
+    }
+
+    this.setCache(cacheKey, entries);
+    return entries;
   }
 
   // Tags

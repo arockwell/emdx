@@ -81,6 +81,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // ------------------------------------------------------------------
+  // Filter by tag
+  // ------------------------------------------------------------------
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emdx.filterByTag", async (tagName?: string) => {
+      if (!tagName) {
+        return;
+      }
+      try {
+        const docs = await client.findByTag(tagName);
+        if (docs.length === 0) {
+          vscode.window.showInformationMessage(`No documents tagged "${tagName}"`);
+          return;
+        }
+        const items = docs.map((d) => ({
+          label: `$(file-text) ${d.title}`,
+          description: `#${d.id}`,
+          docId: d.id,
+        }));
+        const selected = await vscode.window.showQuickPick(items, {
+          placeHolder: `Documents tagged "${tagName}"`,
+        });
+        if (selected && selected.docId > 0) {
+          await vscode.commands.executeCommand("emdx.viewDocument", selected.docId);
+        }
+      } catch (err) {
+        vscode.window.showErrorMessage(`Failed to filter by tag: ${String(err)}`);
+      }
+    }),
+  );
+
+  // ------------------------------------------------------------------
   // Save commands
   // ------------------------------------------------------------------
 
@@ -178,7 +210,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // ------------------------------------------------------------------
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("emdx.viewTask", (task?: Task) => {
+    vscode.commands.registerCommand("emdx.viewTask", async (task?: Task) => {
       if (!task) {
         return;
       }
@@ -188,7 +220,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         vscode.ViewColumn.One,
         { enableScripts: false },
       );
-      panel.webview.html = buildTaskPreviewHtml(task);
+      // Show immediately with description, then enrich with work log
+      panel.webview.html = buildTaskPreviewHtml(task, []);
+      try {
+        const log = await client.getTaskLog(task.id);
+        panel.webview.html = buildTaskPreviewHtml(task, log);
+      } catch {
+        // Work log fetch failed — keep showing description only
+      }
     }),
   );
 
@@ -590,7 +629,10 @@ function buildDocumentPreviewHtml(title: string, content: string, tags: string[]
 </html>`;
 }
 
-function buildTaskPreviewHtml(task: Task): string {
+function buildTaskPreviewHtml(
+  task: Task,
+  log: Array<{ timestamp: string; message: string }>
+): string {
   const statusIcons: Record<string, string> = {
     open: "\u25CB",
     active: "\u25CF",
@@ -614,8 +656,14 @@ function buildTaskPreviewHtml(task: Task): string {
     .join("\n");
 
   const description = task.description
-    ? `<hr />\n<pre><code>${escapeHtml(task.description)}</code></pre>`
-    : `<hr />\n<p style="color: var(--vscode-disabledForeground);">No description</p>`;
+    ? `<h3>Description</h3>\n<pre><code>${escapeHtml(task.description)}</code></pre>`
+    : `<p style="color: var(--vscode-disabledForeground);">No description</p>`;
+
+  const logHtml = log.length > 0
+    ? `<h3>Work Log</h3>\n<div class="work-log">${log.map((entry) =>
+        `<div class="log-entry"><span class="log-ts">${escapeHtml(entry.timestamp)}</span> ${escapeHtml(entry.message)}</div>`
+      ).join("\n")}</div>`
+    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -633,6 +681,7 @@ function buildTaskPreviewHtml(task: Task): string {
       line-height: 1.6;
     }
     h1 { font-size: 1.4em; margin-bottom: 4px; }
+    h3 { font-size: 1.1em; margin: 16px 0 8px; }
     ul { list-style: none; padding: 0; }
     li { margin-bottom: 4px; }
     pre {
@@ -643,12 +692,24 @@ function buildTaskPreviewHtml(task: Task): string {
       white-space: pre-wrap;
     }
     pre code { background: none; padding: 0; }
+    .work-log { margin-top: 8px; }
+    .log-entry {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
+    }
+    .log-ts {
+      color: var(--vscode-descriptionForeground);
+      font-size: 0.85em;
+      margin-right: 8px;
+    }
   </style>
 </head>
 <body>
   <h1>#${task.id}: ${escapeHtml(task.title)}</h1>
   <ul>${meta}</ul>
+  <hr />
   ${description}
+  ${logHtml}
 </body>
 </html>`;
 }
