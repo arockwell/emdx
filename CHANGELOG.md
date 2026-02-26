@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.1] - 2026-02-26
+
+**Clickable doc refs in the activity pane.** The `#42`-style document IDs in "Related:" sections are now clickable — clicking navigates directly to that document without remounting the widget tree, which previously broke mouse event routing.
+
+### 🔧 Improvements
+
+- **Clickable related doc refs** — `#N` document references in the activity detail pane's "Related:" section now render as clickable Rich Text. Clicking navigates in-place via `select_document_by_id()` instead of `switch_browser()`, avoiding widget tree destruction that broke mouse events (#900)
+
+### 🐛 Bug Fixes
+
+- **Title truncation test** — adapted `test_title_truncation` to dynamic width calculation introduced in #898 (#899)
+
+[0.24.1]: https://github.com/arockwell/emdx/compare/v0.24.0...v0.24.1
+
 ## [0.24.0] - 2026-02-26
 
 **Clickable URLs and adaptive layouts.** The TUI now renders URLs as clickable cyan links across all screens — click to open in your browser, or press Shift+O to open the first link from the selected item. The layout became responsive: a metadata sidebar appears at wide terminals (120+ cols) and collapses to inline content at narrow widths. Zoom got a three-state cycle (normal → content fullscreen → list fullscreen). On the CLI side, `delegate --task` and `--epic` now accept category-prefixed keys like `FEAT-77`, and delegates are prompted to create subtasks for progress visibility.
