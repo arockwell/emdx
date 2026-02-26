@@ -116,14 +116,13 @@ class TaskBrowser(HelpMixin, Widget):
         pass
 
     def focus(self, scroll_visible: bool = True) -> Self:
-        """Focus the task view."""
+        """Focus the task table inside the task view."""
         if self.task_view:
             try:
-                option_list = self.task_view.query_one("#task-option-list")
-                if option_list:
-                    option_list.focus()
+                table = self.task_view.query_one("#task-table")
+                table.focus()
             except Exception:
-                pass
+                logger.warning("TaskBrowser.focus: #task-table not found")
         return self
 
     async def select_document_by_id(self, doc_id: int) -> bool:

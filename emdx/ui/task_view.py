@@ -365,6 +365,18 @@ class TaskView(Widget):
         await self._load_tasks()
         table.focus()
 
+        # Defer a re-render of the selected task detail so RichLog has proper
+        # dimensions.  On first mount the RowHighlighted event fires during
+        # _load_tasks, but the RichLog hasn't been through layout yet and
+        # write() renders at zero width — producing invisible output.
+        def _deferred_detail_rerender() -> None:
+            task = self._get_selected_task()
+            if task:
+                self._update_sidebar_visibility()
+                self._render_task_detail(task)
+
+        self.call_after_refresh(_deferred_detail_rerender)
+
     def on_resize(self, event: events.Resize) -> None:
         """Toggle sidebar visibility based on terminal width."""
         self._update_sidebar_visibility()
@@ -1019,8 +1031,13 @@ class TaskView(Widget):
             self._render_epic_detail(task)
             return
 
-        detail_log = self.query_one("#task-detail-log", RichLog)
-        header = self.query_one("#task-detail-header", Static)
+        try:
+            detail_log = self.query_one("#task-detail-log", RichLog)
+            header = self.query_one("#task-detail-header", Static)
+        except Exception as e:
+            logger.warning("📋 _render_task_detail: detail widgets not found: %s", e)
+            return
+
         detail_log.clear()
 
         icon = STATUS_ICONS.get(task["status"], "?")
@@ -1039,7 +1056,7 @@ class TaskView(Widget):
                 sidebar_header.update(f"{icon} #{task['id']}")
                 self._render_task_metadata(sidebar_log, task)
             except Exception as e:
-                logger.debug(f"Sidebar not ready: {e}")
+                logger.warning("📋 Sidebar not ready: %s", e)
         else:
             # Narrow: metadata inline in detail pane
             self._render_task_metadata(detail_log, task)
