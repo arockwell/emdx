@@ -30,6 +30,8 @@ from emdx.models.tasks import (
     update_task,
 )
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
+from emdx.ui.link_helpers import extract_urls as _extract_urls
+from emdx.ui.link_helpers import linkify_text as _linkify_text
 
 logger = logging.getLogger(__name__)
 
@@ -725,6 +727,7 @@ class TaskView(Widget):
                     "x",
                     "f",
                     "asterisk",
+                    "O",
                 }
                 if event.key in vim_keys:
                     return
@@ -763,6 +766,10 @@ class TaskView(Widget):
             self._group_by = "epic" if self._group_by == "status" else "status"
             self._render_task_table()
             self._update_status_bar()
+            event.prevent_default()
+            event.stop()
+        elif event.key == "O":
+            self._open_task_urls()
             event.prevent_default()
             event.stop()
 
@@ -830,13 +837,20 @@ class TaskView(Widget):
         wrap width so that ``prefix + subline`` never exceeds *width*.
         """
         wrap_at = max(20, width - prefix_width)
+        prefix_text = Text.from_markup(prefix) if prefix else None
         for line in text.split("\n"):
             if not line:
                 detail_log.write(prefix if prefix else "")
                 continue
             wrapped = textwrap.wrap(line, width=wrap_at) or [""]
             for subline in wrapped:
-                detail_log.write(f"{prefix}{subline}")
+                linkified = _linkify_text(subline)
+                if prefix_text is not None:
+                    out = prefix_text.copy()
+                    out.append_text(linkified)
+                    detail_log.write(out)
+                else:
+                    detail_log.write(linkified)
 
     def _write_markdown_guttered(
         self,
@@ -880,6 +894,10 @@ class TaskView(Widget):
 
         for line in lines:
             content = Text.from_ansi(line)
+            # Linkify URLs so they are clickable in the RichLog
+            plain = content.plain
+            if "http" in plain:
+                content = _linkify_text(plain)
             # Safety: hard-break any line still wider than render_width
             chunks: list[Text] = []
             while content.cell_len > render_width:
@@ -1183,3 +1201,28 @@ class TaskView(Widget):
     async def action_mark_wontdo(self) -> None:
         """Mark selected task as won't do."""
         await self._set_task_status("wontdo")
+
+    # ------------------------------------------------------------------
+    # URL opening (keyboard Shift+O)
+    # ------------------------------------------------------------------
+
+    def _open_task_urls(self) -> None:
+        """Open first URL found in the selected task (Shift+O shortcut)."""
+        task = self._get_selected_task()
+        if not task:
+            return
+        urls: list[str] = []
+        for field in ("description", "error"):
+            val = task.get(field)
+            if isinstance(val, str) and val:
+                urls.extend(_extract_urls(val))
+        if not urls:
+            self.notify("No URLs in this task", timeout=2)
+            return
+        import webbrowser
+
+        webbrowser.open(urls[0])
+        if len(urls) > 1:
+            self.notify(f"Opened 1 of {len(urls)} URLs", timeout=2)
+        else:
+            self.notify(f"Opened {urls[0][:60]}", timeout=2)

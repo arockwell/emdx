@@ -478,3 +478,10 @@ class BrowserContainer(App[None]):
         mode = "🌙 Dark" if is_dark_theme(new_theme) else "☀️ Light"
         logger.debug(f"Theme toggled: {current_theme} -> {new_theme}")
         self.notify(f"{mode} mode", timeout=1.5)
+
+    def action_open_url(self, url: str) -> None:
+        """Open a URL in the default browser (used by @click meta on links)."""
+        import webbrowser
+
+        webbrowser.open(url)
+        self.notify(f"Opened {url[:60]}", timeout=2)

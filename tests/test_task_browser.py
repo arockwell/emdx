@@ -11,6 +11,8 @@ from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Input, RichLog, Static
 
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
+from emdx.ui.link_helpers import extract_urls as _extract_urls
+from emdx.ui.link_helpers import linkify_text as _linkify_text
 from emdx.ui.task_view import TaskView, _format_time_ago, _task_label
 
 # ---------------------------------------------------------------------------
@@ -1872,6 +1874,94 @@ class TestLongLineWrapping:
             for line in detail.lines:
                 assert len(line.text) <= 80, f"Line exceeds panel width: {len(line.text)} chars"
 
+
+class TestUrlLinkification:
+    """Verify URL linkification and @click meta in the detail pane."""
+
+    def test_linkify_text_basic_url(self) -> None:
+        """_linkify_text wraps URLs with @click meta."""
+        result = _linkify_text("Visit https://example.com for info")
+        # Check plain text preserved
+        assert result.plain == "Visit https://example.com for info"
+        # Check that the URL segment has @click meta
+        found_meta = False
+        for span in result._spans:
+            if span.style and hasattr(span.style, "meta") and span.style.meta:
+                meta = span.style.meta
+                if "@click" in meta:
+                    assert "app.open_url" in meta["@click"]
+                    assert "https://example.com" in meta["@click"]
+                    found_meta = True
+        assert found_meta, "No @click meta found on URL segment"
+
+    def test_linkify_text_no_urls(self) -> None:
+        """_linkify_text returns plain text when no URLs present."""
+        result = _linkify_text("no urls here")
+        assert result.plain == "no urls here"
+
+    def test_linkify_text_multiple_urls(self) -> None:
+        """_linkify_text handles multiple URLs."""
+        text = "See https://a.com and https://b.com"
+        result = _linkify_text(text)
+        assert result.plain == text
+        click_count = sum(
+            1
+            for span in result._spans
+            if span.style
+            and hasattr(span.style, "meta")
+            and span.style.meta
+            and "@click" in span.style.meta
+        )
+        assert click_count == 2
+
+    def test_linkify_text_trailing_punctuation(self) -> None:
+        """_linkify_text strips trailing punctuation from URLs."""
+        result = _linkify_text("See https://example.com/path.")
+        assert "https://example.com/path" in result.plain
+        # The period should not be part of the URL
+        for span in result._spans:
+            if span.style and hasattr(span.style, "meta") and span.style.meta:
+                meta = span.style.meta
+                if "@click" in meta:
+                    assert meta["@click"].endswith("')")
+
+    def test_extract_urls_basic(self) -> None:
+        """_extract_urls returns URLs from text."""
+        urls = _extract_urls("Visit https://example.com and https://test.org/path")
+        assert len(urls) == 2
+        assert "https://example.com" in urls
+        assert "https://test.org/path" in urls
+
+    def test_extract_urls_empty(self) -> None:
+        """_extract_urls returns empty list when no URLs."""
+        assert _extract_urls("no urls here") == []
+
+    @pytest.mark.asyncio
+    async def test_description_urls_have_click_meta(self, mock_task_data: MockDict) -> None:
+        """URLs in description render with @click meta in the RichLog."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                status="open",
+                description="Bug: https://github.com/org/repo/issues/42",
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test(size=(80, 30)) as pilot:
+            await pilot.pause()
+            await _select_first_task(pilot)
+            detail = app.query_one("#task-detail-log", RichLog)
+            # Find line containing the URL
+            found_click_meta = False
+            for line in detail.lines:
+                for seg in line._segments:
+                    meta = seg.style.meta if seg.style else None
+                    if meta and meta.get("@click"):
+                        assert "app.open_url" in meta["@click"]
+                        assert "github.com" in meta["@click"]
+                        found_click_meta = True
+            assert found_click_meta, "No @click meta found in rendered detail pane"
+
     @pytest.mark.asyncio
     async def test_long_error_text_wraps(self, mock_task_data: MockDict) -> None:
         """A long error message is wrapped, not rendered raw."""
@@ -1906,4 +1996,3 @@ class TestLongLineWrapping:
             assert "Another short line." in text
             for line in detail.lines:
                 assert len(line.text) <= 80
-

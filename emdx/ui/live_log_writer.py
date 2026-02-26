@@ -20,6 +20,7 @@ import logging
 
 from textual.widgets import RichLog
 
+from emdx.ui.link_helpers import linkify_text
 from emdx.utils.stream_json_parser import parse_and_format_live_logs
 
 logger = logging.getLogger(__name__)
@@ -147,7 +148,17 @@ class LiveLogWriter:
             line: The line to write
         """
         self.line_count += 1
-        if self.show_line_numbers:
+        if "http" in line:
+            from rich.text import Text
+
+            content = linkify_text(line)
+            if self.show_line_numbers:
+                prefix = Text.from_markup(f"[dim]{self.line_count:5}[/dim] ")
+                prefix.append_text(content)
+                self.log_output.write(prefix)
+            else:
+                self.log_output.write(content)
+        elif self.show_line_numbers:
             self.log_output.write(f"[dim]{self.line_count:5}[/dim] {line}")
         else:
             self.log_output.write(line)

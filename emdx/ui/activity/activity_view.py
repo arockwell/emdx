@@ -400,10 +400,15 @@ class ActivityView(HelpMixin, Widget):
 
     def _render_markdown_preview(self, content: str, title: str = "Untitled") -> None:
         """Render markdown content to the preview RichLog."""
+        from emdx.ui.link_helpers import linkify_richlog
         from emdx.ui.markdown_config import render_markdown_to_richlog
 
         preview = self.query_one("#preview-content", RichLog)
         self._preview_raw_content = render_markdown_to_richlog(preview, content, title)
+
+        # Post-process URLs after the RichLog has rendered its content
+        if "http" in content:
+            self.call_after_refresh(linkify_richlog, preview)
 
         if self._copy_mode:
             self._update_copy_widget()
