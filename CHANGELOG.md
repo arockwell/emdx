@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-02-26
+
+**Clickable URLs and adaptive layouts.** The TUI now renders URLs as clickable cyan links across all screens — click to open in your browser, or press Shift+O to open the first link from the selected item. The layout became responsive: a metadata sidebar appears at wide terminals (120+ cols) and collapses to inline content at narrow widths. Zoom got a three-state cycle (normal → content fullscreen → list fullscreen). On the CLI side, `delegate --task` and `--epic` now accept category-prefixed keys like `FEAT-77`, and delegates are prompted to create subtasks for progress visibility.
+
+### 🚀 Major Features
+
+#### Clickable URLs across all TUI screens (#893, Issue #875)
+URLs in task descriptions, QA answers, log entries, and delegate output are now rendered as underlined cyan links. Clicking opens in the default browser via Textual's `@click` meta dispatch. Shift+O keyboard shortcut opens the first URL from the currently selected item. A shared `link_helpers.py` module provides `linkify_text()` and `extract_urls()` for consistent URL handling.
+
+#### Adaptive sidebar layout (#894)
+All TUI screens now have a responsive metadata sidebar that appears at 120+ column widths and collapses to inline content at narrower terminals. Document metadata surfaces knowledge graph links, timestamps, word count, and tags. Task metadata shows status badges, epic progress, dependencies, and execution info. The zoom key (`z`) now cycles through three states: normal split → content fullscreen → list fullscreen → back to normal.
+
+### 🔧 Improvements
+
+- **`delegate --task` accepts category keys** — `--task FEAT-77` and `--epic SEC-1` now resolve correctly instead of requiring raw database IDs. Added `TaskRef` type alias to document task identifier params throughout the codebase (#895)
+- **Delegate subtask tracking** — delegates with a `--task` flag are now prompted to break work into 3-5 subtasks under the parent task, giving visibility into progress from the outside (#896)
+
+[0.24.0]: https://github.com/arockwell/emdx/compare/v0.23.1...v0.24.0
+
 ## [0.23.1] - 2026-02-25
 
 **TUI polish and delegate improvements.** The QA screen got a visual overhaul — answers now render in structured sections with metadata badges, and the history table shows timestamps, elapsed time, source counts, and retrieval method. Clickable `#N` document references now work in QA answers. The task list gained date filters, and delegates can now grant extra tool permissions.
