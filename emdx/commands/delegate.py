@@ -49,6 +49,7 @@ from ..config.cli_config import (
 from ..config.constants import DELEGATE_EXECUTION_TIMEOUT
 from ..config.delegate_config import build_allowed_tools
 from ..database.documents import get_document
+from ..models.types import TaskRef
 from ..utils.git import generate_delegate_branch_name, validate_pr_preconditions
 
 app = typer.Typer(
@@ -1190,10 +1191,10 @@ def delegate(
         "-d",
         help="Document ID to use as input context",
     ),
-    task: int | None = typer.Option(
+    task: TaskRef | None = typer.Option(
         None,
         "--task",
-        help="Existing task ID to associate with this delegate (sets EMDX_TASK_ID)",
+        help="Existing task ID to associate with this delegate (e.g. 1656 or FEAT-77)",
     ),
     pr: bool = typer.Option(
         False,
@@ -1222,11 +1223,11 @@ def delegate(
         "-b",
         help="Base branch for worktree/branch (default: main)",
     ),
-    epic: int | None = typer.Option(
+    epic: TaskRef | None = typer.Option(
         None,
         "--epic",
         "-e",
-        help="Epic task ID to add tasks to",
+        help="Epic task ID to add tasks to (e.g. 510 or FEAT-5)",
     ),
     cat: str | None = typer.Option(
         None,
@@ -1407,20 +1408,32 @@ def delegate(
         for t in tool:
             extra_tools.extend(t.split(","))
 
-    # Resolve --epic and --cat to parent_task_id and epic_key
+    # Resolve --epic, --cat, and --task (all accept category keys like FEAT-5)
+    from ..models.tasks import get_task as _get_task
+    from ..models.tasks import resolve_task_id as _resolve_task_id
+
     epic_parent_id = None
     epic_key = cat.upper() if isinstance(cat, str) else None
 
-    if isinstance(epic, int) and epic:
-        from ..models.tasks import get_task as _get_task
-
-        epic_task = _get_task(epic)
-        if not epic_task:
-            typer.echo(f"Error: Epic #{epic} not found", err=True)
+    if isinstance(epic, str) and epic:
+        resolved_epic = _resolve_task_id(epic)
+        if resolved_epic is None:
+            typer.echo(f"Error: Epic not found: {epic}", err=True)
             raise typer.Exit(1)
-        epic_parent_id = epic
+        epic_task = _get_task(resolved_epic)
+        if not epic_task:
+            typer.echo(f"Error: Epic not found: {epic}", err=True)
+            raise typer.Exit(1)
+        epic_parent_id = resolved_epic
         if not epic_key and epic_task.get("epic_key"):
             epic_key = epic_task["epic_key"]
+
+    resolved_task: int | None = None
+    if isinstance(task, str) and task:
+        resolved_task = _resolve_task_id(task)
+        if resolved_task is None:
+            typer.echo(f"Error: Task not found: {task}", err=True)
+            raise typer.Exit(1)
 
     # 3. Setup worktree for single task paths (parallel creates per-task worktrees)
     #    --pr/--branch always imply --worktree for a clean git environment
@@ -1462,7 +1475,7 @@ def delegate(
                 source_doc_id=doc,
                 parent_task_id=epic_parent_id,
                 epic_key=epic_key,
-                task_flag=task,
+                task_flag=resolved_task,
                 extra_tools=extra_tools or None,
             )
             if json_output:
@@ -1491,7 +1504,7 @@ def delegate(
                 worktree=use_worktree,
                 epic_key=epic_key,
                 epic_parent_id=epic_parent_id,
-                task_flag=task,
+                task_flag=resolved_task,
                 extra_tools=extra_tools or None,
             )
             if json_output:

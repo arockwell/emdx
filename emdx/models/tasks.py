@@ -16,6 +16,7 @@ from emdx.models.types import (
     EpicViewDict,
     TaskDict,
     TaskLogEntryDict,
+    TaskRef,
 )
 
 # Valid status values
@@ -188,7 +189,7 @@ def get_task(task_id: int) -> TaskDict | None:
 _PREFIXED_ID_RE = re.compile(r"^([A-Za-z]+)-(\d+)$")
 
 
-def resolve_task_id(identifier: str) -> int | None:
+def resolve_task_id(identifier: TaskRef) -> int | None:
     """Resolve a task identifier to a database ID.
 
     Accepts:

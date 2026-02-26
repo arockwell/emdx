@@ -4,6 +4,7 @@ import typer
 from rich.table import Table
 
 from emdx.models import tasks
+from emdx.models.types import TaskRef
 from emdx.utils.output import console
 
 app = typer.Typer(help="Manage task epics")
@@ -13,7 +14,7 @@ ICONS = {"open": "○", "active": "●", "done": "✓", "failed": "✗", "blocke
 EPIC_ID_HELP = "Epic ID (e.g. 510 or SEC-1)"
 
 
-def _resolve_epic_id(identifier: str) -> int:
+def _resolve_epic_id(identifier: TaskRef) -> int:
     """Resolve an epic identifier string to a database ID.
 
     Accepts integer IDs (510) or category keys (SEC-1).
@@ -204,8 +205,8 @@ TASK_ID_HELP = "Task ID (e.g. 42 or TOOL-12)"
 
 @app.command()
 def attach(
-    task_ids: list[str] = typer.Argument(..., help=TASK_ID_HELP),
-    epic: str = typer.Option(..., "-e", "--epic", help=EPIC_ID_HELP),
+    task_ids: list[TaskRef] = typer.Argument(..., help=TASK_ID_HELP),
+    epic: TaskRef = typer.Option(..., "-e", "--epic", help=EPIC_ID_HELP),
 ) -> None:
     """Attach existing tasks to an epic.
 
