@@ -356,8 +356,17 @@ class TaskView(Widget):
         table = self.query_one("#task-table", DataTable)
         table.add_column("icon", key="icon", width=3)
         table.add_column("epic", key="epic", width=7)
-        table.add_column("title", key="title")
+        table.add_column("title", key="title", width=60)
         table.add_column("age", key="age", width=4)
+        # Disable auto-width on title so it doesn't shrink to content
+        try:
+            from textual.widgets._data_table import ColumnKey
+
+            col = table.columns.get(ColumnKey("title"))
+            if col:
+                col.auto_width = False
+        except Exception:
+            pass
 
         # Apply initial sidebar visibility based on current width
         self._update_sidebar_visibility()
@@ -372,13 +381,15 @@ class TaskView(Widget):
         # an empty detail pane.
         def _deferred_select_first_task() -> None:
             self._update_sidebar_visibility()
+            self._sync_title_width()
             self._select_first_task_row()
 
         self.call_after_refresh(_deferred_select_first_task)
 
     def on_resize(self, event: events.Resize) -> None:
-        """Toggle sidebar visibility based on terminal width."""
+        """Toggle sidebar visibility and sync title column width."""
         self._update_sidebar_visibility()
+        self._sync_title_width()
 
     def _update_sidebar_visibility(self) -> None:
         """Show/hide sidebar based on current width."""
@@ -396,6 +407,30 @@ class TaskView(Widget):
         # Re-render detail if sidebar visibility changed
         if was_visible != self._sidebar_visible and self._current_task:
             self._render_task_detail(self._current_task)
+
+    def _sync_title_width(self) -> None:
+        """Set the title column to fill remaining horizontal space."""
+        try:
+            table = self.query_one("#task-table", DataTable)
+        except Exception:
+            return
+        # icon(3) + epic(7) + age(4) + borders/padding(~4)
+        overhead = 3 + 7 + 4 + 4
+        # In sidebar-visible mode, the list section is 70% of width
+        if self._sidebar_visible:
+            avail = int(self.size.width * 0.7)
+        else:
+            avail = self.size.width
+        title_w = max(20, avail - overhead)
+        try:
+            from textual.widgets._data_table import ColumnKey
+
+            col = table.columns.get(ColumnKey("title"))
+            if col and col.width != title_w:
+                col.width = title_w
+                col.auto_width = False
+        except Exception:
+            pass
 
     async def _load_tasks(self, *, restore_row: int | None = None) -> None:
         """Load all manual tasks from the database."""
