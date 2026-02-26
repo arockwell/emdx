@@ -258,8 +258,8 @@ class TestRendering:
             assert any("✗" in i and "Failed task" in t for i, t in task_rows)
 
     @pytest.mark.asyncio
-    async def test_long_title_truncated(self, mock_task_data: MockDict) -> None:
-        """Titles longer than 45 chars are truncated with '...'."""
+    async def test_long_title_stored_in_full(self, mock_task_data: MockDict) -> None:
+        """Full titles stored in cells; DataTable handles visual clipping."""
         long_title = "A" * 60
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title=long_title, status="open"),
@@ -269,11 +269,9 @@ class TestRendering:
             await pilot.pause()
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
-            # Filter to task rows (contain "A"s but not section headers)
             task_titles = [t for t in titles if "A" in t and "READY" not in t]
             assert len(task_titles) >= 1
-            assert "..." in task_titles[0]
-            assert long_title not in task_titles[0]
+            assert long_title in task_titles[0]
 
     @pytest.mark.asyncio
     async def test_status_bar_shows_per_status_counts(self, mock_task_data: MockDict) -> None:
