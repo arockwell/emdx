@@ -18,6 +18,17 @@ if [[ "${EMDX_AUTO_SAVE:-}" == "1" ]]; then
     echo "● emdx delegate — Focus on your assigned task only."
     echo "Output is auto-saved to the knowledge base when you finish."
     echo "Do NOT check ready tasks or pick up other work."
+
+    # Subtask progress tracking
+    if [[ -n "${EMDX_TASK_ID:-}" ]]; then
+        echo ""
+        echo "## Progress Tracking"
+        echo "Break your work into 3-5 subtasks and track progress:"
+        echo "  emdx task add \"Step description\" --epic $EMDX_TASK_ID"
+        echo "  emdx task done <id>   # mark each step done as you complete it"
+        echo "Create subtasks BEFORE starting work. Mark each done as you finish it."
+    fi
+
     if [[ -n "${EMDX_DOC_ID:-}" ]]; then
         echo "Document context (doc #${EMDX_DOC_ID}) follows below."
         echo ""
