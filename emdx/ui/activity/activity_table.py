@@ -66,6 +66,13 @@ class ActivityTable(DataTable[str | Text]):
         self.add_column("time", key="time", width=4)
         self.add_column("id", key="id", width=7)
 
+    def _max_title_width(self) -> int:
+        """Calculate max title width from available table width."""
+        overhead = 3 + 4 + 7 + 4  # icon + time + id + borders/padding
+        if self.size.width > 0:
+            return max(20, self.size.width - overhead)
+        return 60
+
     def _format_time(self, item: ActivityItem) -> str:
         """Format timestamp as compact relative time."""
         from .activity_view import format_time_ago
@@ -90,8 +97,9 @@ class ActivityTable(DataTable[str | Text]):
         """Add a single item row to the table."""
         icon = item.type_icon
         title = item.title.replace("\n", " ").strip()
-        if len(title) > 80:
-            title = title[:77] + "..."
+        max_w = self._max_title_width()
+        if len(title) > max_w:
+            title = title[: max_w - 3] + "..."
         time_str = self._format_time(item)
         id_str = f"#{item.doc_id}" if item.doc_id else ""
 
@@ -144,8 +152,9 @@ class ActivityTable(DataTable[str | Text]):
             try:
                 icon = item.type_icon
                 title = item.title.replace("\n", " ").strip()
-                if len(title) > 80:
-                    title = title[:77] + "..."
+                max_w = self._max_title_width()
+                if len(title) > max_w:
+                    title = title[: max_w - 3] + "..."
                 time_str = self._format_time(item)
                 id_str = f"#{item.doc_id}" if item.doc_id else ""
 

@@ -486,9 +486,6 @@ class TaskView(Widget):
             task.get("epic_key"),
             task.get("epic_seq"),
         )
-        if len(title) > 45:
-            title = title[:42] + "..."
-
         # Epic badge: epics and children show "KEY-N" when available
         epic_key = task.get("epic_key")
         epic_seq = task.get("epic_seq")
