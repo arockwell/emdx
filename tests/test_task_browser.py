@@ -11,7 +11,9 @@ from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Input, RichLog, Static
 
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
-from emdx.ui.task_view import TaskView, _extract_urls, _format_time_ago, _linkify_text, _task_label
+from emdx.ui.link_helpers import extract_urls as _extract_urls
+from emdx.ui.link_helpers import linkify_text as _linkify_text
+from emdx.ui.task_view import TaskView, _format_time_ago, _task_label
 
 # ---------------------------------------------------------------------------
 # Factories

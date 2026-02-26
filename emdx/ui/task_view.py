@@ -5,7 +5,6 @@ Right pane: RichLog with selected task detail (description, deps, log, execution
 """
 
 import logging
-import re
 import textwrap
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -13,7 +12,6 @@ from io import StringIO
 from typing import Any
 
 from rich.console import Console as RichConsole
-from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
@@ -32,6 +30,8 @@ from emdx.models.tasks import (
     update_task,
 )
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
+from emdx.ui.link_helpers import extract_urls as _extract_urls
+from emdx.ui.link_helpers import linkify_text as _linkify_text
 
 logger = logging.getLogger(__name__)
 
@@ -147,54 +147,6 @@ def _task_label(task: TaskDict) -> str:
     if len(title) > 50:
         title = title[:47] + "..."
     return f"{icon} {title}"
-
-
-# URL detection for clickable links in the detail pane
-_URL_RE = re.compile(r"https?://[^\s<>\[\]\"{}]+")
-
-_LINK_STYLE = Style(underline=True, color="bright_cyan")
-
-
-def _clean_url(raw: str) -> str:
-    """Strip trailing punctuation that is likely not part of the URL."""
-    url = raw
-    while url.endswith(")") and url.count(")") > url.count("("):
-        url = url[:-1]
-    url = url.rstrip(".,;:!?'\"")
-    return url
-
-
-def _linkify_text(raw: str) -> Text:
-    """Build a Rich Text with URLs rendered as clickable action links."""
-    text = Text()
-    last_end = 0
-    for match in _URL_RE.finditer(raw):
-        url = _clean_url(match.group(0))
-        if not url:
-            continue
-        if match.start() > last_end:
-            text.append(raw[last_end : match.start()])
-        link_style = _LINK_STYLE + Style(
-            meta={"@click": f"app.open_url({url!r})"},
-        )
-        text.append(url, style=link_style)
-        leftover_start = match.start() + len(url)
-        if leftover_start < match.end():
-            text.append(raw[leftover_start : match.end()])
-        last_end = match.end()
-    if last_end < len(raw):
-        text.append(raw[last_end:])
-    return text
-
-
-def _extract_urls(text: str) -> list[str]:
-    """Extract clean URLs from text."""
-    urls: list[str] = []
-    for match in _URL_RE.finditer(text):
-        url = _clean_url(match.group(0))
-        if url:
-            urls.append(url)
-    return urls
 
 
 class TaskView(Widget):

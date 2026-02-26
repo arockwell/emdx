@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 
 from textual.widgets import RichLog, Static
 
+from emdx.ui.link_helpers import linkify_text
+
 if TYPE_CHECKING:
     from emdx.services.execution_service import Execution
 
@@ -54,11 +56,9 @@ class LogBrowserDisplayMixin:
             metadata_lines.append(f"[yellow]Duration:[/yellow] {minutes}m {seconds}s")
 
         # Add status
-        status_icon = {
-            'running': '🔄',
-            'completed': '✅',
-            'failed': '❌'
-        }.get(execution.status, '❓')
+        status_icon = {"running": "🔄", "completed": "✅", "failed": "❌"}.get(
+            execution.status, "❓"
+        )
         metadata_lines.append(f"[yellow]Status:[/yellow] {status_icon} {execution.status}")
 
         return "\n".join(metadata_lines)
@@ -83,7 +83,11 @@ class LogBrowserDisplayMixin:
                 filtered_content = self._filter_log_content(new_content)  # type: ignore[attr-defined]
                 if filtered_content.strip():
                     log_content = self.query_one("#log-content", RichLog)  # type: ignore[attr-defined]
-                    log_content.write(filtered_content)
+                    log_content.write(
+                        linkify_text(filtered_content)
+                        if "http" in filtered_content
+                        else filtered_content
+                    )
 
                     # Auto-scroll to bottom in live mode
                     if self.is_live_mode:  # type: ignore[attr-defined]

@@ -20,6 +20,7 @@ from textual.containers import Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, Markdown, RichLog, Static
 
+from ..link_helpers import linkify_text
 from ..modals import HelpMixin
 from .qa_presenter import QAEntry, QAPresenter, QAStateVM
 
@@ -557,7 +558,10 @@ class QAScreen(HelpMixin, Widget):
             if not latest.is_loading:
                 if self._stream_buffer:
                     try:
-                        self.query_one("#qa-answer-stream", RichLog).write(self._stream_buffer)
+                        buf = self._stream_buffer
+                        self.query_one("#qa-answer-stream", RichLog).write(
+                            linkify_text(buf) if "http" in buf else buf
+                        )
                     except Exception:
                         pass
                     self._stream_buffer = ""
@@ -578,7 +582,7 @@ class QAScreen(HelpMixin, Widget):
             line, self._stream_buffer = self._stream_buffer.split("\n", 1)
             try:
                 log = self.query_one("#qa-answer-stream", RichLog)
-                log.write(line)
+                log.write(linkify_text(line) if "http" in line else line)
             except Exception:
                 pass
 
