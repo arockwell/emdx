@@ -9,6 +9,7 @@ import logging
 import time
 
 from rich.text import Text
+from textual import events
 from textual.events import Click
 from textual.message import Message
 from textual.widgets import DataTable
@@ -62,9 +63,35 @@ class ActivityTable(DataTable[str | Text]):
     def on_mount(self) -> None:
         """Set up columns."""
         self.add_column("icon", key="icon", width=3)
-        self.add_column("title", key="title")
+        self.add_column("title", key="title", width=self._max_title_width())
         self.add_column("time", key="time", width=4)
         self.add_column("id", key="id", width=7)
+        # Disable auto-width on title so it doesn't shrink to content
+        try:
+            from textual.widgets._data_table import ColumnKey
+
+            col = self.columns.get(ColumnKey("title"))
+            if col:
+                col.auto_width = False
+        except Exception:
+            pass
+
+    def on_resize(self, event: events.Resize) -> None:
+        """Update title column width to fill available space."""
+        self._sync_title_width()
+
+    def _sync_title_width(self) -> None:
+        """Set the title column to fill remaining horizontal space."""
+        w = self._max_title_width()
+        try:
+            from textual.widgets._data_table import ColumnKey
+
+            col = self.columns.get(ColumnKey("title"))
+            if col and col.width != w:
+                col.width = w
+                col.auto_width = False
+        except Exception:
+            pass
 
     def _max_title_width(self) -> int:
         """Calculate max title width from available table width."""
@@ -93,13 +120,12 @@ class ActivityTable(DataTable[str | Text]):
         for item in items:
             self._add_item_row(item)
 
+        self._sync_title_width()
+
     def _add_item_row(self, item: ActivityItem) -> None:
         """Add a single item row to the table."""
         icon = item.type_icon
         title = item.title.replace("\n", " ").strip()
-        max_w = self._max_title_width()
-        if len(title) > max_w:
-            title = title[: max_w - 3] + "..."
         time_str = self._format_time(item)
         id_str = f"#{item.doc_id}" if item.doc_id else ""
 
@@ -152,9 +178,6 @@ class ActivityTable(DataTable[str | Text]):
             try:
                 icon = item.type_icon
                 title = item.title.replace("\n", " ").strip()
-                max_w = self._max_title_width()
-                if len(title) > max_w:
-                    title = title[: max_w - 3] + "..."
                 time_str = self._format_time(item)
                 id_str = f"#{item.doc_id}" if item.doc_id else ""
 

@@ -116,8 +116,8 @@ class TestPopulate:
             assert keys == ["document:1", "document:2"]
 
     @pytest.mark.asyncio
-    async def test_title_truncation(self) -> None:
-        """Long titles are dynamically truncated based on available width."""
+    async def test_title_not_text_truncated(self) -> None:
+        """Full titles are stored in cells; column width handles visual clipping."""
         long_title = "A" * 100
         items: list[ActivityItem] = [make_doc(item_id=1, title=long_title)]
         app = ActivityTestApp()
@@ -128,8 +128,8 @@ class TestPopulate:
             titles = _table_cell_texts(table, "title")
             assert len(titles) == 1
             title_str = str(titles[0])
-            assert title_str.endswith("...")
-            assert len(title_str) < len(long_title)  # truncated below original
+            # Full title is stored — no text-level truncation
+            assert title_str == long_title
 
     @pytest.mark.asyncio
     async def test_id_column_document(self) -> None:
