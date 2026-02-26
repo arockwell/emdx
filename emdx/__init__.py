@@ -6,7 +6,7 @@ import hashlib
 import time
 from pathlib import Path
 
-__version__ = "0.24.1"
+__version__ = "0.24.2"
 
 
 # Generate a unique build identifier based on current timestamp and file modification times
