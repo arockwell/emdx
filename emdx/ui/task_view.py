@@ -5,6 +5,7 @@ Right pane: RichLog with selected task detail (description, deps, log, execution
 """
 
 import logging
+import re
 import textwrap
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from io import StringIO
 from typing import Any
 
 from rich.console import Console as RichConsole
+from rich.style import Style
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
@@ -145,6 +147,54 @@ def _task_label(task: TaskDict) -> str:
     if len(title) > 50:
         title = title[:47] + "..."
     return f"{icon} {title}"
+
+
+# URL detection for clickable links in the detail pane
+_URL_RE = re.compile(r"https?://[^\s<>\[\]\"{}]+")
+
+_LINK_STYLE = Style(underline=True, color="bright_cyan")
+
+
+def _clean_url(raw: str) -> str:
+    """Strip trailing punctuation that is likely not part of the URL."""
+    url = raw
+    while url.endswith(")") and url.count(")") > url.count("("):
+        url = url[:-1]
+    url = url.rstrip(".,;:!?'\"")
+    return url
+
+
+def _linkify_text(raw: str) -> Text:
+    """Build a Rich Text with URLs rendered as clickable action links."""
+    text = Text()
+    last_end = 0
+    for match in _URL_RE.finditer(raw):
+        url = _clean_url(match.group(0))
+        if not url:
+            continue
+        if match.start() > last_end:
+            text.append(raw[last_end : match.start()])
+        link_style = _LINK_STYLE + Style(
+            meta={"@click": f"open_url({url!r})"},
+        )
+        text.append(url, style=link_style)
+        leftover_start = match.start() + len(url)
+        if leftover_start < match.end():
+            text.append(raw[leftover_start : match.end()])
+        last_end = match.end()
+    if last_end < len(raw):
+        text.append(raw[last_end:])
+    return text
+
+
+def _extract_urls(text: str) -> list[str]:
+    """Extract clean URLs from text."""
+    urls: list[str] = []
+    for match in _URL_RE.finditer(text):
+        url = _clean_url(match.group(0))
+        if url:
+            urls.append(url)
+    return urls
 
 
 class TaskView(Widget):
@@ -725,6 +775,7 @@ class TaskView(Widget):
                     "x",
                     "f",
                     "asterisk",
+                    "O",
                 }
                 if event.key in vim_keys:
                     return
@@ -763,6 +814,10 @@ class TaskView(Widget):
             self._group_by = "epic" if self._group_by == "status" else "status"
             self._render_task_table()
             self._update_status_bar()
+            event.prevent_default()
+            event.stop()
+        elif event.key == "O":
+            self._open_task_urls()
             event.prevent_default()
             event.stop()
 
@@ -830,13 +885,20 @@ class TaskView(Widget):
         wrap width so that ``prefix + subline`` never exceeds *width*.
         """
         wrap_at = max(20, width - prefix_width)
+        prefix_text = Text.from_markup(prefix) if prefix else None
         for line in text.split("\n"):
             if not line:
                 detail_log.write(prefix if prefix else "")
                 continue
             wrapped = textwrap.wrap(line, width=wrap_at) or [""]
             for subline in wrapped:
-                detail_log.write(f"{prefix}{subline}")
+                linkified = _linkify_text(subline)
+                if prefix_text is not None:
+                    out = prefix_text.copy()
+                    out.append_text(linkified)
+                    detail_log.write(out)
+                else:
+                    detail_log.write(linkified)
 
     def _write_markdown_guttered(
         self,
@@ -880,6 +942,10 @@ class TaskView(Widget):
 
         for line in lines:
             content = Text.from_ansi(line)
+            # Linkify URLs so they are clickable in the RichLog
+            plain = content.plain
+            if "http" in plain:
+                content = _linkify_text(plain)
             # Safety: hard-break any line still wider than render_width
             chunks: list[Text] = []
             while content.cell_len > render_width:
@@ -1183,3 +1249,35 @@ class TaskView(Widget):
     async def action_mark_wontdo(self) -> None:
         """Mark selected task as won't do."""
         await self._set_task_status("wontdo")
+
+    # ------------------------------------------------------------------
+    # URL opening (click + keyboard)
+    # ------------------------------------------------------------------
+
+    def action_open_url(self, url: str) -> None:
+        """Open a URL in the default browser (triggered by @click on links)."""
+        import webbrowser
+
+        webbrowser.open(url)
+        self.notify(f"Opened {url[:60]}...", timeout=2)
+
+    def _open_task_urls(self) -> None:
+        """Open first URL found in the selected task (Shift+O shortcut)."""
+        task = self._get_selected_task()
+        if not task:
+            return
+        urls: list[str] = []
+        for field in ("description", "error"):
+            val = task.get(field)
+            if isinstance(val, str) and val:
+                urls.extend(_extract_urls(val))
+        if not urls:
+            self.notify("No URLs in this task", timeout=2)
+            return
+        import webbrowser
+
+        webbrowser.open(urls[0])
+        if len(urls) > 1:
+            self.notify(f"Opened 1 of {len(urls)} URLs", timeout=2)
+        else:
+            self.notify(f"Opened {urls[0][:60]}", timeout=2)
