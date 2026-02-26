@@ -487,5 +487,17 @@ class BrowserContainer(App[None]):
         self.notify(f"Opened {url[:60]}", timeout=2)
 
     async def action_select_doc(self, doc_id: int) -> None:
-        """Navigate to a document by ID (used by @click meta on doc refs)."""
-        await self._view_document(doc_id)
+        """Navigate to a document by ID (used by @click meta on doc refs).
+
+        If already on the activity browser, navigate in-place to avoid
+        destroying and remounting the widget tree (which corrupts mouse state).
+        """
+        activity = self.browsers.get("activity")
+        if (
+            self.current_browser == "activity"
+            and activity
+            and hasattr(activity, "select_document_by_id")
+        ):
+            await activity.select_document_by_id(doc_id)
+        else:
+            await self._view_document(doc_id)
