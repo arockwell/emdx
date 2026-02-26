@@ -29,17 +29,6 @@ function relativeTime(dateStr: string): string {
   return `${diffYears}y ago`;
 }
 
-function docTypeIcon(docType: string): string {
-  switch (docType) {
-    case "epic":
-      return "\u{1F4DA}"; // books
-    case "task":
-      return "\u{2611}\u{FE0F}"; // ballot box with check
-    default:
-      return "\u{1F4C4}"; // page facing up
-  }
-}
-
 export function DocumentList({ documents, selectedId, onSelect }: DocumentListProps) {
   const [focusIndex, setFocusIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -118,19 +107,13 @@ export function DocumentList({ documents, selectedId, onSelect }: DocumentListPr
           role="option"
           aria-selected={doc.id === selectedId}
         >
-          <span className="doc-icon">{docTypeIcon(doc.doc_type)}</span>
+          <span className="doc-icon">{"\u{1F4C4}"}</span>
           <div className="doc-info">
             <span className="doc-title">{doc.title}</span>
             <span className="doc-meta">
-              <span className="doc-time">{relativeTime(doc.updated_at)}</span>
-              {doc.tags.length > 0 && (
-                <span className="doc-tags">
-                  {doc.tags.map((tag) => (
-                    <span key={tag} className="badge">
-                      {tag}
-                    </span>
-                  ))}
-                </span>
+              <span className="doc-time">{relativeTime(doc.accessed_at)}</span>
+              {doc.project && (
+                <span className="badge">{doc.project}</span>
               )}
             </span>
           </div>

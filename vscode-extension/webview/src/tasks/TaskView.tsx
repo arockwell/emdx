@@ -4,18 +4,21 @@ import { useVscodeMessage, postMessage } from "../hooks/useVscode";
 export interface Task {
   id: number;
   title: string;
-  description: string;
+  description: string | null;
   status: TaskStatus;
   priority: number;
-  category: string | null;
-  epic_id: number | null;
-  epic_title: string | null;
-  dependencies: number[];
+  epic_key: string | null;
+  epic_seq: number | null;
+  source_doc_id: number | null;
+  parent_task_id: number | null;
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
+  project: string | null;
+  type: string;
 }
 
-type TaskStatus = "ready" | "active" | "blocked" | "done" | "failed" | "wontdo";
+type TaskStatus = "open" | "active" | "blocked" | "done" | "failed" | "wontdo";
 
 interface TaskGroup {
   status: TaskStatus;
@@ -30,10 +33,10 @@ type IncomingMessage =
   | { type: "loading"; data: boolean }
   | { type: "error"; data: string };
 
-const STATUS_ORDER: TaskStatus[] = ["ready", "active", "blocked", "done", "failed", "wontdo"];
+const STATUS_ORDER: TaskStatus[] = ["open", "active", "blocked", "done", "failed", "wontdo"];
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  ready: "Ready",
+  open: "Open",
   active: "Active",
   blocked: "Blocked",
   done: "Done",
@@ -42,7 +45,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 };
 
 const STATUS_ICONS: Record<TaskStatus, string> = {
-  ready: "\u{25CB}", // white circle
+  open: "\u{25CB}", // white circle
   active: "\u{25D4}", // circle with upper right quadrant
   blocked: "\u{26D4}", // no entry
   done: "\u{2705}", // check mark
@@ -250,8 +253,8 @@ export function TaskView() {
                             {task.priority > 0 ? `P${task.priority}` : ""}
                           </span>
                           <span className="task-title">{task.title}</span>
-                          {task.category && (
-                            <span className="badge badge-category">{task.category}</span>
+                          {task.epic_key && (
+                            <span className="badge badge-category">{task.epic_key}</span>
                           )}
                         </div>
                       );
@@ -301,11 +304,8 @@ function TaskDetail({ task, onStatusChange }: TaskDetailProps) {
           {task.priority > 0 && (
             <span className="meta-item">Priority: P{task.priority}</span>
           )}
-          {task.category && (
-            <span className="meta-item">Category: {task.category}</span>
-          )}
-          {task.epic_title && (
-            <span className="meta-item">Epic: {task.epic_title}</span>
+          {task.epic_key && (
+            <span className="meta-item">Epic: {task.epic_key}</span>
           )}
         </div>
       </header>
@@ -314,19 +314,6 @@ function TaskDetail({ task, onStatusChange }: TaskDetailProps) {
         <div className="detail-description">
           <h3>Description</h3>
           <p>{task.description}</p>
-        </div>
-      )}
-
-      {task.dependencies.length > 0 && (
-        <div className="detail-dependencies">
-          <h3>Dependencies</h3>
-          <div className="dep-chips">
-            {task.dependencies.map((depId) => (
-              <span key={depId} className="badge">
-                #{depId}
-              </span>
-            ))}
-          </div>
         </div>
       )}
 

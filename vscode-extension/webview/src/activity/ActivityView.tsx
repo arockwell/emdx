@@ -6,16 +6,18 @@ import { DocumentPreview } from "./DocumentPreview";
 export interface DocumentSummary {
   id: number;
   title: string;
-  doc_type: string;
-  tags: string[];
-  created_at: string;
-  updated_at: string;
+  project: string | null;
+  access_count: number;
+  accessed_at: string;
 }
 
 export interface DocumentDetail extends DocumentSummary {
   content: string;
+  tags: string[];
   word_count: number;
-  linked_docs: Array<{ id: number; title: string }>;
+  created_at: string;
+  updated_at: string;
+  linked_docs: Array<{ doc_id: number; title: string }>;
 }
 
 type IncomingMessage =

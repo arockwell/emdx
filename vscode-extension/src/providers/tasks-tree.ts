@@ -60,6 +60,12 @@ export class TaskTreeItem extends vscode.TreeItem {
         .join("\n\n")
     );
 
+    this.command = {
+      command: "emdx.viewTask",
+      title: "View Task",
+      arguments: [task],
+    };
+
     // Context value enables right-click actions based on current status.
     switch (task.status) {
       case "open":

@@ -1,41 +1,39 @@
 // Shared types between extension host and webview.
-// Mirrors the types in src/types.ts — keep in sync.
+// Mirrors the types in src/types.ts — keep in sync with actual emdx CLI JSON output.
 
 export interface Document {
   id: number;
   title: string;
   project: string | null;
+  access_count: number;
+  accessed_at: string;
+}
+
+export interface DocumentDetail {
+  id: number;
+  title: string;
+  content: string;
+  project: string | null;
+  tags: string[];
+  linked_docs: Array<{ doc_id: number; title: string; similarity_score: number; method: string }>;
+  word_count: number;
+  char_count: number;
+  line_count: number;
+  access_count: number;
+  accessed_at: string;
   created_at: string;
   updated_at: string;
-  accessed_at: string;
-  access_count: number;
-  doc_type: string;
-  tags: string[];
-}
-
-export interface DocumentDetail extends Document {
-  content: string;
-  links: DocumentLink[];
-  word_count?: number;
   parent_id: number | null;
-}
-
-export interface DocumentLink {
-  doc_id: number;
-  title: string;
-  similarity_score: number;
-  method: string;
 }
 
 export interface SearchResult {
   id: number;
   title: string;
   project: string | null;
-  snippet: string;
-  rank: number;
+  score: number;
+  keyword_score?: number;
+  source: string;
   tags: string[];
-  created_at: string;
-  updated_at: string;
 }
 
 export type TaskStatus = "open" | "active" | "blocked" | "done" | "failed" | "wontdo";
@@ -53,12 +51,16 @@ export interface Task {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
+  project: string | null;
+  type: string;
 }
 
 export interface Tag {
+  id: number;
   name: string;
   count: number;
   created_at: string;
+  last_used: string;
 }
 
 export interface QAResult {
@@ -72,19 +74,10 @@ export interface QASource {
   snippet: string;
 }
 
-export interface KBStatus {
-  documents: {
-    total: number;
-    user_created: number;
-    delegate_created: number;
-  };
-  tasks: {
-    open: number;
-    active: number;
-    done: number;
-    blocked: number;
-    failed: number;
-  };
+export interface StatusData {
+  active: Task[];
+  recent: Task[];
+  failed: Task[];
 }
 
 export type ExtensionMessage =
@@ -93,7 +86,7 @@ export type ExtensionMessage =
   | { type: "tasks"; data: Task[] }
   | { type: "searchResults"; data: SearchResult[] }
   | { type: "qaAnswer"; data: QAResult }
-  | { type: "status"; data: KBStatus }
+  | { type: "status"; data: StatusData }
   | { type: "tags"; data: Tag[] }
   | { type: "error"; message: string }
   | { type: "loading"; loading: boolean };

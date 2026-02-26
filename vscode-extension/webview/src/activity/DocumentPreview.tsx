@@ -63,12 +63,12 @@ export function DocumentPreview({ document }: DocumentPreviewProps) {
           <div className="link-chips">
             {document.linked_docs.map((linked) => (
               <button
-                key={linked.id}
+                key={linked.doc_id}
                 className="link-chip"
-                onClick={() => handleLinkedDocClick(linked.id)}
+                onClick={() => handleLinkedDocClick(linked.doc_id)}
                 title={linked.title}
               >
-                #{linked.id} {linked.title}
+                #{linked.doc_id} {linked.title}
               </button>
             ))}
           </div>

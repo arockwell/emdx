@@ -1,26 +1,34 @@
 // EMDX VSCode Extension Types
-// TypeScript interfaces mirroring the EMDX Python TypedDicts for CLI --json output.
+// TypeScript interfaces mirroring the actual emdx CLI --json output.
 
 // ---------------------------------------------------------------------------
 // Document types
 // ---------------------------------------------------------------------------
 
+/** Returned by `emdx find --recent --json` */
 export interface Document {
   id: number;
   title: string;
   project: string | null;
-  created_at: string;
-  updated_at: string;
-  accessed_at: string;
   access_count: number;
-  doc_type: string; // "user" | "wiki"
-  tags: string[];
+  accessed_at: string;
 }
 
-export interface DocumentDetail extends Document {
+/** Returned by `emdx view <id> --json` */
+export interface DocumentDetail {
+  id: number;
+  title: string;
   content: string;
-  links: DocumentLink[];
-  word_count?: number;
+  project: string | null;
+  tags: string[];
+  linked_docs: DocumentLink[];
+  word_count: number;
+  char_count: number;
+  line_count: number;
+  access_count: number;
+  accessed_at: string;
+  created_at: string;
+  updated_at: string;
   parent_id: number | null;
 }
 
@@ -31,15 +39,15 @@ export interface DocumentLink {
   method: string;
 }
 
+/** Returned by `emdx find <query> --json` */
 export interface SearchResult {
   id: number;
   title: string;
   project: string | null;
-  snippet: string;
-  rank: number;
+  score: number;
+  keyword_score?: number;
+  source: string;
   tags: string[];
-  created_at: string;
-  updated_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -48,6 +56,7 @@ export interface SearchResult {
 
 export type TaskStatus = "open" | "active" | "blocked" | "done" | "failed" | "wontdo";
 
+/** Returned by `emdx task list --json` */
 export interface Task {
   id: number;
   title: string;
@@ -61,46 +70,32 @@ export interface Task {
   created_at: string;
   updated_at: string;
   completed_at: string | null;
-}
-
-export interface TaskDependency {
-  id: number;
-  title: string;
-  status: TaskStatus;
+  project: string | null;
+  type: string;
 }
 
 // ---------------------------------------------------------------------------
 // Tag types
 // ---------------------------------------------------------------------------
 
+/** Returned by `emdx tag list --json` */
 export interface Tag {
+  id: number;
   name: string;
   count: number;
   created_at: string;
+  last_used: string;
 }
 
 // ---------------------------------------------------------------------------
 // Status types
 // ---------------------------------------------------------------------------
 
-export interface KBStatus {
-  documents: {
-    total: number;
-    user_created: number;
-    delegate_created: number;
-  };
-  tasks: {
-    open: number;
-    active: number;
-    done: number;
-    blocked: number;
-    failed: number;
-  };
-  delegate_activity: {
-    total_executions: number;
-    success_count: number;
-    failure_count: number;
-  };
+/** Returned by `emdx status --json` */
+export interface StatusData {
+  active: Task[];
+  recent: Task[];
+  failed: Task[];
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +123,7 @@ export type ExtensionMessage =
   | { type: "tasks"; data: Task[] }
   | { type: "searchResults"; data: SearchResult[] }
   | { type: "qaAnswer"; data: QAResult }
-  | { type: "status"; data: KBStatus }
+  | { type: "status"; data: StatusData }
   | { type: "tags"; data: Tag[] }
   | { type: "error"; message: string }
   | { type: "loading"; loading: boolean };

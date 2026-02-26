@@ -1,12 +1,12 @@
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import * as vscode from "vscode";
 
 import type {
   Document,
   DocumentDetail,
-  KBStatus,
   SearchResult,
+  StatusData,
   Tag,
   Task,
 } from "./types";
@@ -30,16 +30,19 @@ class EmdxClient {
     return config.get<string>("executablePath", "emdx");
   }
 
+  private getExecParts(): { command: string; baseArgs: string[] } {
+    const execPath = this.getExecutablePath();
+    const parts = execPath.split(/\s+/);
+    return { command: parts[0], baseArgs: parts.slice(1) };
+  }
+
   private async exec<T>(args: string[], parseJson: true): Promise<T>;
   private async exec(args: string[], parseJson: false): Promise<string>;
   private async exec<T>(
     args: string[],
     parseJson: boolean = true
   ): Promise<T | string> {
-    const execPath = this.getExecutablePath();
-    const parts = execPath.split(/\s+/);
-    const command = parts[0];
-    const baseArgs = parts.slice(1);
+    const { command, baseArgs } = this.getExecParts();
 
     const shouldAddJson =
       parseJson &&
@@ -85,6 +88,50 @@ class EmdxClient {
     }
   }
 
+  /** Execute a command with content piped to stdin. Returns stdout text. */
+  private execWithStdin(args: string[], stdin: string): Promise<string> {
+    const { command, baseArgs } = this.getExecParts();
+    const fullArgs = [...baseArgs, ...args];
+
+    return new Promise((resolve, reject) => {
+      const proc = spawn(command, fullArgs, {
+        timeout: DEFAULT_TIMEOUT_MS,
+        cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+      });
+
+      let stdout = "";
+      let stderr = "";
+
+      proc.stdout.on("data", (data: Buffer) => {
+        stdout += data.toString();
+      });
+      proc.stderr.on("data", (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      proc.on("close", (code) => {
+        if (code === 0) {
+          resolve(stdout);
+        } else {
+          this.outputChannel.appendLine(
+            `[ERROR] emdx ${args.join(" ")}: exit code ${code}`
+          );
+          if (stderr) {
+            this.outputChannel.appendLine(`[STDERR] ${stderr}`);
+          }
+          reject(new Error(`emdx save failed (exit ${code}): ${stderr}`));
+        }
+      });
+
+      proc.on("error", (err) => {
+        reject(err);
+      });
+
+      proc.stdin.write(stdin);
+      proc.stdin.end();
+    });
+  }
+
   // Documents
 
   async listRecentDocuments(limit: number = 20): Promise<Document[]> {
@@ -103,12 +150,20 @@ class EmdxClient {
     title: string,
     content: string,
     tags?: string[]
-  ): Promise<{ id: number }> {
-    const args = ["save", content, "--title", title];
+  ): Promise<{ id: number; title: string }> {
+    // emdx save does not support --json. Pipe content via stdin.
+    const args = ["save", "--title", title];
     if (tags && tags.length > 0) {
       args.push("--tags", tags.join(","));
     }
-    return this.exec<{ id: number }>(args, true);
+
+    const output = await this.execWithStdin(args, content);
+
+    // Parse "✅ Saved as #18: title" from output (with ANSI codes stripped)
+    const clean = output.replace(/\x1b\[[0-9;]*m/g, "");
+    const match = clean.match(/Saved as #(\d+)/);
+    const id = match ? parseInt(match[1], 10) : 0;
+    return { id, title };
   }
 
   // Tasks
@@ -143,8 +198,8 @@ class EmdxClient {
 
   // Status
 
-  async getStatus(): Promise<KBStatus> {
-    return this.exec<KBStatus>(["status", "--stats"], true);
+  async getStatus(): Promise<StatusData> {
+    return this.exec<StatusData>(["status"], true);
   }
 
   // Q&A

@@ -3,11 +3,6 @@ import * as vscode from "vscode";
 import type { Document } from "../types";
 import type { EmdxClient } from "../emdx-client";
 
-const DOC_TYPE_ICONS: Record<string, string> = {
-  user: "\u{1F4C4}",
-  wiki: "\u{1F4DA}",
-};
-
 export class DocTreeItem extends vscode.TreeItem {
   constructor(
     public readonly doc: Document,
@@ -16,26 +11,24 @@ export class DocTreeItem extends vscode.TreeItem {
   ) {
     super(doc.title, collapsibleState);
 
-    const icon = DOC_TYPE_ICONS[doc.doc_type] ?? "\u{1F4C4}";
-    this.label = `${icon} ${doc.title}`;
+    this.label = `\u{1F4C4} ${doc.title}`;
     this.description = doc.project ?? undefined;
     this.tooltip = new vscode.MarkdownString(
       [
         `**${doc.title}**`,
         "",
         `ID: ${doc.id}`,
-        `Type: ${doc.doc_type}`,
         doc.project ? `Project: ${doc.project}` : null,
-        doc.tags.length > 0 ? `Tags: ${doc.tags.join(", ")}` : null,
-        `Updated: ${doc.updated_at}`,
+        `Views: ${doc.access_count}`,
+        `Last accessed: ${doc.accessed_at}`,
       ]
         .filter(Boolean)
         .join("\n\n")
     );
 
     this.command = {
-      command: "emdx.previewDocument",
-      title: "Preview Document",
+      command: "emdx.viewDocument",
+      title: "View Document",
       arguments: [doc.id],
     };
 

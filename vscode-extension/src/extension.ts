@@ -6,7 +6,7 @@ import { TagsTreeProvider } from "./providers/tags-tree";
 import { ActivityPanel } from "./panels/activity-panel";
 import { TaskPanel } from "./panels/task-panel";
 import { QAPanel } from "./panels/qa-panel";
-import type { SearchResult, Task } from "./types";
+import type { SearchResult, StatusData, Task } from "./types";
 
 // ---------------------------------------------------------------------------
 // State
@@ -21,7 +21,7 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const config = vscode.workspace.getConfiguration("emdx");
-  const client = new EmdxClient(config.get<string>("executablePath", "emdx"));
+  const client = new EmdxClient();
 
   // Verify emdx is reachable
   const available = await client.isAvailable();
@@ -139,11 +139,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("emdx.status", async () => {
       try {
         const status = await client.getStatus();
-        const msg = [
-          `Documents: ${status.documents.total}`,
-          `Tasks — open: ${status.tasks.open}, active: ${status.tasks.active}, done: ${status.tasks.done}`,
-          `Delegates — ${status.delegate_activity.total_executions} runs, ${status.delegate_activity.success_count} ok`,
-        ].join("  |  ");
+        const msg = statusSummary(status);
         vscode.window.showInformationMessage(msg);
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to fetch status: ${String(err)}`);
@@ -173,6 +169,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } catch (err) {
         vscode.window.showErrorMessage(`Failed to load document: ${String(err)}`);
       }
+    }),
+  );
+
+  // ------------------------------------------------------------------
+  // View task
+  // ------------------------------------------------------------------
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("emdx.viewTask", (task?: Task) => {
+      if (!task) {
+        return;
+      }
+      const panel = vscode.window.createWebviewPanel(
+        "emdx.taskPreview",
+        `Task #${task.id}: ${task.title}`,
+        vscode.ViewColumn.One,
+        { enableScripts: false },
+      );
+      panel.webview.html = buildTaskPreviewHtml(task);
     }),
   );
 
@@ -354,7 +369,7 @@ async function saveSelectionToKB(client: EmdxClient): Promise<void> {
 
   try {
     const result = await client.saveDocument(title, text, tags);
-    vscode.window.showInformationMessage(`Saved as #${result.id}: ${result.title}`);
+    vscode.window.showInformationMessage(`Saved as #${result.id}: ${title}`);
   } catch (err) {
     vscode.window.showErrorMessage(`Failed to save: ${String(err)}`);
   }
@@ -449,16 +464,42 @@ async function changeTaskStatus(
 // Status bar
 // ---------------------------------------------------------------------------
 
+function statusSummary(status: StatusData): string {
+  const activeCount = status.active.length;
+  const recentCount = status.recent.length;
+  const failedCount = status.failed.length;
+  const parts: string[] = [];
+  if (activeCount > 0) {
+    parts.push(`${activeCount} active`);
+  }
+  if (recentCount > 0) {
+    parts.push(`${recentCount} recent`);
+  }
+  if (failedCount > 0) {
+    parts.push(`${failedCount} failed`);
+  }
+  return parts.length > 0
+    ? `Delegates: ${parts.join(", ")}`
+    : "No active delegates";
+}
+
 async function updateStatusBar(client: EmdxClient): Promise<void> {
   if (!statusBarItem) {
     return;
   }
   try {
     const status = await client.getStatus();
-    const docs = status.documents.total;
-    const activeTasks = status.tasks.active;
-    const openTasks = status.tasks.open;
-    statusBarItem.text = `$(database) EMDX: ${docs} docs, ${activeTasks}/${openTasks} tasks`;
+    const activeCount = status.active.length;
+    const failedCount = status.failed.length;
+    const parts: string[] = [];
+    if (activeCount > 0) {
+      parts.push(`${activeCount} active`);
+    }
+    if (failedCount > 0) {
+      parts.push(`${failedCount} failed`);
+    }
+    const suffix = parts.length > 0 ? `: ${parts.join(", ")}` : "";
+    statusBarItem.text = `$(database) EMDX${suffix}`;
     statusBarItem.show();
   } catch {
     statusBarItem.text = "$(database) EMDX";
@@ -544,6 +585,69 @@ function buildDocumentPreviewHtml(title: string, content: string, tags: string[]
   ${tagsHtml}
   <hr />
   <pre><code>${escapeHtml(content)}</code></pre>
+</body>
+</html>`;
+}
+
+function buildTaskPreviewHtml(task: Task): string {
+  const statusIcons: Record<string, string> = {
+    open: "\u25CB",
+    active: "\u25CF",
+    blocked: "\u26A0",
+    done: "\u2713",
+    failed: "\u2717",
+    wontdo: "\u2298",
+  };
+  const icon = statusIcons[task.status] ?? "\u25CB";
+
+  const meta = [
+    `<strong>Status:</strong> ${icon} ${escapeHtml(task.status)}`,
+    `<strong>Priority:</strong> ${task.priority}`,
+    task.epic_key ? `<strong>Epic:</strong> ${escapeHtml(task.epic_key)}` : null,
+    `<strong>Created:</strong> ${escapeHtml(task.created_at)}`,
+    `<strong>Updated:</strong> ${escapeHtml(task.updated_at)}`,
+    task.completed_at ? `<strong>Completed:</strong> ${escapeHtml(task.completed_at)}` : null,
+  ]
+    .filter(Boolean)
+    .map((m) => `<li>${m}</li>`)
+    .join("\n");
+
+  const description = task.description
+    ? `<hr />\n<pre><code>${escapeHtml(task.description)}</code></pre>`
+    : `<hr />\n<p style="color: var(--vscode-disabledForeground);">No description</p>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task #${task.id}</title>
+  <style>
+    body {
+      font-family: var(--vscode-font-family, sans-serif);
+      font-size: var(--vscode-font-size, 14px);
+      color: var(--vscode-foreground);
+      background: var(--vscode-editor-background);
+      padding: 16px 24px;
+      line-height: 1.6;
+    }
+    h1 { font-size: 1.4em; margin-bottom: 4px; }
+    ul { list-style: none; padding: 0; }
+    li { margin-bottom: 4px; }
+    pre {
+      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
+      padding: 12px;
+      border-radius: 4px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+    pre code { background: none; padding: 0; }
+  </style>
+</head>
+<body>
+  <h1>#${task.id}: ${escapeHtml(task.title)}</h1>
+  <ul>${meta}</ul>
+  ${description}
 </body>
 </html>`;
 }

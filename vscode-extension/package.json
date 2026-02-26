@@ -96,6 +96,11 @@
         "command": "emdx.viewDocument",
         "title": "EMDX: View Document",
         "icon": "$(eye)"
+      },
+      {
+        "command": "emdx.viewTask",
+        "title": "EMDX: View Task",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
@@ -154,7 +159,7 @@
         },
         "emdx.autoRefreshInterval": {
           "type": "number",
-          "default": 30,
+          "default": 120,
           "description": "Auto-refresh interval in seconds (0 to disable)."
         }
       }
