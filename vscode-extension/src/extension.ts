@@ -577,6 +577,115 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Simple markdown to HTML converter for static webviews. */
+function markdownToHtml(md: string): string {
+  let html = "";
+  const lines = md.split("\n");
+  let inCodeBlock = false;
+  let codeBlockContent = "";
+  let inList = false;
+  let listType: "ul" | "ol" = "ul";
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Fenced code blocks
+    if (line.trimStart().startsWith("```")) {
+      if (inCodeBlock) {
+        html += `<pre><code>${escapeHtml(codeBlockContent.trimEnd())}</code></pre>\n`;
+        codeBlockContent = "";
+        inCodeBlock = false;
+      } else {
+        if (inList) { html += listType === "ul" ? "</ul>\n" : "</ol>\n"; inList = false; }
+        inCodeBlock = true;
+      }
+      continue;
+    }
+    if (inCodeBlock) {
+      codeBlockContent += line + "\n";
+      continue;
+    }
+
+    // Close list if current line isn't a list item
+    if (inList && !/^\s*[-*+]\s|^\s*\d+\.\s/.test(line)) {
+      html += listType === "ul" ? "</ul>\n" : "</ol>\n";
+      inList = false;
+    }
+
+    // Blank line
+    if (line.trim() === "") {
+      continue;
+    }
+
+    // Headers
+    const headerMatch = line.match(/^(#{1,6})\s+(.+)/);
+    if (headerMatch) {
+      const level = headerMatch[1].length;
+      html += `<h${level}>${inlineMarkdown(escapeHtml(headerMatch[2]))}</h${level}>\n`;
+      continue;
+    }
+
+    // Horizontal rules
+    if (/^[-*_]{3,}\s*$/.test(line.trim())) {
+      html += "<hr />\n";
+      continue;
+    }
+
+    // Unordered list items
+    const ulMatch = line.match(/^\s*[-*+]\s+(.*)/);
+    if (ulMatch) {
+      if (!inList || listType !== "ul") {
+        if (inList) { html += "</ol>\n"; }
+        html += "<ul>\n";
+        inList = true;
+        listType = "ul";
+      }
+      html += `<li>${inlineMarkdown(escapeHtml(ulMatch[1]))}</li>\n`;
+      continue;
+    }
+
+    // Ordered list items
+    const olMatch = line.match(/^\s*\d+\.\s+(.*)/);
+    if (olMatch) {
+      if (!inList || listType !== "ol") {
+        if (inList) { html += "</ul>\n"; }
+        html += "<ol>\n";
+        inList = true;
+        listType = "ol";
+      }
+      html += `<li>${inlineMarkdown(escapeHtml(olMatch[1]))}</li>\n`;
+      continue;
+    }
+
+    // Regular paragraph
+    html += `<p>${inlineMarkdown(escapeHtml(line))}</p>\n`;
+  }
+
+  if (inCodeBlock) {
+    html += `<pre><code>${escapeHtml(codeBlockContent.trimEnd())}</code></pre>\n`;
+  }
+  if (inList) {
+    html += listType === "ul" ? "</ul>\n" : "</ol>\n";
+  }
+
+  return html;
+}
+
+/** Convert inline markdown (bold, italic, code, links) in already-escaped HTML. */
+function inlineMarkdown(escaped: string): string {
+  return escaped
+    // inline code (must come before bold/italic to avoid conflicts)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    // bold+italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>")
+    // bold
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    // italic
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    // links [text](url)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
 function buildDocumentPreviewHtml(title: string, content: string, tags: string[]): string {
   const tagsHtml = tags.length
     ? `<p style="margin-bottom:12px;">${tags.map((t) => `<code>${escapeHtml(t)}</code>`).join(" ")}</p>`
@@ -618,13 +727,19 @@ function buildDocumentPreviewHtml(title: string, content: string, tags: string[]
       background: none;
       padding: 0;
     }
+    .content a { color: var(--vscode-textLink-foreground); }
+    .content p { margin: 4px 0; }
+    .content h2 { font-size: 1.2em; margin: 16px 0 8px; }
+    .content h3 { font-size: 1.1em; margin: 12px 0 6px; }
+    .content ul, .content ol { padding-left: 24px; }
+    .content li { margin: 2px 0; }
   </style>
 </head>
 <body>
   <h1>${escapeHtml(title)}</h1>
   ${tagsHtml}
   <hr />
-  <pre><code>${escapeHtml(content)}</code></pre>
+  <div class="content">${markdownToHtml(content)}</div>
 </body>
 </html>`;
 }
@@ -656,12 +771,12 @@ function buildTaskPreviewHtml(
     .join("\n");
 
   const description = task.description
-    ? `<h3>Description</h3>\n<pre><code>${escapeHtml(task.description)}</code></pre>`
+    ? `<h3>Description</h3>\n<div class="content">${markdownToHtml(task.description)}</div>`
     : `<p style="color: var(--vscode-disabledForeground);">No description</p>`;
 
   const logHtml = log.length > 0
     ? `<h3>Work Log</h3>\n<div class="work-log">${log.map((entry) =>
-        `<div class="log-entry"><span class="log-ts">${escapeHtml(entry.timestamp)}</span> ${escapeHtml(entry.message)}</div>`
+        `<div class="log-entry"><div class="log-ts">${escapeHtml(entry.timestamp)}</div><div class="log-msg">${markdownToHtml(entry.message)}</div></div>`
       ).join("\n")}</div>`
     : "";
 
@@ -692,16 +807,20 @@ function buildTaskPreviewHtml(
       white-space: pre-wrap;
     }
     pre code { background: none; padding: 0; }
+    .content p { margin: 4px 0; }
+    .content a { color: var(--vscode-textLink-foreground); }
     .work-log { margin-top: 8px; }
     .log-entry {
-      padding: 6px 0;
+      padding: 8px 0;
       border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
     }
     .log-ts {
       color: var(--vscode-descriptionForeground);
       font-size: 0.85em;
-      margin-right: 8px;
+      margin-bottom: 4px;
     }
+    .log-msg { margin: 0; }
+    .log-msg p { margin: 2px 0; }
   </style>
 </head>
 <body>

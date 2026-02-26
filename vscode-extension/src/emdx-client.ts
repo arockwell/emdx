@@ -266,11 +266,15 @@ class EmdxClient {
     const clean = (raw as string).replace(/\x1b\[[0-9;]*m/g, "");
     const entries: Array<{ timestamp: string; message: string }> = [];
 
-    // Each log line: "  2026-02-26 09:45:42 The message text..."
+    // Log lines start with "  2026-02-26 09:45:42 message text..."
+    // Continuation lines are indented or bare (no timestamp prefix).
     for (const line of clean.split("\n")) {
-      const match = line.match(/^\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(.+)/);
+      const match = line.match(/^\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(.*)/);
       if (match) {
         entries.push({ timestamp: match[1], message: match[2] });
+      } else if (entries.length > 0 && line.trim()) {
+        // Continuation of the previous entry
+        entries[entries.length - 1].message += "\n" + line.trim();
       }
     }
 
