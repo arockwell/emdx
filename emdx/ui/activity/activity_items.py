@@ -48,6 +48,13 @@ class DocumentItem(ActivityItem):
 
     doc_id: int = 0
     doc_type: str = "user"
+    project: str = ""
+    tags: list[str] | None = None
+    access_count: int = 0
+    word_count: int = 0
+    updated_at: datetime | None = None
+    accessed_at: datetime | None = None
+    parent_id: int | None = None
 
     @property
     def item_type(self) -> str:
