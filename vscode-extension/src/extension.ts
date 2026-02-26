@@ -14,6 +14,7 @@ import type { SearchResult, StatusData, Task } from "./types";
 
 let autoRefreshTimer: ReturnType<typeof setInterval> | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+let clientInstance: EmdxClient | undefined;
 
 // ---------------------------------------------------------------------------
 // Activation
@@ -22,6 +23,7 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const config = vscode.workspace.getConfiguration("emdx");
   const client = new EmdxClient();
+  clientInstance = client;
 
   // Verify emdx is reachable
   const available = await client.isAvailable();
@@ -308,6 +310,10 @@ export function deactivate(): void {
   if (statusBarItem) {
     statusBarItem.dispose();
     statusBarItem = undefined;
+  }
+  if (clientInstance) {
+    clientInstance.dispose();
+    clientInstance = undefined;
   }
 }
 
