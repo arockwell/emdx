@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-02-26
+
+**Title columns fill available width.** The Docs and Tasks DataTable title columns now expand to fill horizontal space instead of auto-sizing to content width. Previously titles were double-truncated — once at the text level during populate (using a width calculated before layout finalized) and again by the column width constraint — leaving visible empty space on the right. Now full title text is stored in cells with `auto_width` disabled from mount, and column width syncs on every resize. This also eliminates the "pop-in" where titles would briefly appear truncated then expand.
+
+### 🔧 Improvements
+
+- **Title columns fill available space** — ActivityTable and TaskView DataTables now set explicit title column widths on mount and sync them on resize, replacing the previous auto-width behavior that left empty space (#902)
+- **Updated demo GIF** — re-recorded at 900x700 (83 cols) for a clean narrow layout without sidebar
+
+[0.24.2]: https://github.com/arockwell/emdx/compare/v0.24.1...v0.24.2
+
 ## [0.24.1] - 2026-02-26
 
 **Clickable doc refs in the activity pane.** The `#42`-style document IDs in "Related:" sections are now clickable — clicking navigates directly to that document without remounting the widget tree, which previously broke mouse event routing.
