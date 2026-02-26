@@ -1,0 +1,199 @@
+{
+  "name": "emdx",
+  "displayName": "EMDX Knowledge Base",
+  "description": "Browse and manage your EMDX knowledge base from VSCode",
+  "version": "0.1.0",
+  "publisher": "arockwell",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "resources/emdx-icon.png",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "emdx",
+          "title": "EMDX",
+          "icon": "resources/emdx-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "emdx": [
+        {
+          "id": "emdx.recentDocs",
+          "name": "Recent Documents"
+        },
+        {
+          "id": "emdx.tasks",
+          "name": "Tasks"
+        },
+        {
+          "id": "emdx.tags",
+          "name": "Tags"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "emdx.showActivity",
+        "title": "EMDX: Documents",
+        "icon": "$(files)"
+      },
+      {
+        "command": "emdx.showTasks",
+        "title": "EMDX: Tasks",
+        "icon": "$(tasklist)"
+      },
+      {
+        "command": "emdx.showQA",
+        "title": "EMDX: Ask",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "emdx.search",
+        "title": "EMDX: Search Knowledge Base",
+        "icon": "$(search)"
+      },
+      {
+        "command": "emdx.saveSelection",
+        "title": "EMDX: Save Selection to KB"
+      },
+      {
+        "command": "emdx.saveFile",
+        "title": "EMDX: Save File to KB"
+      },
+      {
+        "command": "emdx.refresh",
+        "title": "EMDX: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "emdx.taskDone",
+        "title": "EMDX: Mark Task Done"
+      },
+      {
+        "command": "emdx.taskActive",
+        "title": "EMDX: Mark Task Active"
+      },
+      {
+        "command": "emdx.taskBlocked",
+        "title": "EMDX: Mark Task Blocked"
+      },
+      {
+        "command": "emdx.status",
+        "title": "EMDX: Show Status"
+      },
+      {
+        "command": "emdx.viewDocument",
+        "title": "EMDX: View Document",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "emdx.viewTask",
+        "title": "EMDX: View Task",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "emdx.filterByTag",
+        "title": "EMDX: Filter by Tag",
+        "icon": "$(filter)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "emdx.refresh",
+          "when": "view =~ /^emdx\\./",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "emdx.saveSelection",
+          "when": "editorHasSelection",
+          "group": "emdx"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "emdx.search",
+        "key": "ctrl+shift+k",
+        "mac": "cmd+shift+k"
+      },
+      {
+        "command": "emdx.showActivity",
+        "key": "ctrl+shift+1",
+        "mac": "cmd+shift+1",
+        "when": "emdx.active"
+      },
+      {
+        "command": "emdx.showTasks",
+        "key": "ctrl+shift+2",
+        "mac": "cmd+shift+2",
+        "when": "emdx.active"
+      },
+      {
+        "command": "emdx.showQA",
+        "key": "ctrl+shift+3",
+        "mac": "cmd+shift+3",
+        "when": "emdx.active"
+      }
+    ],
+    "configuration": {
+      "title": "EMDX",
+      "properties": {
+        "emdx.executablePath": {
+          "type": "string",
+          "default": "emdx",
+          "description": "Path to the emdx CLI executable. Use 'poetry run emdx' if installed via Poetry."
+        },
+        "emdx.recentDocumentLimit": {
+          "type": "number",
+          "default": 50,
+          "description": "Number of recent documents to show in the Activity view."
+        },
+        "emdx.autoRefreshInterval": {
+          "type": "number",
+          "default": 120,
+          "description": "Auto-refresh interval in seconds (0 to disable)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.config.mjs --production",
+    "watch": "node esbuild.config.mjs --watch",
+    "build:webview": "node esbuild.config.mjs --webview --production",
+    "watch:webview": "node esbuild.config.mjs --webview --watch",
+    "lint": "eslint src/ webview/",
+    "test": "node --import tsx src/test/runTests.ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^9.0.0"
+  }
+}

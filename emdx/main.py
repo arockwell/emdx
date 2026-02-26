@@ -96,6 +96,7 @@ from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
+from emdx.commands.serve import serve as serve_command  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
@@ -153,6 +154,9 @@ app.command(name="briefing")(briefing_command)
 
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
+
+# Add the serve command for IDE integrations (JSON-RPC over stdin/stdout)
+app.command(name="serve")(serve_command)
 
 
 # =============================================================================
