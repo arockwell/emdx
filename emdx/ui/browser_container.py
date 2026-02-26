@@ -485,3 +485,7 @@ class BrowserContainer(App[None]):
 
         webbrowser.open(url)
         self.notify(f"Opened {url[:60]}", timeout=2)
+
+    async def action_select_doc(self, doc_id: int) -> None:
+        """Navigate to a document by ID (used by @click meta on doc refs)."""
+        await self._view_document(doc_id)
