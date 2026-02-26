@@ -13,7 +13,7 @@ from rich.text import Text
 from emdx.commands.categories import app as categories_app
 from emdx.commands.epics import app as epics_app
 from emdx.models import tasks
-from emdx.models.types import TaskDict
+from emdx.models.types import TaskDict, TaskRef
 from emdx.utils.lazy_group import make_alias_group
 from emdx.utils.output import console, is_non_interactive, print_json
 
@@ -64,7 +64,7 @@ def _display_id(task: TaskDict) -> str:
 
 
 def _resolve_id(
-    identifier: str,
+    identifier: TaskRef,
     json_output: bool = False,
 ) -> int:
     """Resolve a task identifier string to a database ID.
@@ -87,7 +87,7 @@ def add(
     title: str = typer.Argument(..., help="Task title"),
     doc: int | None = typer.Option(None, "-d", "--doc", help="Link to document ID"),
     description: str | None = typer.Option(None, "-D", "--description", help="Task description"),
-    epic: str | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
+    epic: TaskRef | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Category key (e.g. SEC)"),
     after: list[int] | None = typer.Option(
         None, "--after", help="Task IDs this depends on (repeatable)"
@@ -454,7 +454,7 @@ def list_cmd(
     all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
     done: bool = typer.Option(False, "--done", help="Show done tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
-    epic: str | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
+    epic: TaskRef | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
     since: str | None = typer.Option(
         None, "--since", help="Show tasks completed on or after DATE (YYYY-MM-DD)"

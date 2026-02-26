@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, TypedDict
+from typing import Literal, TypeAlias, TypedDict
 
 TaskStatus = Literal["open", "active", "blocked", "done", "failed", "wontdo"]
+
+# User-facing task identifier: "42", "#42", or "FEAT-77".
+# Resolved to int by resolve_task_id().
+TaskRef: TypeAlias = str
 
 
 class TaskDict(TypedDict):
