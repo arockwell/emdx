@@ -2117,17 +2117,18 @@ class TestAllowedToolsSeparator:
             title=None,
             model=None,
             quiet=True,
-            extra_tools=["Read", "Grep", "Bash(gh:*)"],
+            extra_tools=["WebFetch", "NotebookEdit", "Bash(gh:*)"],
         )
 
         cmd = mock_subprocess.run.call_args[0][0]
         tools_idx = cmd.index("--allowedTools")
         tools_value = cmd[tools_idx + 1]
-        assert "Read" in tools_value.split(",")
-        assert "Grep" in tools_value.split(",")
+        assert "WebFetch" in tools_value.split(",")
+        assert "NotebookEdit" in tools_value.split(",")
         assert "Bash(gh:*)" in tools_value.split(",")
         # Base tools still present
         assert "Bash(git:*)" in tools_value.split(",")
+        assert "Read" in tools_value.split(",")
 
     @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
@@ -2151,7 +2152,7 @@ class TestAllowedToolsSeparator:
             title=None,
             model=None,
             quiet=True,
-            extra_tools=["Bash(git:*)", "Read"],  # Bash(git:*) is already in base
+            extra_tools=["Bash(git:*)", "Read"],  # both already in base
         )
 
         cmd = mock_subprocess.run.call_args[0][0]
@@ -2159,7 +2160,7 @@ class TestAllowedToolsSeparator:
         tools_value = cmd[tools_idx + 1]
         tools_list = tools_value.split(",")
         assert tools_list.count("Bash(git:*)") == 1
-        assert "Read" in tools_list
+        assert tools_list.count("Read") == 1
 
 
 # =============================================================================
@@ -2192,13 +2193,20 @@ class TestBuildAllowedTools:
         result = build_allowed_tools(branch=True)
         assert "Bash(gh:*)" in result
 
+    def test_file_operation_tools_in_base(self):
+        """File operation tools are included in base set (#913)."""
+        from emdx.config.delegate_config import BASE_ALLOWED_TOOLS
+
+        for tool in ("Read", "Write", "Edit", "Glob", "Grep"):
+            assert tool in BASE_ALLOWED_TOOLS, f"{tool} missing from BASE_ALLOWED_TOOLS"
+
     def test_extra_tools_appended(self):
         """Extra tools are appended to the list."""
         from emdx.config.delegate_config import build_allowed_tools
 
-        result = build_allowed_tools(extra_tools=["Read", "Grep"])
-        assert "Read" in result
-        assert "Grep" in result
+        result = build_allowed_tools(extra_tools=["WebFetch", "NotebookEdit"])
+        assert "WebFetch" in result
+        assert "NotebookEdit" in result
 
     def test_deduplication(self):
         """Duplicate tools are not repeated."""
@@ -2206,7 +2214,7 @@ class TestBuildAllowedTools:
 
         result = build_allowed_tools(extra_tools=["Bash(git:*)", "Read"])
         assert result.count("Bash(git:*)") == 1
-        assert "Read" in result
+        assert result.count("Read") == 1
 
     @patch("emdx.config.delegate_config.load_delegate_config")
     def test_config_file_tools_loaded(self, mock_config):
@@ -2223,10 +2231,10 @@ class TestBuildAllowedTools:
         """Config and extra tools are deduplicated against each other."""
         from emdx.config.delegate_config import build_allowed_tools
 
-        mock_config.return_value = {"allowed_tools": ["Read"]}
-        result = build_allowed_tools(extra_tools=["Read", "Grep"])
-        assert result.count("Read") == 1
-        assert "Grep" in result
+        mock_config.return_value = {"allowed_tools": ["WebFetch"]}
+        result = build_allowed_tools(extra_tools=["WebFetch", "NotebookEdit"])
+        assert result.count("WebFetch") == 1
+        assert "NotebookEdit" in result
 
 
 # =============================================================================

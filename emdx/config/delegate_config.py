@@ -13,9 +13,19 @@ logger = logging.getLogger(__name__)
 
 DELEGATE_CONFIG_PATH = EMDX_CONFIG_DIR / "delegate.json"
 
-# Base tools always granted to delegates (Bash subcommand patterns).
-# These are the minimum set needed for Python dev workflows.
+# Base tools always granted to delegates.
+# --print mode can't prompt for interactive approval, so every tool the
+# agent needs must be pre-authorized here.  File-operation tools (Read,
+# Write, Edit, Glob, Grep) are essential — without them the agent can't
+# access the worktree at all (#913).
 BASE_ALLOWED_TOOLS: list[str] = [
+    # File operations — required for all code tasks
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    # Bash subcommand patterns for Python dev workflows
     "Bash(git:*)",
     "Bash(poetry:*)",
     "Bash(ruff:*)",
