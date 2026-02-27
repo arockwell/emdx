@@ -227,7 +227,7 @@ class DelegateView(Widget):
                     if 0 <= cursor_row < len(row_keys):
                         selected_key = str(row_keys[cursor_row].value)
             except Exception:
-                pass
+                logger.warning("Failed to save cursor position", exc_info=True)
 
             table.clear()
             self._row_data.clear()
@@ -326,7 +326,7 @@ class DelegateView(Widget):
                             table.move_cursor(row=idx)
                             break
                 except Exception:
-                    pass
+                    logger.warning("Failed to restore cursor", exc_info=True)
 
             # Update status bar
             status_bar = self.query_one("#delegate-status-bar", Static)
@@ -482,7 +482,7 @@ class DelegateView(Widget):
                         attempts += 1
                         continue
             except Exception:
-                pass
+                logger.warning("Failed to skip header row", exc_info=True)
             break
 
     def action_refresh(self) -> None:
