@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-02-27
+
+**Delegate Browser and streamlined TUI.** A new Delegate Browser (key `3`) gives real-time visibility into delegate activity — active, recently completed, and failed tasks with a detail pane showing prompts, subtask trees, and clickable links to PRs and output documents. The save pipeline was rewritten to bypass the hook-based Rube Goldberg flow, saving output directly in Python after `subprocess.run()`. The Q&A screen was retired (replaced by `emdx find --ask` and Claude Code), and the remaining TUI chrome was simplified with cleaner help bars and a working Enter-to-fullscreen shortcut.
+
+### 🚀 Major Features
+
+#### Delegate Browser TUI (#905)
+New TUI screen on key `3` with a DataTable showing ACTIVE, RECENT, and FAILED delegate sections, plus a RichLog detail pane. The detail pane shows the delegate's prompt (with linkified URLs), subtask tree with status icons, and a Links section with clickable PR URLs and output document references. Auto-refreshes every 5 seconds with cursor position preserved across refreshes.
+
+#### Inline save for delegates (#905)
+Replaced the hook-based save flow (`save-output.sh` → `emdx save` CLI → parse doc ID from stdout → temp batch file) with a direct `save_document()` call in Python, followed by post-save enrichment (title-match wikify, entity wikify, auto-link). Removed execution tracking — delegates no longer create empty execution rows with no log file or PID.
+
+### 🔧 Improvements
+
+- **Simplified TUI chrome** — help bars across all screens now use a consistent compact format with double-space separators instead of `│` pipes, and show essential hints only (#907)
+- **Enter opens fullscreen preview** — Enter key on a document row now correctly opens the fullscreen document preview instead of being consumed by DataTable's built-in cursor action (#907)
+- **Stronger delegate subtask tracking** — `prime.sh` now uses REQUIRED Progress Tracking with concrete `emdx task add` examples instead of a soft suggestion (#905)
+- **Clickable PR links in delegate detail** — delegates that create PRs store the URL in the task description, rendered as a clickable link in the Delegate Browser (#905)
+
+### 🐛 Bug Fixes
+
+- **Doc link click no longer freezes TUI** — `action_select_doc` was async, but Textual dispatches `@click` meta actions synchronously; async DOM mutations during a click handler deadlocked the message loop. Made it sync with `run_worker` to defer navigation (#905)
+- **Delegate tasks now visible under epics** — queries filtered by `parent_task_id IS NULL`, missing tasks nested under epics; changed to filter by `prompt IS NOT NULL` (#905)
+- **Cursor preserved across delegate refreshes** — `table.clear()` was resetting cursor to row 0 on every 5s auto-refresh; now saves and restores the selected row key (#905)
+
+### 🗑️ Removed
+
+- **Q&A screen** — removed the Q&A TUI screen (key `3`), presenter, and 1,147 lines of tests. The 5s minimum latency floor from Claude CLI overhead made it impractical; `emdx find --ask` and Claude Code serve the use case better (#906)
+
+[0.25.0]: https://github.com/arockwell/emdx/compare/v0.24.2...v0.25.0
+
 ## [0.24.2] - 2026-02-26
 
 **Title columns fill available width.** The Docs and Tasks DataTable title columns now expand to fill horizontal space instead of auto-sizing to content width. Previously titles were double-truncated — once at the text level during populate (using a width calculated before layout finalized) and again by the column width constraint — leaving visible empty space on the right. Now full title text is stored in cells with `auto_width` disabled from mount, and column width syncs on every resize. This also eliminates the "pop-in" where titles would briefly appear truncated then expand.
