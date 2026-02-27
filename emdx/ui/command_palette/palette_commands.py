@@ -157,6 +157,25 @@ class CommandRegistry:
             )
         )
 
+        self.register(
+            PaletteCommand(
+                id="nav.delegates",
+                name="Go to Delegates",
+                description="Switch to Delegate browser",
+                keywords=[
+                    "delegate",
+                    "delegates",
+                    "agent",
+                    "agents",
+                    "running",
+                    "parallel",
+                ],
+                context=CommandContext.GLOBAL,
+                shortcut="3",
+                category="Navigation",
+            )
+        )
+
         # Appearance commands
         self.register(
             PaletteCommand(

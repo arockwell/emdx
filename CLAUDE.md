@@ -151,9 +151,17 @@ and `EMDX_DOC_ID` env vars. No manual priming needed.
 #### For Human Sessions (interactive Claude Code)
 
 1. **Check ready tasks** before starting work: `emdx task ready`
-2. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
-3. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
-4. **Never end session** without updating task status and creating tasks for remaining work
+2. **Track progress on multi-step work** — for any task with 3+ steps, create subtasks BEFORE starting:
+   ```bash
+   emdx task add "Read and understand relevant code" --epic <id>
+   emdx task add "Implement the changes" --epic <id>
+   emdx task add "Run tests and fix issues" --epic <id>
+   emdx task done <id>   # mark each step done as you complete it
+   ```
+   This gives the user real-time visibility into progress, especially for longer tasks.
+3. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
+4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
+5. **Never end session** without updating task status and creating tasks for remaining work
 
 #### For Delegate Sessions (emdx delegate sub-agents)
 
@@ -342,6 +350,7 @@ grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
 - **Terminal state corruption in TUI**: Running code in background threads (via `asyncio.to_thread`) that imports heavy libraries (torch, sentence-transformers) or runs subprocesses can reset the terminal from raw mode to cooked mode, killing Textual's mouse/key handling. **Fix**: Save terminal state with `termios.tcgetattr()` before the threaded call and restore with `termios.tcsetattr()` after. This also explains why `UnifiedExecutor` corrupted the terminal — its `get_subprocess_env()` or subprocess execution path triggers the same reset.
 - **Textual `@click` meta namespace resolution**: `@click` actions in Rich Text rendered inside a widget resolve ONLY on the widget that received the click — they do NOT walk up the DOM. If you put `meta={"@click": "open_url(...)"}` in a RichLog's text, Textual looks for `action_open_url` on the RichLog, not on parent widgets. Use `app.open_url(...)` prefix to target the App, or `screen.open_url(...)` for the Screen. This applies to `@click`, `@mouse.down`, and `@mouse.up` meta actions.
 - **Don't add `on_click`/`on_mouse_down` to parent widgets**: Adding `on_click`, `on_mouse_down`, or `on_mouse_up` handlers to a parent Widget (or subclassing RichLog with these handlers) can break all mouse interaction in the TUI globally. Prefer Rich Style `@click` meta with namespace prefixes (e.g. `app.action_name(...)`) instead of custom mouse event handlers.
+- **`@click` actions that mutate the DOM must be sync + `run_worker`**: Textual dispatches `@click` meta actions synchronously. If the target action is `async` and does DOM mutations (`remove_children`, `mount`, `switch_browser`), it will deadlock the message loop and freeze the TUI. **Fix:** Make the action method sync, store any state you need, and use `self.run_worker(async_fn(), exclusive=True)` to defer the async work. See `BrowserContainer.action_select_doc()` for the canonical pattern. `action_open_url()` (sync, no DOM changes) works fine as-is.
 
 ## Textual Pilot Testing Patterns
 

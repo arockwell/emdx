@@ -513,7 +513,11 @@ def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLo
 
 
 def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
-    """Get active top-level delegate tasks with child progress counts."""
+    """Get active delegate tasks with child progress counts.
+
+    Finds tasks that are currently active and have a prompt (delegate indicator),
+    including tasks nested under epics.
+    """
     with db.get_connection() as conn:
         cursor = conn.execute("""
             SELECT t.*,
@@ -526,7 +530,8 @@ def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
                  WHERE c.parent_task_id = t.id
                  AND c.status = 'active') as children_active
             FROM tasks t
-            WHERE t.status = 'active' AND t.parent_task_id IS NULL
+            WHERE t.status = 'active'
+              AND t.prompt IS NOT NULL AND t.prompt != ''
             ORDER BY t.updated_at DESC
         """)
         return [cast(ActiveDelegateTaskDict, dict(row)) for row in cursor.fetchall()]
@@ -547,12 +552,13 @@ def get_children(parent_task_id: int) -> list[TaskDict]:
 
 
 def get_recent_completed_tasks(limit: int = 10) -> list[TaskDict]:
-    """Get recent completed top-level tasks."""
+    """Get recent completed delegate tasks (those with prompts)."""
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT * FROM tasks
-            WHERE status = 'done' AND parent_task_id IS NULL
+            WHERE status = 'done'
+              AND prompt IS NOT NULL AND prompt != ''
             ORDER BY completed_at DESC
             LIMIT ?
         """,
@@ -562,12 +568,13 @@ def get_recent_completed_tasks(limit: int = 10) -> list[TaskDict]:
 
 
 def get_failed_tasks(limit: int = 5) -> list[TaskDict]:
-    """Get recent failed top-level tasks."""
+    """Get recent failed delegate tasks (those with prompts)."""
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT * FROM tasks
-            WHERE status = 'failed' AND parent_task_id IS NULL
+            WHERE status = 'failed'
+              AND prompt IS NOT NULL AND prompt != ''
             ORDER BY updated_at DESC
             LIMIT ?
         """,
