@@ -53,12 +53,12 @@ class TaskBrowser(HelpMixin, Widget):
         self.task_view = TaskView(id="task-view")
         yield self.task_view
         yield Static(
-            "[dim]1[/dim] Docs │ [bold]2[/bold] Tasks │ "
-            "[dim]j/k[/dim] nav │ [dim]/[/dim] filter │ "
-            "[dim]o[/dim] ready [dim]i[/dim] active [dim]x[/dim] blocked "
-            "[dim]f[/dim] done [dim]*[/dim] all │ "
-            "[dim]g[/dim] group │ [dim]d[/dim] done │ [dim]w[/dim] wontdo │ [dim]a[/dim] active │ "
-            "[dim]z[/dim] zoom │ [dim]r[/dim] refresh │ [dim]?[/dim] help",
+            "[dim]j/k[/dim] Navigate  "
+            "[dim]Enter[/dim] Open  "
+            "[dim]o/i/x/f[/dim] Status  "
+            "[dim]d[/dim] Done  "
+            "[dim]/[/dim] Filter  "
+            "[dim]?[/dim] Help",
             id="task-help-bar",
         )
 

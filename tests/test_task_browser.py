@@ -686,7 +686,7 @@ class TestScreenSwitching:
 
     @pytest.mark.asyncio
     async def test_help_bar_shows_key_hints(self, mock_task_data: MockDict) -> None:
-        """TaskBrowser help bar shows screen-switching hints."""
+        """TaskBrowser help bar shows essential keybinding hints."""
         from emdx.ui.task_browser import TaskBrowser
 
         class HelpBarApp(App[None]):
@@ -697,10 +697,10 @@ class TestScreenSwitching:
         async with app.run_test() as pilot:
             await pilot.pause()
             bar = app.query_one("#task-help-bar", Static)
-            assert "1" in str(bar.content)
-            assert "2" in str(bar.content)
-            assert "Docs" in str(bar.content)
-            assert "Tasks" in str(bar.content)
+            content = str(bar.content)
+            assert "Navigate" in content
+            assert "Help" in content
+            assert "Filter" in content
 
 
 # ===================================================================
@@ -1130,7 +1130,7 @@ class TestFilterBar:
             await pilot.pause()
             bar = app.query_one("#task-help-bar", Static)
             bar_text = str(bar.content)
-            assert "filter" in bar_text
+            assert "Filter" in bar_text
 
 
 # ===================================================================
@@ -1509,21 +1509,6 @@ class TestEpicGrouping:
             await pilot.pause()
 
             assert filter_input.value == "g"
-
-    @pytest.mark.asyncio
-    async def test_help_bar_shows_group_hint(self, mock_task_data: MockDict) -> None:
-        """Help bar includes the g group hint."""
-        from emdx.ui.task_browser import TaskBrowser
-
-        class HelpBarApp(App[None]):
-            def compose(self) -> ComposeResult:
-                yield TaskBrowser()
-
-        app = HelpBarApp()
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            bar = app.query_one("#task-help-bar", Static)
-            assert "group" in str(bar.content)
 
     @pytest.mark.asyncio
     async def test_epic_grouping_hides_all_done_epics(self, mock_task_data: MockDict) -> None:
