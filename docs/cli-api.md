@@ -762,40 +762,30 @@ Launch interactive TUI browser.
 # Launch full TUI interface
 emdx gui
 
-# Note: This is the main interactive interface with:
-# - Document browser (default view)
-# - Log browser (press 'l')
-# - Activity view (press 'a')
-# - Task browser (press 't')
-# - Vim-like navigation and editing
+# Launch with a specific theme
+emdx gui --theme emdx-dark
 ```
 
 **TUI Key Bindings:**
 
 *Global:*
-- `1` - Switch to activity view
+- `1` - Switch to activity view (Docs)
 - `2` - Switch to task browser
-- `3` - Switch to Q&A
+- `3` - Switch to delegate browser
 - `\` - Cycle theme
 - `Ctrl+t` - Toggle dark/light mode
 - `Ctrl+k` / `Ctrl+p` - Command palette
+- `q` - Quit
 
 *Activity View:*
 - `j/k` - Navigate up/down
-- `Tab` / `Shift+Tab` - Next/prev pane
-- `Enter` / `f` - Open fullscreen
+- `Enter` - Open fullscreen preview
+- `/` - Filter
 - `r` - Refresh
-- `R` - Jump to RUNNING section
-- `T` - Jump to TASKS section
-- `D` - Jump to DOCS section
-- `x` - Kill/dismiss execution
-- `c` - Copy mode
-- `i` - Create gist
 - `?` - Help
 
 *Task Browser:*
 - `j/k` - Navigate up/down
-- `Tab` / `Shift+Tab` - Next/prev pane
 - `/` - Live filter bar
 - `Escape` - Clear filter
 - `g` - Toggle epic grouping
@@ -806,17 +796,16 @@ emdx gui
 - `*` - Show all (clear status filter)
 - `d` - Mark done
 - `a` - Mark active
-- `b` - Mark blocked
 - `w` - Mark won't do
 - `r` - Refresh
-
-*Q&A Screen:*
-- `Enter` - Submit question
-- `/` - Focus input
-- `s` - Save exchange
-- `c` - Clear history
-- `Escape` - Exit
 - `?` - Help
+
+*Delegate Browser:*
+- `j/k` - Navigate up/down
+- `z` - Zoom detail pane
+- `r` - Refresh
+- Click PR links to open in browser
+- Click output doc links to navigate to document
 
 ## 🔗 **Integration Commands**
 
