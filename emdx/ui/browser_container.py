@@ -485,22 +485,30 @@ class BrowserContainer(App[None]):
         webbrowser.open(url)
         self.notify(f"Opened {url[:60]}", timeout=2)
 
-    async def action_select_doc(self, doc_id: int) -> None:
+    def action_select_doc(self, doc_id: int) -> None:
         """Navigate to a document by ID (used by @click meta on doc refs).
 
-        If already on the activity browser, navigate in-place.
-        From other browsers, store the target doc ID and switch browsers;
-        the activity browser will pick up the pending doc after mount.
+        IMPORTANT: This must be synchronous because Textual's @click meta
+        actions are dispatched synchronously. An async action that mutates
+        the DOM (remove_children/mount) during a click handler will deadlock
+        the message loop and freeze the TUI. Instead we store the target
+        doc ID and use run_worker to perform the async switch outside the
+        click handler's call stack.
         """
-        activity = self.browsers.get("activity")
-        if (
-            self.current_browser == "activity"
-            and activity
-            and hasattr(activity, "select_document_by_id")
-        ):
-            await activity.select_document_by_id(doc_id)
-        else:
-            # Store pending doc ID so we can select it after browser switch
-            self._pending_doc_id = doc_id
-            self.notify(f"Opening doc #{doc_id}...", timeout=1.5)
-            await self.switch_browser("activity")
+        self._pending_doc_id = doc_id
+        self.notify(f"Opening doc #{doc_id}...", timeout=1.5)
+
+        async def _navigate() -> None:
+            activity = self.browsers.get("activity")
+            if (
+                self.current_browser == "activity"
+                and activity
+                and hasattr(activity, "select_document_by_id")
+            ):
+                await activity.select_document_by_id(doc_id)
+                self._pending_doc_id = None
+            else:
+                await self.switch_browser("activity")
+                # switch_browser's post_mount callback handles _pending_doc_id
+
+        self.run_worker(_navigate(), exclusive=True)

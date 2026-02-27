@@ -420,18 +420,22 @@ class DelegateView(Widget):
             detail.write(Text("Links:", style="bold"))
 
             if pr_url:
-                pr_style = Style(
-                    underline=True,
-                    color="bright_cyan",
-                ) + Style(meta={"@click": f"app.open_url({pr_url!r})"})
-                detail.write(Text(f"  PR: {pr_url}", style=pr_style))
+                pr_link = Text("  ")
+                pr_link.append(
+                    f"PR: {pr_url}",
+                    Style(underline=True, color="bright_cyan")
+                    + Style(meta={"@click": f"app.open_url({pr_url!r})"}),
+                )
+                detail.write(pr_link)
 
             if output_doc_id:
-                doc_style = Style(
-                    underline=True,
-                    color="bright_cyan",
-                ) + Style(meta={"@click": f"app.select_doc({output_doc_id})"})
-                detail.write(Text(f"  Output: doc #{output_doc_id}", style=doc_style))
+                doc_link = Text("  ")
+                doc_link.append(
+                    f"Output: doc #{output_doc_id}",
+                    Style(underline=True, color="bright_cyan")
+                    + Style(meta={"@click": f"app.select_doc({output_doc_id})"}),
+                )
+                detail.write(doc_link)
 
         # Subtask tree
         task_id = task["id"]
