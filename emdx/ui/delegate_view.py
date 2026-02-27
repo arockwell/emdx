@@ -5,6 +5,7 @@ Right pane: RichLog with selected delegate detail (prompt, subtasks, output doc)
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,6 +24,7 @@ from emdx.models.tasks import (
     get_recent_completed_tasks,
 )
 from emdx.models.types import TaskDict
+from emdx.ui.link_helpers import linkify_text
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +74,18 @@ def _format_time_ago(dt_str: str | None) -> str:
         return dt.strftime("%b %d, %Y")
     except Exception:
         return ""
+
+
+_PR_URL_RE = re.compile(r"https://github\.com/[^\s]+/pull/\d+")
+
+
+def _extract_pr_url_from_task(task: TaskDict) -> str | None:
+    """Extract a PR URL from a task's description or tags."""
+    desc = task.get("description") or ""
+    match = _PR_URL_RE.search(desc)
+    if match:
+        return match.group(0)
+    return None
 
 
 class DelegateView(Widget):
@@ -374,14 +388,13 @@ class DelegateView(Widget):
                 )
             )
 
-        # Prompt
+        # Prompt (with linkified URLs)
         prompt = task.get("prompt")
         if prompt:
             detail.write("")
             detail.write(Text("Prompt:", style="bold"))
-            # Truncate long prompts
             display_prompt = prompt if len(prompt) <= 500 else prompt[:500] + "..."
-            detail.write(display_prompt)
+            detail.write(linkify_text(display_prompt))
 
         # Error
         error = task.get("error")
@@ -389,16 +402,27 @@ class DelegateView(Widget):
             detail.write("")
             detail.write(Text(f"Error: {error}", style="bold red"))
 
-        # Output document link
+        # Links section: PR URL and output doc
+        pr_url = _extract_pr_url_from_task(task)
         output_doc_id = task.get("output_doc_id")
-        if output_doc_id:
+
+        if pr_url or output_doc_id:
             detail.write("")
-            link_style = Style(
-                underline=True,
-                color="bright_cyan",
-            ) + Style(meta={"@click": f"app.select_doc({output_doc_id})"})
-            doc_link = Text(f"Output: doc #{output_doc_id}", style=link_style)
-            detail.write(doc_link)
+            detail.write(Text("Links:", style="bold"))
+
+            if pr_url:
+                pr_style = Style(
+                    underline=True,
+                    color="bright_cyan",
+                ) + Style(meta={"@click": f"app.open_url({pr_url!r})"})
+                detail.write(Text(f"  PR: {pr_url}", style=pr_style))
+
+            if output_doc_id:
+                doc_style = Style(
+                    underline=True,
+                    color="bright_cyan",
+                ) + Style(meta={"@click": f"app.select_doc({output_doc_id})"})
+                detail.write(Text(f"  Output: doc #{output_doc_id}", style=doc_style))
 
         # Subtask tree
         task_id = task["id"]
@@ -423,7 +447,7 @@ class DelegateView(Widget):
                         child_line.stylize(color)
                     detail.write(child_line)
         except Exception:
-            pass  # Never crash on subtask display
+            logger.warning("Failed to load subtasks for task %s", task_id, exc_info=True)
 
     def action_cursor_down(self) -> None:
         """Move cursor down, skipping headers."""

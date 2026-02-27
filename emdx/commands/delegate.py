@@ -110,6 +110,7 @@ def _safe_update_task(
     error: str | None = None,
     execution_id: int | None = None,
     output_doc_id: int | None = None,
+    description: str | None = None,
 ) -> None:
     """Update task, never fail delegate.
 
@@ -119,6 +120,7 @@ def _safe_update_task(
         error: Error message (for failed status)
         execution_id: Link to execution record
         output_doc_id: Output document ID
+        description: Task description (used to store PR URL etc.)
     """
     if task_id is None:
         return
@@ -136,6 +138,8 @@ def _safe_update_task(
             kwargs["execution_id"] = execution_id
         if output_doc_id is not None:
             kwargs["output_doc_id"] = output_doc_id
+        if description is not None:
+            kwargs["description"] = description
 
         if kwargs:
             update_task(task_id, **kwargs)
@@ -673,10 +677,18 @@ def _run_single(
     # Store raw output for caller when not printing (parallel mode)
     stored_output: str | None = None
 
+    # Build description with PR URL for Delegate Browser display
+    task_desc = f"pr:{pr_url}" if pr_url else None
+
     if doc_id:
-        _safe_update_task(task_id, status="done", output_doc_id=doc_id)
+        _safe_update_task(
+            task_id,
+            status="done",
+            output_doc_id=doc_id,
+            description=task_desc,
+        )
     else:
-        _safe_update_task(task_id, status="done")
+        _safe_update_task(task_id, status="done", description=task_desc)
 
     if print_content:
         if output:
