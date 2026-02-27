@@ -702,7 +702,10 @@ class TestScreenSwitching:
             assert "2" in content
             assert "Docs" in content
             assert "Tasks" in content
-            assert "Navigate" in content
+            assert "Done" in content
+            assert "Active" in content
+            assert "Blocked" in content
+            assert "Reopen" in content
             assert "Help" in content
             assert "Filter" in content
 
