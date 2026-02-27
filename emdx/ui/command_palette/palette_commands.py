@@ -157,18 +157,6 @@ class CommandRegistry:
             )
         )
 
-        self.register(
-            PaletteCommand(
-                id="nav.qa",
-                name="Go to Q&A",
-                description="Switch to Q&A screen",
-                keywords=["qa", "search", "find", "query", "lookup"],
-                context=CommandContext.GLOBAL,
-                shortcut="3",
-                category="Navigation",
-            )
-        )
-
         # Appearance commands
         self.register(
             PaletteCommand(

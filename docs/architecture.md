@@ -214,7 +214,6 @@ App (emdx gui)
     │   ├── FilterInput (hidden until `/`, debounced text search over title/epic/description)
     │   ├── DataTable (grouped by status or epic, with section headers)
     │   └── DetailPanel (description, deps, work log, execution info)
-    ├── QAScreen (key '3')
     └── LogBrowser
         ├── ExecutionTable
         ├── LogViewer (with streaming)
