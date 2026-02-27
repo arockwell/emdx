@@ -159,10 +159,17 @@ class CommandRegistry:
 
         self.register(
             PaletteCommand(
-                id="nav.qa",
-                name="Go to Q&A",
-                description="Switch to Q&A screen",
-                keywords=["qa", "search", "find", "query", "lookup"],
+                id="nav.delegates",
+                name="Go to Delegates",
+                description="Switch to Delegate browser",
+                keywords=[
+                    "delegate",
+                    "delegates",
+                    "agent",
+                    "agents",
+                    "running",
+                    "parallel",
+                ],
                 context=CommandContext.GLOBAL,
                 shortcut="3",
                 category="Navigation",

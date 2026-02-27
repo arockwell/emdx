@@ -53,16 +53,15 @@ def mock_get_document():
 
 @pytest.fixture
 def mock_task_helpers():
-    """Mock task creation, update, and execution helpers."""
+    """Mock task creation, update, and save helpers."""
     with (
         patch("emdx.commands.delegate._safe_create_task") as mock_create,
         patch("emdx.commands.delegate._safe_update_task") as mock_update,
-        patch("emdx.commands.delegate._safe_create_execution") as mock_create_exec,
-        patch("emdx.commands.delegate._safe_update_execution_status") as mock_update_exec,
+        patch("emdx.commands.delegate._safe_save_document") as mock_save_doc,
     ):
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
-        yield mock_create, mock_update, mock_create_exec, mock_update_exec
+        mock_save_doc.return_value = 42
+        yield mock_create, mock_update, mock_save_doc
 
 
 @pytest.fixture
@@ -269,10 +268,7 @@ class TestLoadDocContext:
 class TestRunSingle:
     """Tests for _run_single — runs a single task via subprocess + hooks."""
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -281,15 +277,11 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
-        mock_read_batch.return_value = 42
 
         result = _run_single(
             prompt="test task",
@@ -303,11 +295,9 @@ class TestRunSingle:
         assert result.task_id == 1
         mock_create.assert_called_once()
         mock_update.assert_called()
-        mock_print.assert_called_once_with(42)
+        mock_save_doc.assert_called_once()
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -316,14 +306,11 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = None
         mock_subprocess.run.return_value = _mock_subprocess_failure("Task failed")
-        mock_read_batch.return_value = None
 
         result = _run_single(
             prompt="failing task",
@@ -341,10 +328,7 @@ class TestRunSingle:
         calls = mock_update.call_args_list
         assert any("failed" in str(c) for c in calls)
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -353,15 +337,11 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="fix bug",
@@ -377,10 +357,7 @@ class TestRunSingle:
         prompt_input = call_args[1]["input"]
         assert "pull request" in prompt_input.lower() or "gh pr create" in prompt_input
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -389,16 +366,12 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         """Test that pr=True with draft=True includes --draft flag in prompt."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="fix bug",
@@ -414,10 +387,7 @@ class TestRunSingle:
         prompt_input = call_args[1]["input"]
         assert "--draft" in prompt_input
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -426,16 +396,12 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         """Test that pr=True with draft=False omits --draft flag."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="fix bug",
@@ -452,10 +418,7 @@ class TestRunSingle:
         assert "--draft" not in prompt_input
         assert "gh pr create" in prompt_input
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -464,15 +427,11 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="test task",
@@ -487,10 +446,7 @@ class TestRunSingle:
         call_args = mock_subprocess.run.call_args
         assert call_args[1]["cwd"] == "/custom/path"
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -499,16 +455,12 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         """Test that pr=True with epic task includes epic_id in PR instruction."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = 42
 
         with patch("emdx.models.tasks.get_task") as mock_get_task:
             mock_get_task.return_value = {
@@ -529,10 +481,7 @@ class TestRunSingle:
         prompt_input = call_args[1]["input"]
         assert "(ARCH-11)" in prompt_input
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -541,16 +490,12 @@ class TestRunSingle:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         """Test that pr=True without epic_key does not include epic_id."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = 42
 
         with patch("emdx.models.tasks.get_task") as mock_get_task:
             mock_get_task.return_value = {
@@ -1495,10 +1440,7 @@ class TestErrorHandling:
 class TestRunSingleHooksIntegration:
     """Tests for _run_single hooks integration (batch file doc ID)."""
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -1507,16 +1449,12 @@ class TestRunSingleHooksIntegration:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
-        """When hook writes doc ID to batch file, _run_single picks it up."""
+        """Inline save produces a doc_id in the result."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 99
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = 99
 
         result = _run_single(
             prompt="test task",
@@ -1528,9 +1466,7 @@ class TestRunSingleHooksIntegration:
 
         assert result.doc_id == 99
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -1539,15 +1475,12 @@ class TestRunSingleHooksIntegration:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
-        """When hook doesn't write to batch file, doc_id is None."""
+        """When inline save fails, doc_id is None."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = None
         mock_subprocess.run.return_value = _mock_subprocess_success()
-        mock_read_batch.return_value = None
 
         result = _run_single(
             prompt="test task",
@@ -1914,10 +1847,7 @@ class TestJsonOutput:
 class TestRunSingleNewFields:
     """Tests for new fields in _run_single results."""
 
-    @patch("emdx.commands.delegate._print_doc_content")
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -1926,16 +1856,12 @@ class TestRunSingleNewFields:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
-        mock_print,
+        mock_save_doc,
     ):
         """Successful _run_single should populate duration, exit_code, execution_id."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
-        mock_read_batch.return_value = 42
 
         result = _run_single(
             prompt="test task",
@@ -1946,14 +1872,12 @@ class TestRunSingleNewFields:
         )
 
         assert result.exit_code == 0
-        assert result.execution_id == 100
+        assert result.execution_id is None
         assert result.duration_seconds is not None
         assert result.duration_seconds >= 0
         assert result.output_doc_id == 42
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -1962,15 +1886,12 @@ class TestRunSingleNewFields:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
         """Failed _run_single should still populate duration and exit_code."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = None
         mock_subprocess.run.return_value = _mock_subprocess_failure("Task failed")
-        mock_read_batch.return_value = None
 
         result = _run_single(
             prompt="failing task",
@@ -1983,12 +1904,10 @@ class TestRunSingleNewFields:
         assert result.exit_code == 1
         assert result.duration_seconds is not None
         assert result.duration_seconds >= 0
-        assert result.execution_id == 100
+        assert result.execution_id is None
         assert not result.success
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -1997,15 +1916,12 @@ class TestRunSingleNewFields:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
         """Timed-out _run_single should populate duration and exit_code=-1."""
         import subprocess as sp
 
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
         mock_subprocess.run.side_effect = sp.TimeoutExpired(cmd="claude", timeout=30)
         mock_subprocess.TimeoutExpired = sp.TimeoutExpired
 
@@ -2021,7 +1937,7 @@ class TestRunSingleNewFields:
         assert result.exit_code == -1
         assert result.duration_seconds is not None
         assert result.error_message == "timeout"
-        assert result.execution_id == 100
+        assert result.execution_id is None
 
 
 # =============================================================================
@@ -2118,9 +2034,7 @@ class TestSubcommandRouting:
 class TestAllowedToolsSeparator:
     """Test that --allowedTools uses comma separators to avoid space ambiguity."""
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -2129,15 +2043,12 @@ class TestAllowedToolsSeparator:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
         """allowedTools should use commas, not spaces, to avoid splitting patterns."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="test task",
@@ -2154,9 +2065,7 @@ class TestAllowedToolsSeparator:
         assert "," in tools_value
         assert " " not in tools_value
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -2165,15 +2074,12 @@ class TestAllowedToolsSeparator:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
         """--pr should add Bash(gh:*) to allowed tools."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="fix bug",
@@ -2189,9 +2095,7 @@ class TestAllowedToolsSeparator:
         tools_value = cmd[tools_idx + 1]
         assert "Bash(gh:*)" in tools_value
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -2200,15 +2104,12 @@ class TestAllowedToolsSeparator:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
         """extra_tools should be appended to the allowed tools list."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="analyze PR",
@@ -2228,9 +2129,7 @@ class TestAllowedToolsSeparator:
         # Base tools still present
         assert "Bash(git:*)" in tools_value.split(",")
 
-    @patch("emdx.commands.delegate._read_batch_doc_id")
-    @patch("emdx.commands.delegate._safe_update_execution_status")
-    @patch("emdx.commands.delegate._safe_create_execution")
+    @patch("emdx.commands.delegate._safe_save_document")
     @patch("emdx.commands.delegate._safe_update_task")
     @patch("emdx.commands.delegate._safe_create_task")
     @patch("emdx.commands.delegate.subprocess")
@@ -2239,15 +2138,12 @@ class TestAllowedToolsSeparator:
         mock_subprocess,
         mock_create,
         mock_update,
-        mock_create_exec,
-        mock_update_exec,
-        mock_read_batch,
+        mock_save_doc,
     ):
         """Duplicate tool patterns should not appear twice."""
         mock_create.return_value = 1
-        mock_create_exec.return_value = 100
+        mock_save_doc.return_value = 42
         mock_subprocess.run.return_value = _mock_subprocess_success(doc_id=42)
-        mock_read_batch.return_value = 42
 
         _run_single(
             prompt="test dedup",
