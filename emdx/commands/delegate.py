@@ -535,6 +535,9 @@ def _run_single(
     extra_tools: list[str] | None = None,
 ) -> SingleResult:
     """Run a single task via Claude CLI subprocess. Saves output inline."""
+    # Task title: use the prompt directly (epic key prefix is added automatically)
+    # Doc title: keep "Delegate: " prefix for KB searchability
+    task_title = title or prompt[:80]
     doc_title = title or f"Delegate: {prompt[:60]}"
 
     # Add model tags: model:opus for filtering, model-ver:claude-opus-4-6 for version
@@ -549,7 +552,7 @@ def _run_single(
 
     # Create task before execution
     task_id = _safe_create_task(
-        title=doc_title,
+        title=task_title,
         prompt=prompt[:500],
         task_type="single",
         status="active",
