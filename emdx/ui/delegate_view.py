@@ -203,6 +203,18 @@ class DelegateView(Widget):
         self._refresh_in_progress = True
         try:
             table = self.query_one("#delegate-table", DataTable)
+
+            # Save current selection so we can restore it after refresh
+            selected_key: str | None = None
+            try:
+                if table.row_count > 0:
+                    cursor_row = table.cursor_row
+                    row_keys = list(table.rows.keys())
+                    if 0 <= cursor_row < len(row_keys):
+                        selected_key = str(row_keys[cursor_row].value)
+            except Exception:
+                pass
+
             table.clear()
             self._row_data.clear()
 
@@ -290,6 +302,17 @@ class DelegateView(Widget):
                     Text(""),
                     key=f"{HEADER_PREFIX}empty",
                 )
+
+            # Restore cursor to previously selected row
+            if selected_key and table.row_count > 0:
+                try:
+                    row_keys = list(table.rows.keys())
+                    for idx, rk in enumerate(row_keys):
+                        if str(rk.value) == selected_key:
+                            table.move_cursor(row=idx)
+                            break
+                except Exception:
+                    pass
 
             # Update status bar
             status_bar = self.query_one("#delegate-status-bar", Static)
