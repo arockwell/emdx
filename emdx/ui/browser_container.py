@@ -71,6 +71,7 @@ class BrowserContainer(App[None]):
     BINDINGS = [
         Binding("1", "switch_activity", "Docs", show=True),
         Binding("2", "switch_tasks", "Tasks", show=True),
+        Binding("3", "switch_delegates", "Delegates", show=True),
         Binding("backslash", "cycle_theme", "Theme", show=True),
         Binding("ctrl+k", "open_command_palette", "Search", show=True),
         Binding("ctrl+p", "open_command_palette", "Search", show=False),
@@ -87,6 +88,7 @@ class BrowserContainer(App[None]):
         self.browser_states: dict[str, Any] = {}  # Quick and dirty state storage
         self.container_widget: BrowserContainerWidget | None = None  # Will be set in compose
         self._initial_theme = initial_theme  # Theme override from CLI
+        self._pending_doc_id: int | None = None  # For deferred doc navigation
 
     def exit(self, *args: Any, **kwargs: Any) -> None:
         """Override exit to log when it's called."""
@@ -235,6 +237,18 @@ class BrowserContainer(App[None]):
                     self.browsers[browser_type] = Static(
                         f"Task browser failed to load:\n{escape(str(e))}\n\nCheck logs for details."
                     )  # noqa: E501
+            elif browser_type == "delegate":
+                try:
+                    from .delegate_browser import DelegateBrowser
+
+                    self.browsers[browser_type] = DelegateBrowser()
+                    logger.debug("DelegateBrowser created")
+                except Exception as e:
+                    logger.error(f"Failed to create DelegateBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+
+                    msg = f"Delegate browser failed to load:\n{escape(str(e))}"
+                    self.browsers[browser_type] = Static(msg)
             else:
                 # Unknown browser type - fallback to activity
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to activity")
@@ -247,12 +261,19 @@ class BrowserContainer(App[None]):
         browser = self.browsers[browser_type]
         await mount_point.mount(browser)
 
-        # Set focus to the new browser after mount is complete
-        def do_focus() -> None:
+        # Set focus and handle pending doc navigation after mount
+        def post_mount() -> None:
             if hasattr(browser, "focus"):
                 browser.focus()
+            # If a pending doc was requested (e.g. from delegate browser click),
+            # navigate to it now that the activity browser is mounted
+            pending = getattr(self, "_pending_doc_id", None)
+            if pending is not None and browser_type == "activity":
+                self._pending_doc_id = None
+                if hasattr(browser, "select_document_by_id"):
+                    self.run_worker(browser.select_document_by_id(pending))
 
-        self.call_after_refresh(do_focus)
+        self.call_after_refresh(post_mount)
 
         # Parent reference is set automatically by Textual during mount
 
@@ -271,6 +292,10 @@ class BrowserContainer(App[None]):
     async def action_switch_tasks(self) -> None:
         """Switch to the Tasks browser."""
         await self.switch_browser("task")
+
+    async def action_switch_delegates(self) -> None:
+        """Switch to the Delegate browser."""
+        await self.switch_browser("delegate")
 
     async def action_quit(self) -> None:
         """Quit the application."""
@@ -303,8 +328,8 @@ class BrowserContainer(App[None]):
             event.stop()
             return
 
-        # Q to quit from activity or task browser
-        if key == "q" and self.current_browser in ["activity", "task"]:
+        # Q to quit from activity, task, or delegate browser
+        if key == "q" and self.current_browser in ["activity", "task", "delegate"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
             event.stop()
@@ -415,6 +440,8 @@ class BrowserContainer(App[None]):
             await self.switch_browser("activity")
         elif command_id == "nav.tasks":
             await self.switch_browser("task")
+        elif command_id == "nav.delegates":
+            await self.switch_browser("delegate")
         elif command_id == "nav.logs":
             await self.switch_browser("log")
 
@@ -458,18 +485,30 @@ class BrowserContainer(App[None]):
         webbrowser.open(url)
         self.notify(f"Opened {url[:60]}", timeout=2)
 
-    async def action_select_doc(self, doc_id: int) -> None:
+    def action_select_doc(self, doc_id: int) -> None:
         """Navigate to a document by ID (used by @click meta on doc refs).
 
-        If already on the activity browser, navigate in-place to avoid
-        destroying and remounting the widget tree (which corrupts mouse state).
+        IMPORTANT: This must be synchronous because Textual's @click meta
+        actions are dispatched synchronously. An async action that mutates
+        the DOM (remove_children/mount) during a click handler will deadlock
+        the message loop and freeze the TUI. Instead we store the target
+        doc ID and use run_worker to perform the async switch outside the
+        click handler's call stack.
         """
-        activity = self.browsers.get("activity")
-        if (
-            self.current_browser == "activity"
-            and activity
-            and hasattr(activity, "select_document_by_id")
-        ):
-            await activity.select_document_by_id(doc_id)
-        else:
-            await self._view_document(doc_id)
+        self._pending_doc_id = doc_id
+        self.notify(f"Opening doc #{doc_id}...", timeout=1.5)
+
+        async def _navigate() -> None:
+            activity = self.browsers.get("activity")
+            if (
+                self.current_browser == "activity"
+                and activity
+                and hasattr(activity, "select_document_by_id")
+            ):
+                await activity.select_document_by_id(doc_id)
+                self._pending_doc_id = None
+            else:
+                await self.switch_browser("activity")
+                # switch_browser's post_mount callback handles _pending_doc_id
+
+        self.run_worker(_navigate(), exclusive=True)
