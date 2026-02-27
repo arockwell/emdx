@@ -31,7 +31,6 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -144,66 +143,45 @@ def _safe_update_task(
         sys.stderr.write(f"delegate: failed to update task {task_id}: {e}\n")
 
 
-def _safe_create_execution(
-    doc_title: str,
-    working_dir: str | None,
-    task_id: int | None,
+def _safe_save_document(
+    title: str,
+    content: str,
+    tags: list[str],
 ) -> int | None:
-    """Create execution record, never fail delegate."""
+    """Save output document inline, never fail delegate.
+
+    Saves the document and runs post-save enrichment (wikify, entity link,
+    auto-link) — same steps the `emdx save` CLI does.
+    """
     try:
-        from ..models.executions import create_execution
+        from ..database.documents import save_document
 
-        exec_id = create_execution(
-            doc_id=None,
-            doc_title=doc_title,
-            log_file="",
-            working_dir=working_dir,
-        )
-        if task_id is not None:
-            from ..models.executions import update_execution
+        doc_id = save_document(title=title, content=content, tags=tags)
 
-            update_execution(exec_id, task_id=task_id)
-        return exec_id
+        # Post-save enrichment (best-effort, never fail delegate)
+        try:
+            from ..services.wikify_service import title_match_wikify
+
+            title_match_wikify(doc_id)
+        except Exception:
+            pass
+        try:
+            from ..services.entity_service import entity_match_wikify
+
+            entity_match_wikify(doc_id)
+        except Exception:
+            pass
+        try:
+            from ..services.link_service import auto_link_document
+
+            auto_link_document(doc_id)
+        except (ImportError, Exception):
+            pass
+
+        return doc_id
     except Exception as e:
-        sys.stderr.write(f"delegate: execution tracking failed: {e}\n")
+        sys.stderr.write(f"delegate: inline save failed: {e}\n")
         return None
-
-
-def _safe_update_execution_status(
-    exec_id: int | None,
-    status: str,
-    exit_code: int | None = None,
-) -> None:
-    """Update execution status, never fail delegate."""
-    if exec_id is None:
-        return
-    try:
-        from ..models.executions import update_execution_status
-
-        update_execution_status(exec_id, status, exit_code)
-    except Exception as e:
-        sys.stderr.write(f"delegate: failed to update execution {exec_id}: {e}\n")
-
-
-def _read_batch_doc_id(batch_path: str) -> int | None:
-    """Read the first doc ID from a batch file written by save-output.sh hook."""
-    try:
-        content = Path(batch_path).read_text().strip()
-        if content:
-            first_line = content.split("\n")[0].strip()
-            if first_line:
-                return int(first_line)
-    except (ValueError, FileNotFoundError, OSError):
-        pass
-    return None
-
-
-def _cleanup_batch_file(batch_path: str) -> None:
-    """Remove the batch temp file, never fail."""
-    try:
-        os.unlink(batch_path)
-    except OSError:
-        pass
 
 
 PR_INSTRUCTION_GENERIC = (
@@ -552,7 +530,7 @@ def _run_single(
     print_content: bool = True,
     extra_tools: list[str] | None = None,
 ) -> SingleResult:
-    """Run a single task via Claude CLI subprocess. Hooks handle save/tracking."""
+    """Run a single task via Claude CLI subprocess. Saves output inline."""
     doc_title = title or f"Delegate: {prompt[:60]}"
 
     # Add model tags: model:opus for filtering, model-ver:claude-opus-4-6 for version
@@ -578,14 +556,6 @@ def _run_single(
         epic_key=epic_key,
     )
 
-    # Always include 'needs-review' tag for triage workflow
-    all_tags = list(tags) if tags else []
-    if "needs-review" not in all_tags:
-        all_tags.append("needs-review")
-
-    # Create execution record
-    execution_id = _safe_create_execution(doc_title, working_dir, task_id)
-
     # Look up the task's epic identifier (e.g. "ARCH-11") for PR titles
     epic_id: str | None = None
     if pr and task_id is not None:
@@ -608,26 +578,12 @@ def _run_single(
     elif branch:
         full_prompt += _make_branch_instruction(pr_branch)
 
-    # Set up batch file for doc ID collection (written by save-output.sh hook)
-    batch_fd, batch_path = tempfile.mkstemp(suffix=".ids", prefix="emdx-batch-")
-    os.close(batch_fd)
-
     # Build environment for hooks (strip CLAUDECODE to allow nested sessions)
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-    env.update(
-        {
-            "EMDX_AUTO_SAVE": "1",
-            "EMDX_TITLE": doc_title,
-            "EMDX_TAGS": ",".join(all_tags),
-            "EMDX_BATCH_FILE": batch_path,
-        }
-    )
     # --task flag overrides auto-created task ID for hook consumption
     effective_task_id = task_flag if task_flag is not None else task_id
     if effective_task_id is not None:
         env["EMDX_TASK_ID"] = str(effective_task_id)
-    if execution_id is not None:
-        env["EMDX_EXECUTION_ID"] = str(execution_id)
     if source_doc_id is not None:
         env["EMDX_DOC_ID"] = str(source_doc_id)
 
@@ -642,7 +598,7 @@ def _run_single(
     allowed = build_allowed_tools(pr=pr, branch=branch, extra_tools=extra_tools)
     cmd += ["--allowedTools", ",".join(allowed)]
 
-    # Run the subprocess — hooks handle priming, saving, and task tracking
+    # Run the subprocess
     effective_timeout = timeout if timeout is not None else DELEGATE_EXECUTION_TIMEOUT
     start_time = time.monotonic()
     try:
@@ -665,15 +621,12 @@ def _run_single(
             f"duration:{_format_duration(elapsed)} error:timeout\n"
         )
         _safe_update_task(task_id, status="failed", error="timeout")
-        _safe_update_execution_status(execution_id, "failed", exit_code=-1)
-        _cleanup_batch_file(batch_path)
         return SingleResult(
             task_id=task_id,
             success=False,
             error_message="timeout",
             exit_code=-1,
             duration_seconds=elapsed,
-            execution_id=execution_id,
         )
     except Exception as e:
         elapsed = time.monotonic() - start_time
@@ -682,19 +635,12 @@ def _run_single(
             f"duration:{_format_duration(elapsed)} error:{str(e)[:100]}\n"
         )
         _safe_update_task(task_id, status="failed", error=str(e)[:200])
-        _safe_update_execution_status(execution_id, "failed")
-        _cleanup_batch_file(batch_path)
         return SingleResult(
             task_id=task_id,
             success=False,
             error_message=str(e),
             duration_seconds=elapsed,
-            execution_id=execution_id,
         )
-
-    # Update execution with exit code
-    status = "completed" if success else "failed"
-    _safe_update_execution_status(execution_id, status, exit_code=result.returncode)
 
     if not success:
         error_msg = (result.stderr or "")[:200] or f"exit code {result.returncode}"
@@ -703,23 +649,22 @@ def _run_single(
             f"duration:{_format_duration(elapsed)} error:{error_msg[:100]}\n"
         )
         _safe_update_task(task_id, status="failed", error=error_msg)
-        _cleanup_batch_file(batch_path)
         return SingleResult(
             task_id=task_id,
             success=False,
             error_message=error_msg,
             exit_code=result.returncode,
             duration_seconds=elapsed,
-            execution_id=execution_id,
         )
 
     # Validate PR preconditions if --pr was requested
     if pr and working_dir:
         _validate_pr_and_warn(working_dir, quiet=quiet)
 
-    # Read doc ID from batch file (written by save-output.sh hook)
-    doc_id = _read_batch_doc_id(batch_path)
-    _cleanup_batch_file(batch_path)
+    # Save output inline (replaces hook-based save)
+    doc_id: int | None = None
+    if output and output.strip():
+        doc_id = _safe_save_document(doc_title, output, tags)
 
     # Extract PR URL from output
     pr_url = _extract_pr_url(output)
@@ -730,24 +675,16 @@ def _run_single(
 
     if doc_id:
         _safe_update_task(task_id, status="done", output_doc_id=doc_id)
-        # Try to extract PR URL from saved doc content
-        if not pr_url:
-            doc = get_document(doc_id)
-            if doc:
-                pr_url = _extract_pr_url(doc.get("content", ""))
-        if print_content:
-            _print_doc_content(doc_id)
     else:
         _safe_update_task(task_id, status="done")
-        if print_content:
-            # Hook didn't save — print captured output directly
-            if output:
-                sys.stdout.write(output)
-                if not output.endswith("\n"):
-                    sys.stdout.write("\n")
-        else:
-            # Store raw output so caller can print it (no doc to read from DB)
-            stored_output = output or None
+
+    if print_content:
+        if output:
+            sys.stdout.write(output)
+            if not output.endswith("\n"):
+                sys.stdout.write("\n")
+    else:
+        stored_output = output or None
 
     single_result = SingleResult(
         doc_id=doc_id,
@@ -756,7 +693,6 @@ def _run_single(
         branch_name=pushed_branch,
         exit_code=result.returncode,
         duration_seconds=elapsed,
-        execution_id=execution_id,
         output_doc_id=doc_id,
         raw_output=stored_output,
     )

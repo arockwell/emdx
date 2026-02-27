@@ -151,9 +151,17 @@ and `EMDX_DOC_ID` env vars. No manual priming needed.
 #### For Human Sessions (interactive Claude Code)
 
 1. **Check ready tasks** before starting work: `emdx task ready`
-2. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
-3. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
-4. **Never end session** without updating task status and creating tasks for remaining work
+2. **Track progress on multi-step work** — for any task with 3+ steps, create subtasks BEFORE starting:
+   ```bash
+   emdx task add "Read and understand relevant code" --epic <id>
+   emdx task add "Implement the changes" --epic <id>
+   emdx task add "Run tests and fix issues" --epic <id>
+   emdx task done <id>   # mark each step done as you complete it
+   ```
+   This gives the user real-time visibility into progress, especially for longer tasks.
+3. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
+4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
+5. **Never end session** without updating task status and creating tasks for remaining work
 
 #### For Delegate Sessions (emdx delegate sub-agents)
 

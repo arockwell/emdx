@@ -281,6 +281,7 @@ class QAScreen(HelpMixin, Widget):
         yield Static("Ready | Type a question and press Enter", id="qa-status")
         yield Static(
             "[dim]1[/dim] Docs | [dim]2[/dim] Tasks | [bold]3[/bold] Q&A | "
+            "[dim]4[/dim] Delegates | "
             "[dim]/[/dim] type | [dim]j/k[/dim] history | "
             "[dim]Enter[/dim] ask | [dim]s[/dim] save | [dim]c[/dim] clear | "
             "[dim]z[/dim] zoom",

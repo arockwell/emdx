@@ -22,11 +22,17 @@ if [[ "${EMDX_AUTO_SAVE:-}" == "1" ]]; then
     # Subtask progress tracking
     if [[ -n "${EMDX_TASK_ID:-}" ]]; then
         echo ""
-        echo "## Progress Tracking"
-        echo "Break your work into 3-5 subtasks and track progress:"
-        echo "  emdx task add \"Step description\" --epic $EMDX_TASK_ID"
-        echo "  emdx task done <id>   # mark each step done as you complete it"
-        echo "Create subtasks BEFORE starting work. Mark each done as you finish it."
+        echo "## REQUIRED: Progress Tracking"
+        echo "You MUST break your work into steps and track progress."
+        echo "Do this FIRST, before writing any code:"
+        echo ""
+        echo "  emdx task add \"Read and understand the codebase\" --epic $EMDX_TASK_ID"
+        echo "  emdx task add \"Implement the changes\" --epic $EMDX_TASK_ID"
+        echo "  emdx task add \"Run tests and fix issues\" --epic $EMDX_TASK_ID"
+        echo "  emdx task add \"Final review and cleanup\" --epic $EMDX_TASK_ID"
+        echo ""
+        echo "Mark each step done as you complete it:"
+        echo "  emdx task done <id>"
     fi
 
     if [[ -n "${EMDX_DOC_ID:-}" ]]; then

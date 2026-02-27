@@ -72,6 +72,7 @@ class BrowserContainer(App[None]):
         Binding("1", "switch_activity", "Docs", show=True),
         Binding("2", "switch_tasks", "Tasks", show=True),
         Binding("3", "switch_qa", "Q&A", show=True),
+        Binding("4", "switch_delegates", "Delegates", show=True),
         Binding("backslash", "cycle_theme", "Theme", show=True),
         Binding("ctrl+k", "open_command_palette", "Search", show=True),
         Binding("ctrl+p", "open_command_palette", "Search", show=False),
@@ -248,6 +249,18 @@ class BrowserContainer(App[None]):
 
                     msg = f"Q&A screen failed to load:\n{escape(str(e))}"
                     self.browsers[browser_type] = Static(msg)
+            elif browser_type == "delegate":
+                try:
+                    from .delegate_browser import DelegateBrowser
+
+                    self.browsers[browser_type] = DelegateBrowser()
+                    logger.debug("DelegateBrowser created")
+                except Exception as e:
+                    logger.error(f"Failed to create DelegateBrowser: {e}", exc_info=True)
+                    from textual.widgets import Static
+
+                    msg = f"Delegate browser failed to load:\n{escape(str(e))}"
+                    self.browsers[browser_type] = Static(msg)
             else:
                 # Unknown browser type - fallback to activity
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to activity")
@@ -289,6 +302,10 @@ class BrowserContainer(App[None]):
         """Switch to the Q&A browser."""
         await self.switch_browser("qa")
 
+    async def action_switch_delegates(self) -> None:
+        """Switch to the Delegate browser."""
+        await self.switch_browser("delegate")
+
     async def action_quit(self) -> None:
         """Quit the application."""
         logger.debug("action_quit called")
@@ -320,8 +337,8 @@ class BrowserContainer(App[None]):
             event.stop()
             return
 
-        # Q to quit from activity, task, or qa browser
-        if key == "q" and self.current_browser in ["activity", "task", "qa"]:
+        # Q to quit from activity, task, qa, or delegate browser
+        if key == "q" and self.current_browser in ["activity", "task", "qa", "delegate"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
             event.stop()
@@ -443,6 +460,8 @@ class BrowserContainer(App[None]):
             await self.switch_browser("task")
         elif command_id == "nav.qa":
             await self.switch_browser("qa")
+        elif command_id == "nav.delegates":
+            await self.switch_browser("delegate")
         elif command_id == "nav.logs":
             await self.switch_browser("log")
 
