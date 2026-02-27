@@ -757,7 +757,7 @@ class TaskView(Widget):
         status_bar = self.query_one("#task-status-bar", Static)
 
         counts = {s: len(self._tasks_by_status.get(s, [])) for s in STATUS_ORDER}
-        parts = ["[bold]TASKS[/bold]"]
+        parts: list[str] = []
 
         if counts["open"]:
             parts.append(f"{counts['open']} ready")
@@ -778,26 +778,28 @@ class TaskView(Widget):
             else:
                 parts.append("[dim]no tasks[/dim]")
 
-        # Show grouping mode indicator
-        if self._group_by == "epic":
-            parts.append("[magenta]by epic[/magenta]")
+        # Mode indicators (separated from counts with │)
+        mode_parts: list[str] = []
 
-        # Show status filter indicator
+        if self._group_by == "epic":
+            mode_parts.append("[magenta]by epic[/magenta]")
+
         if self._status_filter:
             labels = [STATUS_LABELS.get(s, s) for s in sorted(self._status_filter)]
-            parts.append(f"[magenta]{'+'.join(labels)}[/magenta]")
+            mode_parts.append(f"[magenta]{'+'.join(labels)}[/magenta]")
 
-        # Show epic filter indicator
         if self._epic_filter:
-            parts.append(f"[cyan]epic: {self._epic_filter}[/cyan]")
+            mode_parts.append(f"[cyan]epic: {self._epic_filter}[/cyan]")
 
-        # Show text filter count when active
         if self._filter_text:
             matched = sum(counts.values())
             total = len(self._tasks)
-            parts.append(f"[cyan]filter: {matched}/{total}[/cyan]")
+            mode_parts.append(f"[cyan]filter: {matched}/{total}[/cyan]")
 
-        status_bar.update(" · ".join(parts))
+        sections = [" · ".join(parts)] if parts else []
+        if mode_parts:
+            sections.append(" · ".join(mode_parts))
+        status_bar.update(" │ ".join(sections))
 
     # ------------------------------------------------------------------
     # Filter logic

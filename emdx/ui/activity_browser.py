@@ -44,9 +44,11 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[bold]1[/bold] Docs │ [dim]2[/dim] Tasks │ "
-            "[dim]j/k[/dim] nav │ [dim]Enter[/dim] open │ "
-            "[dim]w[/dim] filter │ [dim]z[/dim] zoom │ [dim]?[/dim] help",
+            "[dim]1[/dim] Docs  [dim]2[/dim] Tasks  "
+            "[dim]j/k[/dim] Navigate  "
+            "[dim]Enter[/dim] Open  "
+            "[dim]/[/dim] Filter  "
+            "[dim]?[/dim] Help",
             id="help-bar",
         )
 
