@@ -685,20 +685,6 @@ class TestScreenSwitching:
             assert app.current_browser == "activity"
 
     @pytest.mark.asyncio
-    async def test_press_3_from_tasks_switches_to_qa(self, mock_browser_deps: None) -> None:
-        """Pressing 3 from tasks switches to Q&A."""
-        from emdx.ui.browser_container import BrowserContainer
-
-        app = BrowserContainer()
-        async with app.run_test(size=(120, 40)) as pilot:
-            await pilot.pause()
-            await pilot.press("2")
-            await pilot.pause()
-            await pilot.press("3")
-            await pilot.pause()
-            assert app.current_browser == "qa"
-
-    @pytest.mark.asyncio
     async def test_help_bar_shows_key_hints(self, mock_task_data: MockDict) -> None:
         """TaskBrowser help bar shows screen-switching hints."""
         from emdx.ui.task_browser import TaskBrowser
@@ -713,10 +699,8 @@ class TestScreenSwitching:
             bar = app.query_one("#task-help-bar", Static)
             assert "1" in str(bar.content)
             assert "2" in str(bar.content)
-            assert "3" in str(bar.content)
             assert "Docs" in str(bar.content)
             assert "Tasks" in str(bar.content)
-            assert "Q&A" in str(bar.content)
 
 
 # ===================================================================

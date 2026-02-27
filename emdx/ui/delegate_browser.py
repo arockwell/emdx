@@ -44,8 +44,8 @@ class DelegateBrowser(Widget):
         self.delegate_view = DelegateView(id="delegate-view")
         yield self.delegate_view
         yield Static(
-            "[dim]1[/dim] Docs │ [dim]2[/dim] Tasks │ [dim]3[/dim] Q&A │ "
-            "[bold]4[/bold] Delegates │ "
+            "[dim]1[/dim] Docs │ [dim]2[/dim] Tasks │ "
+            "[bold]3[/bold] Delegates │ "
             "[dim]j/k[/dim] nav │ [dim]z[/dim] zoom │ [dim]r[/dim] refresh",
             id="delegate-help-bar",
         )

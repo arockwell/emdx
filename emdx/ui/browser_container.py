@@ -71,8 +71,7 @@ class BrowserContainer(App[None]):
     BINDINGS = [
         Binding("1", "switch_activity", "Docs", show=True),
         Binding("2", "switch_tasks", "Tasks", show=True),
-        Binding("3", "switch_qa", "Q&A", show=True),
-        Binding("4", "switch_delegates", "Delegates", show=True),
+        Binding("3", "switch_delegates", "Delegates", show=True),
         Binding("backslash", "cycle_theme", "Theme", show=True),
         Binding("ctrl+k", "open_command_palette", "Search", show=True),
         Binding("ctrl+p", "open_command_palette", "Search", show=False),
@@ -237,18 +236,6 @@ class BrowserContainer(App[None]):
                     self.browsers[browser_type] = Static(
                         f"Task browser failed to load:\n{escape(str(e))}\n\nCheck logs for details."
                     )  # noqa: E501
-            elif browser_type == "qa":
-                try:
-                    from .qa import QAScreen
-
-                    self.browsers[browser_type] = QAScreen()
-                    logger.debug("QAScreen created")
-                except Exception as e:
-                    logger.error(f"Failed to create QAScreen: {e}", exc_info=True)
-                    from textual.widgets import Static
-
-                    msg = f"Q&A screen failed to load:\n{escape(str(e))}"
-                    self.browsers[browser_type] = Static(msg)
             elif browser_type == "delegate":
                 try:
                     from .delegate_browser import DelegateBrowser
@@ -298,10 +285,6 @@ class BrowserContainer(App[None]):
         """Switch to the Tasks browser."""
         await self.switch_browser("task")
 
-    async def action_switch_qa(self) -> None:
-        """Switch to the Q&A browser."""
-        await self.switch_browser("qa")
-
     async def action_switch_delegates(self) -> None:
         """Switch to the Delegate browser."""
         await self.switch_browser("delegate")
@@ -337,8 +320,8 @@ class BrowserContainer(App[None]):
             event.stop()
             return
 
-        # Q to quit from activity, task, qa, or delegate browser
-        if key == "q" and self.current_browser in ["activity", "task", "qa", "delegate"]:
+        # Q to quit from activity, task, or delegate browser
+        if key == "q" and self.current_browser in ["activity", "task", "delegate"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
             event.stop()
@@ -440,15 +423,6 @@ class BrowserContainer(App[None]):
             if command_id:
                 await self._execute_palette_command(command_id)
 
-        elif action == "search_tag":
-            tag = result.get("tag")
-            if tag:
-                # Switch to Q&A screen with tag query
-                await self.switch_browser("qa")
-                qa_browser = self.browsers.get("qa")
-                if qa_browser and hasattr(qa_browser, "set_query"):
-                    qa_browser.set_query(f"@{tag}")
-
     async def _execute_palette_command(self, command_id: str) -> None:
         """Execute a command from the palette by ID."""
         logger.debug(f"Palette command: {command_id}")
@@ -458,8 +432,6 @@ class BrowserContainer(App[None]):
             await self.switch_browser("activity")
         elif command_id == "nav.tasks":
             await self.switch_browser("task")
-        elif command_id == "nav.qa":
-            await self.switch_browser("qa")
         elif command_id == "nav.delegates":
             await self.switch_browser("delegate")
         elif command_id == "nav.logs":
@@ -508,11 +480,10 @@ class BrowserContainer(App[None]):
     async def action_select_doc(self, doc_id: int) -> None:
         """Navigate to a document by ID (used by @click meta on doc refs).
 
-        If already on the activity browser, navigate in-place to avoid
-        destroying and remounting the widget tree (which corrupts mouse state).
-        When called from other browsers (e.g. delegate), defer the navigation
-        to the next tick to avoid black-screen hangs from remove_children()
-        racing with click handlers.
+        If already on the activity browser, navigate in-place.
+        From other browsers, switch to activity first then select.
+        Uses set_timer(0) to defer the switch so the click handler
+        completes before the widget tree is modified.
         """
         activity = self.browsers.get("activity")
         if (
@@ -522,4 +493,9 @@ class BrowserContainer(App[None]):
         ):
             await activity.select_document_by_id(doc_id)
         else:
-            self.call_later(self._view_document, doc_id)
+            self.notify(f"Opening doc #{doc_id}...", timeout=1.5)
+            self.set_timer(0.1, lambda: self._deferred_view_doc(doc_id))
+
+    async def _deferred_view_doc(self, doc_id: int) -> None:
+        """Switch to activity browser and view a doc (called via timer)."""
+        await self._view_document(doc_id)
