@@ -24,6 +24,7 @@ from emdx.models.tasks import (
     get_recent_completed_tasks,
 )
 from emdx.models.types import TaskDict
+from emdx.ui.layout_mixin import LayoutMixin
 from emdx.ui.link_helpers import linkify_text
 
 logger = logging.getLogger(__name__)
@@ -88,14 +89,19 @@ def _extract_pr_url_from_task(task: TaskDict) -> str | None:
     return None
 
 
-class DelegateView(Widget):
+class DelegateView(LayoutMixin, Widget):
     """Two-pane delegate monitor view."""
+
+    _layout_list_panel_id = "#delegate-list-panel"
+    _layout_detail_panel_id = "#delegate-detail-panel"
 
     BINDINGS = [
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
         ("r", "refresh", "Refresh"),
         ("z", "toggle_zoom", "Zoom"),
+        ("plus", "grow_list", "Grow List"),
+        ("minus", "shrink_list", "Shrink List"),
     ]
 
     DEFAULT_CSS = """
@@ -201,6 +207,9 @@ class DelegateView(Widget):
 
     def on_mount(self) -> None:
         """Set up table columns and load initial data."""
+        # Apply configurable panel sizes from ui_config
+        self._apply_layout()
+
         table = self.query_one("#delegate-table", DataTable)
         table.add_columns("", "Task", "Progress", "Updated")
         self._load_data()

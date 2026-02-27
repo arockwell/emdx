@@ -18,6 +18,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Log, RichLog, Static
 
+from ..layout_mixin import LayoutMixin
 from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
 from .activity_items import ActivityItem as ActivityItemBase
@@ -91,11 +92,16 @@ def format_time_ago(dt: datetime) -> str:
 ActivityItem = ActivityItemBase
 
 
-class ActivityView(HelpMixin, Widget):
+class ActivityView(LayoutMixin, HelpMixin, Widget):
     """Activity View - Document Browser for EMDX."""
 
     HELP_TITLE = "Activity View"
     """Document browser — flat table of recent documents."""
+
+    _layout_list_panel_id = "#activity-panel"
+    _layout_detail_panel_id = "#preview-panel"
+    _layout_list_section_id = "#activity-list-section"
+    _layout_sidebar_section_id = "#context-section"
 
     class ViewDocument(Message):
         """Request to view a document fullscreen."""
@@ -117,6 +123,8 @@ class ActivityView(HelpMixin, Widget):
         ("c", "toggle_copy_mode", "Copy Mode"),
         ("w", "cycle_doc_type_filter", "Filter Docs"),
         ("z", "toggle_zoom", "Zoom"),
+        ("plus", "grow_list", "Grow List"),
+        ("minus", "shrink_list", "Shrink List"),
     ]
 
     DEFAULT_CSS = """
@@ -341,12 +349,12 @@ class ActivityView(HelpMixin, Widget):
                     auto_scroll=False,
                 )
 
-    # Width threshold for showing/hiding sidebar
-    SIDEBAR_WIDTH_THRESHOLD = 120
-
     async def on_mount(self) -> None:
         """Initialize the view."""
         table = self.query_one("#activity-table", ActivityTable)
+
+        # Apply configurable panel sizes from ui_config
+        self._apply_layout()
 
         # Apply initial sidebar visibility based on current width
         self._update_sidebar_visibility()
@@ -362,13 +370,14 @@ class ActivityView(HelpMixin, Widget):
         self._update_sidebar_visibility()
 
     def _update_sidebar_visibility(self) -> None:
-        """Show/hide sidebar based on current width."""
+        """Show/hide sidebar based on current width and config threshold."""
         try:
             panel = self.query_one("#activity-panel")
         except Exception:
             return
+        threshold = (self._layout or {}).get("sidebar_threshold", 120)
         was_visible = self._sidebar_visible
-        if self.size.width < self.SIDEBAR_WIDTH_THRESHOLD:
+        if self.size.width < threshold:
             panel.add_class("sidebar-hidden")
             self._sidebar_visible = False
         else:

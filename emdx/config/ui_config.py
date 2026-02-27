@@ -1,19 +1,38 @@
 """
 EMDX UI Configuration.
 
-Handles persistence of UI preferences including theme selection.
+Handles persistence of UI preferences including theme selection and layout.
 Config is stored in ~/.config/emdx/ui_config.json
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from .constants import EMDX_CONFIG_DIR
+
+
+class LayoutConfig(TypedDict):
+    """Panel layout configuration for the TUI."""
+
+    list_height_pct: int
+    sidebar_width_pct: int
+    sidebar_threshold: int
+
+
+# Layout defaults: list panel gets 40% of vertical space, sidebar gets 30% of horizontal
+DEFAULT_LAYOUT: LayoutConfig = {
+    "list_height_pct": 40,
+    "sidebar_width_pct": 30,
+    "sidebar_threshold": 120,
+}
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "theme": "emdx-dark",
     "code_theme": "auto",
+    "layout": {**DEFAULT_LAYOUT},
 }
 
 
@@ -92,3 +111,18 @@ def get_code_theme() -> str:
         Code theme name, or "auto" for automatic detection
     """
     return str(load_ui_config().get("code_theme", "auto"))
+
+
+def get_layout() -> LayoutConfig:
+    """Get panel layout configuration, merged with defaults."""
+    raw = load_ui_config().get("layout", {})
+    if not isinstance(raw, dict):
+        return {**DEFAULT_LAYOUT}
+    return {**DEFAULT_LAYOUT, **raw}  # type: ignore[typeddict-item]
+
+
+def set_layout(layout: LayoutConfig) -> None:
+    """Persist panel layout configuration."""
+    config = load_ui_config()
+    config["layout"] = dict(layout)
+    save_ui_config(config)

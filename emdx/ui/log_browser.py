@@ -26,6 +26,7 @@ from textual.widgets import DataTable, RichLog, Static
 from emdx.services.execution_service import Execution, get_recent_executions
 from emdx.services.log_stream import LogStream, LogStreamSubscriber
 
+from .layout_mixin import LayoutMixin
 from .log_browser_display import LogBrowserDisplayMixin
 from .log_browser_filtering import LogBrowserFilteringMixin
 from .log_browser_navigation import LogBrowserNavigationMixin
@@ -50,7 +51,12 @@ class LogBrowserSubscriber(LogStreamSubscriber):
 
 
 class LogBrowser(
-    HelpMixin, LogBrowserDisplayMixin, LogBrowserFilteringMixin, LogBrowserNavigationMixin, Widget
+    LayoutMixin,
+    HelpMixin,
+    LogBrowserDisplayMixin,
+    LogBrowserFilteringMixin,
+    LogBrowserNavigationMixin,
+    Widget,
 ):
     """Log browser widget for viewing execution logs with event-driven streaming.
 
@@ -195,12 +201,14 @@ class LogBrowser(
         # Status bar
         yield Static("Loading executions...", classes="log-status")
 
-    # Width threshold for showing/hiding sidebar
-    SIDEBAR_WIDTH_THRESHOLD = 120
-
     async def on_mount(self) -> None:
         """Initialize the log browser."""
         logger.info("📋 LogBrowser mounted")
+
+        # Load layout config (used for sidebar threshold)
+        from emdx.config.ui_config import get_layout
+
+        self._layout = get_layout()
 
         # Set up the table
         table = self.query_one("#log-table", DataTable)
@@ -221,12 +229,13 @@ class LogBrowser(
         self._update_sidebar_visibility()
 
     def _update_sidebar_visibility(self) -> None:
-        """Show/hide sidebar based on current width."""
+        """Show/hide sidebar based on current width and config threshold."""
         try:
             content = self.query_one(".log-browser-content")
         except Exception:
             return
-        if self.size.width < self.SIDEBAR_WIDTH_THRESHOLD:
+        threshold = (self._layout or {}).get("sidebar_threshold", 120)
+        if self.size.width < threshold:
             content.add_class("sidebar-hidden")
             self._sidebar_visible = False
         else:

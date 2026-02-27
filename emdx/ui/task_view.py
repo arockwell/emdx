@@ -30,6 +30,7 @@ from emdx.models.tasks import (
     update_task,
 )
 from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
+from emdx.ui.layout_mixin import LayoutMixin
 from emdx.ui.link_helpers import extract_urls as _extract_urls
 from emdx.ui.link_helpers import linkify_text as _linkify_text
 
@@ -149,8 +150,13 @@ def _task_label(task: TaskDict) -> str:
     return f"{icon} {title}"
 
 
-class TaskView(Widget):
+class TaskView(LayoutMixin, Widget):
     """Two-pane task browser view using DataTable."""
+
+    _layout_list_panel_id = "#task-list-panel"
+    _layout_detail_panel_id = "#task-detail-panel"
+    _layout_list_section_id = "#task-list-section"
+    _layout_sidebar_section_id = "#task-sidebar-section"
 
     BINDINGS = [
         ("j", "cursor_down", "Down"),
@@ -166,6 +172,8 @@ class TaskView(Widget):
         ("slash", "show_filter", "Filter"),
         ("escape", "clear_filter", "Clear Filter"),
         ("z", "toggle_zoom", "Zoom"),
+        ("plus", "grow_list", "Grow List"),
+        ("minus", "shrink_list", "Shrink List"),
     ]
 
     DEFAULT_CSS = """
@@ -349,9 +357,6 @@ class TaskView(Widget):
                     auto_scroll=False,
                 )
 
-    # Width threshold for showing/hiding sidebar
-    SIDEBAR_WIDTH_THRESHOLD = 120
-
     async def on_mount(self) -> None:
         """Load tasks on mount."""
         table = self.query_one("#task-table", DataTable)
@@ -368,6 +373,9 @@ class TaskView(Widget):
                 col.auto_width = False
         except Exception:
             pass
+
+        # Apply configurable panel sizes from ui_config
+        self._apply_layout()
 
         # Apply initial sidebar visibility based on current width
         self._update_sidebar_visibility()
@@ -393,13 +401,14 @@ class TaskView(Widget):
         self._sync_title_width()
 
     def _update_sidebar_visibility(self) -> None:
-        """Show/hide sidebar based on current width."""
+        """Show/hide sidebar based on current width and config threshold."""
         try:
             panel = self.query_one("#task-list-panel")
         except Exception:
             return
+        threshold = (self._layout or {}).get("sidebar_threshold", 120)
         was_visible = self._sidebar_visible
-        if self.size.width < self.SIDEBAR_WIDTH_THRESHOLD:
+        if self.size.width < threshold:
             panel.add_class("sidebar-hidden")
             self._sidebar_visible = False
         else:
@@ -417,9 +426,11 @@ class TaskView(Widget):
             return
         # icon(3) + epic(7) + age(4) + borders/padding(~4)
         overhead = 3 + 7 + 4 + 4
-        # In sidebar-visible mode, the list section is 70% of width
+        # In sidebar-visible mode, list section width comes from config
         if self._sidebar_visible:
-            avail = int(self.size.width * 0.7)
+            sidebar_pct = (self._layout or {}).get("sidebar_width_pct", 30)
+            list_frac = (100 - sidebar_pct) / 100.0
+            avail = int(self.size.width * list_frac)
         else:
             avail = self.size.width
         title_w = max(20, avail - overhead)
