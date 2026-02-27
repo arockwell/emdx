@@ -317,16 +317,25 @@ class DelegateView(Widget):
                     key=f"{HEADER_PREFIX}empty",
                 )
 
-            # Restore cursor to previously selected row
-            if selected_key and table.row_count > 0:
+            # Restore cursor to previously selected row, or move to first data row
+            if table.row_count > 0:
                 try:
                     row_keys = list(table.rows.keys())
-                    for idx, rk in enumerate(row_keys):
-                        if str(rk.value) == selected_key:
-                            table.move_cursor(row=idx)
-                            break
+                    restored = False
+                    if selected_key:
+                        for idx, rk in enumerate(row_keys):
+                            if str(rk.value) == selected_key:
+                                table.move_cursor(row=idx)
+                                restored = True
+                                break
+                    if not restored:
+                        # Move to first non-header row
+                        for idx, rk in enumerate(row_keys):
+                            if not str(rk.value).startswith(HEADER_PREFIX):
+                                table.move_cursor(row=idx)
+                                break
                 except Exception:
-                    logger.warning("Failed to restore cursor", exc_info=True)
+                    logger.warning("Failed to position cursor", exc_info=True)
 
             # Update status bar
             status_bar = self.query_one("#delegate-status-bar", Static)

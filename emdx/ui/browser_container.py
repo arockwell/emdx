@@ -510,6 +510,9 @@ class BrowserContainer(App[None]):
 
         If already on the activity browser, navigate in-place to avoid
         destroying and remounting the widget tree (which corrupts mouse state).
+        When called from other browsers (e.g. delegate), defer the navigation
+        to the next tick to avoid black-screen hangs from remove_children()
+        racing with click handlers.
         """
         activity = self.browsers.get("activity")
         if (
@@ -519,4 +522,4 @@ class BrowserContainer(App[None]):
         ):
             await activity.select_document_by_id(doc_id)
         else:
-            await self._view_document(doc_id)
+            self.call_later(self._view_document, doc_id)
