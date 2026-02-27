@@ -328,6 +328,10 @@ class BrowserContainer(App[None]):
             event.stop()
             return
 
+        # Don't handle q when a modal screen is active — let the modal handle it
+        if key == "q" and len(self.screen_stack) > 1:
+            return
+
         # Q to quit from activity, task, or delegate browser
         if key == "q" and self.current_browser in ["activity", "task", "delegate"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")

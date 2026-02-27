@@ -22,6 +22,7 @@ class TaskBrowser(HelpMixin, Widget):
         "mark_active": "Actions",
         "mark_blocked": "Actions",
         "mark_wontdo": "Actions",
+        "mark_open": "Actions",
     }
 
     BINDINGS = [
@@ -53,11 +54,10 @@ class TaskBrowser(HelpMixin, Widget):
         self.task_view = TaskView(id="task-view")
         yield self.task_view
         yield Static(
-            "[dim]1[/dim] Docs  [bold]2[/bold] Tasks  [dim]3[/dim] Delegates  "
+            "[dim]1[/dim] Docs  [dim]2[/dim] Tasks  [dim]3[/dim] Delegates  "
             "[dim]j/k[/dim] Navigate  "
-            "[dim]Enter[/dim] Open  "
-            "[dim]o/i/x/f[/dim] Status  "
-            "[dim]d[/dim] Done  "
+            "[dim]d[/dim] Done  [dim]a[/dim] Active  "
+            "[dim]b[/dim] Blocked  [dim]w[/dim] Won't do  [dim]u[/dim] Reopen  "
             "[dim]/[/dim] Filter  "
             "[dim]?[/dim] Help",
             id="task-help-bar",

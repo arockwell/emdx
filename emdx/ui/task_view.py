@@ -162,6 +162,7 @@ class TaskView(Widget):
         ("a", "mark_active", "Mark Active"),
         ("b", "mark_blocked", "Mark Blocked"),
         ("w", "mark_wontdo", "Won't Do"),
+        ("u", "mark_open", "Reopen"),
         ("slash", "show_filter", "Filter"),
         ("escape", "clear_filter", "Clear Filter"),
         ("z", "toggle_zoom", "Zoom"),
@@ -1393,6 +1394,10 @@ class TaskView(Widget):
     async def action_mark_wontdo(self) -> None:
         """Mark selected task as won't do."""
         await self._set_task_status("wontdo")
+
+    async def action_mark_open(self) -> None:
+        """Reopen a task (mark as open/ready)."""
+        await self._set_task_status("open")
 
     # ------------------------------------------------------------------
     # URL opening (keyboard Shift+O)
