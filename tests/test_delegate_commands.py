@@ -1271,6 +1271,9 @@ class TestPRInstruction:
     def test_extract_pr_url_none_input(self):
         assert _extract_pr_url(None) is None
 
+    def test_extract_pr_url_empty_string(self):
+        assert _extract_pr_url("") is None
+
 
 # =============================================================================
 # Tests for --branch flag and branch instruction
