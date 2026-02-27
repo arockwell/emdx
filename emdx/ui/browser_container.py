@@ -88,6 +88,7 @@ class BrowserContainer(App[None]):
         self.browser_states: dict[str, Any] = {}  # Quick and dirty state storage
         self.container_widget: BrowserContainerWidget | None = None  # Will be set in compose
         self._initial_theme = initial_theme  # Theme override from CLI
+        self._pending_doc_id: int | None = None  # For deferred doc navigation
 
     def exit(self, *args: Any, **kwargs: Any) -> None:
         """Override exit to log when it's called."""
@@ -260,12 +261,19 @@ class BrowserContainer(App[None]):
         browser = self.browsers[browser_type]
         await mount_point.mount(browser)
 
-        # Set focus to the new browser after mount is complete
-        def do_focus() -> None:
+        # Set focus and handle pending doc navigation after mount
+        def post_mount() -> None:
             if hasattr(browser, "focus"):
                 browser.focus()
+            # If a pending doc was requested (e.g. from delegate browser click),
+            # navigate to it now that the activity browser is mounted
+            pending = getattr(self, "_pending_doc_id", None)
+            if pending is not None and browser_type == "activity":
+                self._pending_doc_id = None
+                if hasattr(browser, "select_document_by_id"):
+                    self.run_worker(browser.select_document_by_id(pending))
 
-        self.call_after_refresh(do_focus)
+        self.call_after_refresh(post_mount)
 
         # Parent reference is set automatically by Textual during mount
 
@@ -481,9 +489,8 @@ class BrowserContainer(App[None]):
         """Navigate to a document by ID (used by @click meta on doc refs).
 
         If already on the activity browser, navigate in-place.
-        From other browsers, switch to activity first then select.
-        Uses set_timer(0) to defer the switch so the click handler
-        completes before the widget tree is modified.
+        From other browsers, store the target doc ID and switch browsers;
+        the activity browser will pick up the pending doc after mount.
         """
         activity = self.browsers.get("activity")
         if (
@@ -493,9 +500,7 @@ class BrowserContainer(App[None]):
         ):
             await activity.select_document_by_id(doc_id)
         else:
+            # Store pending doc ID so we can select it after browser switch
+            self._pending_doc_id = doc_id
             self.notify(f"Opening doc #{doc_id}...", timeout=1.5)
-            self.set_timer(0.1, lambda: self._deferred_view_doc(doc_id))
-
-    async def _deferred_view_doc(self, doc_id: int) -> None:
-        """Switch to activity browser and view a doc (called via timer)."""
-        await self._view_document(doc_id)
+            await self.switch_browser("activity")
