@@ -43,6 +43,13 @@ class ActivityTable(DataTable[str | Text]):
             self.item = item
             super().__init__()
 
+    class EnterPressed(Message):
+        """Posted when Enter is pressed on a row."""
+
+        def __init__(self, item: ActivityItem) -> None:
+            self.item = item
+            super().__init__()
+
     class ItemHighlighted(Message):
         """Posted when cursor moves to a new row."""
 
@@ -221,6 +228,15 @@ class ActivityTable(DataTable[str | Text]):
             if key_str == f"document:{doc_id}":
                 return i
         return None
+
+    def on_key(self, event: events.Key) -> None:
+        """Intercept Enter to post EnterPressed instead of RowSelected."""
+        if event.key == "enter":
+            event.prevent_default()
+            event.stop()
+            item = self.get_selected_item()
+            if item:
+                self.post_message(self.EnterPressed(item))
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Forward row highlight as ItemHighlighted message."""

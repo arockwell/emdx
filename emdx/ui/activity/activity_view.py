@@ -16,7 +16,7 @@ from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
-from textual.widgets import DataTable, Log, RichLog, Static
+from textual.widgets import Log, RichLog, Static
 
 from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
@@ -852,7 +852,7 @@ class ActivityView(HelpMixin, Widget):
         await self._update_preview(force=True)
         await self._update_context_panel()
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+    def on_activity_table_enter_pressed(self, event: ActivityTable.EnterPressed) -> None:
         """Handle Enter key on table row — open fullscreen."""
         self.action_fullscreen()
 
