@@ -1,6 +1,6 @@
 {
   "name": "emdx",
-  "version": "0.24.2",
+  "version": "0.25.0",
   "description": "Knowledge base skills for Claude Code. Save research, delegate parallel work, and maintain session memory across conversations.",
   "author": {
     "name": "Alex Rockwell"
