@@ -698,6 +698,10 @@ class TestScreenSwitching:
             await pilot.pause()
             bar = app.query_one("#task-help-bar", Static)
             content = str(bar.content)
+            assert "1" in content
+            assert "2" in content
+            assert "Docs" in content
+            assert "Tasks" in content
             assert "Navigate" in content
             assert "Help" in content
             assert "Filter" in content
