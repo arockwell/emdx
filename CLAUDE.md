@@ -13,7 +13,7 @@ EMDX is a knowledge base that AI agents populate and humans curate. Python 3.11+
 **What's good for whom:**
 - **Humans:** Hierarchy (epics/categories/groups), TUI, rendered markdown, fuzzy search, briefings
 - **Agents:** `--json` output, flat task queue (`task ready`), exact ID access, `prime --json`
-- **Both:** Tags, save, find, delegate, task dependencies
+- **Both:** Tags, save, find, task dependencies
 
 **Key Components:**
 - `commands/` - CLI command implementations
@@ -61,7 +61,7 @@ poetry run ruff check .         # Verify zero errors remain
 - B008 is ignored (typer pattern for function call defaults)
 - `ruff check` must pass with **zero errors** before pushing any branch
 - When writing SQL strings that exceed 100 chars, break across lines or use implicit string concatenation
-- All `--flags` must come BEFORE positional arguments in `emdx delegate` calls
+- All `--flags` must come BEFORE positional arguments in CLI calls (e.g. `emdx delegate`)
 
 ## Type Safety — MANDATORY
 
@@ -98,7 +98,7 @@ The codebase uses mypy strict checking. Pre-commit hooks run mypy on staged file
 When writing CLI examples in README.md or docs:
 - Use `$` prompts for commands
 - Show realistic output (✅ Saved as #42, 📋 Saved as #43, 🔍 Found N results, 🔀 PR #87)
-- Use sequential doc IDs that make narrative sense (save produces #42, delegate references --doc 42)
+- Use sequential doc IDs that make narrative sense (save produces #42, view references 42)
 - Comments should narrate the story, not describe flags
 - Each code block should build progressively — later commands reference earlier output
 - Don't use `<details>` collapsible sections — content is either worth showing or not
@@ -111,44 +111,15 @@ When writing CLI examples in README.md or docs:
 
 ### Hooks (Automatic Session Lifecycle)
 
-Claude Code hooks in `.claude/settings.json` handle session lifecycle automatically:
+The `prime.sh` hook in `.claude/settings.json` runs on every session start, injecting
+KB context (ready tasks, in-progress work, recent docs). You can also run manually:
 
-| Hook | Event | What it does |
-|------|-------|-------------|
-| `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
-| `save-output.sh` | Stop | Auto-saves output to KB (delegate sessions only) |
-| `session-end.sh` | SessionEnd | Updates task status (delegate sessions only) |
-
-**Hooks are ambient** — `prime.sh` runs for all sessions. The save/end hooks only activate
-when the delegate launcher sets env vars (`EMDX_AUTO_SAVE=1`, `EMDX_TASK_ID`).
-
-**Env vars recognized by hooks:**
-
-| Variable | Set by | Used by | Purpose |
-|----------|--------|---------|---------|
-| `EMDX_AUTO_SAVE` | delegate | save-output.sh | Enable auto-save ("1" to activate) |
-| `EMDX_DOC_ID` | delegate | prime.sh | Include document as context |
-| `EMDX_TASK_ID` | delegate | prime.sh, session-end.sh | Track task lifecycle |
-| `EMDX_TITLE` | delegate | save-output.sh | Document title for saved output |
-| `EMDX_TAGS` | delegate | save-output.sh | Tags for saved output |
-| `EMDX_BATCH_FILE` | delegate | save-output.sh | Parallel coordination file |
-| `EMDX_EXECUTION_ID` | delegate | session-end.sh | Execution record to update |
-
-### Session Start Protocol
-
-**Human sessions:** `prime.sh` hook runs automatically on session start, injecting KB context.
-You can also run manually:
 ```bash
 emdx prime    # Get current work context (ready tasks, in-progress, recent docs)
 emdx status   # Quick overview
 ```
 
-**Delegate sessions:** `prime.sh` runs automatically with task-specific context via `EMDX_TASK_ID`
-and `EMDX_DOC_ID` env vars. No manual priming needed.
-
 ### Mandatory Behaviors
-
-#### For Human Sessions (interactive Claude Code)
 
 1. **Check ready tasks** before starting work: `emdx task ready`
 2. **Track progress on multi-step work** — for any task with 3+ steps, create subtasks BEFORE starting:
@@ -160,62 +131,33 @@ and `EMDX_DOC_ID` env vars. No manual priming needed.
    ```
    This gives the user real-time visibility into progress, especially for longer tasks.
 3. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
-4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
-5. **Never end session** without updating task status and creating tasks for remaining work
+4. **Search before researching** — check if prior work exists: `emdx find "topic" -s`
+5. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
+6. **Never end session** without updating task status and creating tasks for remaining work
 
-#### For Delegate Sessions (emdx delegate sub-agents)
+### Using emdx with Sub-Agents
 
-1. **Focus exclusively on your assigned task** — do NOT check ready tasks or pick up other work
-2. **Do NOT manually save output** — the `save-output.sh` hook handles this automatically
-3. **Do NOT manually update task status** — the `session-end.sh` hook handles this automatically
-4. **Do NOT sub-delegate** — no recursive `emdx delegate` calls
-
-### CRITICAL: Use `emdx delegate` Instead of Task Tool Sub-Agents
-
-**NEVER use the Task tool to spawn sub-agents.** Use `emdx delegate` instead — results print to stdout AND persist to the knowledge base.
+When using the Agent tool for sub-tasks, save significant results to the KB:
 
 ```bash
-# Single task
-emdx delegate "analyze the auth module"
+# After an agent returns findings worth keeping
+echo "<agent findings>" | emdx save --title "Auth Analysis" --tags "analysis"
 
-# Parallel (up to 10 concurrent)
-emdx delegate "check auth" "review tests" "scan for XSS"
-
-# Parallel with synthesis
-emdx delegate --synthesize "task1" "task2" "task3"
-
-# With document context
-emdx delegate --doc 42 "implement the plan described here"
-
-# With PR creation (--pr implies --worktree)
-emdx delegate --pr "fix the auth bug"
-
-# Push branch only, no PR (--branch implies --worktree)
-emdx delegate --branch "add logging to auth module"
-
-# Draft PR
-emdx delegate --pr --draft "experimental feature"
-
-# Custom base branch
-emdx delegate --branch -b develop "add feature X"
-
-# All flags compose together
-emdx delegate --doc 42 --pr "fix the bug"
+# For tracked work, use the task lifecycle
+emdx task add "Research auth patterns" --epic <id> --cat FEAT
+# ... do the work (inline or via Agent tool) ...
+emdx task done <id>
 ```
 
-**All options:** `--tags`, `--title`, `-j` (max parallel), `--model`, `--sonnet`, `--opus`, `-q` (quiet), `--base-branch`/`-b`, `--branch`, `--pr`, `--draft`/`--no-draft`, `--worktree`/`-w`, `--epic`/`-e`, `--cat`/`-c`, `--tool` (extra allowed tools), `--cleanup`
+`emdx delegate` is also available for batch CLI dispatch with automatic KB persistence:
 
-### Quick Reference
-
-| Situation | Command |
-|-----------|---------|
-| Research/analysis | `emdx delegate "task"` |
-| Parallel research | `emdx delegate "t1" "t2" "t3"` |
-| Combined summary | `emdx delegate --synthesize "t1" "t2"` |
-| Doc as input | `emdx delegate --doc 42 "implement this"` |
-| Code changes with PR | `emdx delegate --pr "fix the bug"` |
-| Push branch, no PR | `emdx delegate --branch "add feature"` |
-| Clean up worktrees | `emdx delegate --cleanup` |
+```bash
+emdx delegate "analyze the auth module"                     # Single task
+emdx delegate "check auth" "review tests" "scan for XSS"    # Parallel
+emdx delegate --synthesize "task1" "task2" "task3"           # With synthesis
+emdx delegate --doc 42 "implement the plan described here"   # Doc context
+emdx delegate --pr "fix the auth bug"                        # With PR creation
+```
 
 ### Document Tags vs Task Organization
 
@@ -276,7 +218,7 @@ emdx tag add 42 gameplan active
 emdx tag list
 
 # Status
-emdx status                            # Delegate activity overview
+emdx status                            # Knowledge base overview
 emdx status --stats                    # Knowledge base statistics
 emdx status --stats --detailed         # Detailed stats with project breakdown
 
@@ -332,21 +274,21 @@ grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
 - `logger.debug("msg")` will NOT appear in TUI logs — emdx.* level is INFO. Use `logger.info()` or `logger.warning()` for debug output that must be visible.
 - TUI logs and CLI logs go to DIFFERENT files. If you're debugging the GUI, check `tui_debug.log`, not `emdx.log`.
 
-## Delegate Cleanup Gotchas
+## Sub-Agent Cleanup Gotchas
 
-- When delegates remove functions, they sometimes miss: (1) tests importing the removed code, (2) private methods called from OTHER files, (3) entirely dead files that should be deleted not just pruned
-- Always check CI after delegate cleanup PRs — `ImportError` in tests is the most common failure mode
-- When multiple delegate PRs touch the same file, merge one at a time — they WILL conflict with each other
+- When sub-agents remove functions, they sometimes miss: (1) tests importing the removed code, (2) private methods called from OTHER files, (3) entirely dead files that should be deleted not just pruned
+- Always check CI after cleanup PRs — `ImportError` in tests is the most common failure mode
+- When multiple PRs touch the same file, merge one at a time — they WILL conflict with each other
 
 ## Known Gotchas
 
 - **`emdx find` does not support OR/AND/NOT** — `escape_fts5_query()` quotes each term, making operators literal. Use separate find calls or `--tags` with `--any-tags`.
 - **`emdx task add`** not `emdx task create` — the subcommand is `add`.
 - **`select.select()` on macOS**: Python's `select.select()` does not work reliably on `subprocess.Popen` stdout/stderr pipes on macOS. Use background threads with `queue.Queue` instead (see `_reader_thread()` in `unified_executor.py`).
-- **Delegate log monitoring**: When running parallel delegates, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
+- **Delegate log monitoring**: When running `emdx delegate` in parallel, verify logs are non-zero with `wc -c` on the log files. Zero-byte logs indicate a streaming bug, not an empty task.
 - **FTS5 virtual table queries**: `documents_fts` is a separate FTS5 virtual table, NOT a column on `documents`. You must JOIN it: `SELECT d.id FROM documents d JOIN documents_fts fts ON d.id = fts.rowid WHERE fts.documents_fts MATCH ?`. Never use `WHERE documents_fts MATCH ?` directly on the documents table — it silently fails with "no such column". See `emdx/database/search.py` for the canonical pattern.
 - **Mocked internal functions in tests**: When refactoring a function's signature (parameters, return type), grep for tests that mock it — they break silently. Use: `rg "mock.*<func_name>\|patch.*<func_name>" tests/`
-- **Duplicate PRs from redone delegates**: When closing a stale delegate PR and redoing it fresh, ensure the old PR is actually closed *before* the new one merges. If both get merged, you'll get duplicate definitions (as happened with #697/#698 both adding `ExecutionResultDict`, breaking main with mypy `no-redef` errors).
+- **Duplicate PRs from redone work**: When closing a stale PR and redoing it fresh, ensure the old PR is actually closed *before* the new one merges. If both get merged, you'll get duplicate definitions.
 - **Terminal state corruption in TUI**: Running code in background threads (via `asyncio.to_thread`) that imports heavy libraries (torch, sentence-transformers) or runs subprocesses can reset the terminal from raw mode to cooked mode, killing Textual's mouse/key handling. **Fix**: Save terminal state with `termios.tcgetattr()` before the threaded call and restore with `termios.tcsetattr()` after. This also explains why `UnifiedExecutor` corrupted the terminal — its `get_subprocess_env()` or subprocess execution path triggers the same reset.
 - **Textual `@click` meta namespace resolution**: `@click` actions in Rich Text rendered inside a widget resolve ONLY on the widget that received the click — they do NOT walk up the DOM. If you put `meta={"@click": "open_url(...)"}` in a RichLog's text, Textual looks for `action_open_url` on the RichLog, not on parent widgets. Use `app.open_url(...)` prefix to target the App, or `screen.open_url(...)` for the Screen. This applies to `@click`, `@mouse.down`, and `@mouse.up` meta actions.
 - **Don't add `on_click`/`on_mouse_down` to parent widgets**: Adding `on_click`, `on_mouse_down`, or `on_mouse_up` handlers to a parent Widget (or subclassing RichLog with these handlers) can break all mouse interaction in the TUI globally. Prefer Rich Style `@click` meta with namespace prefixes (e.g. `app.action_name(...)`) instead of custom mouse event handlers.
@@ -362,20 +304,14 @@ grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
 - `Static` has no `.renderable` attribute — use `.content` property instead
 - See `tests/test_task_browser.py` for canonical patterns: `TaskTestApp`, `mock_task_data` fixture, `_richlog_text()` helper, `_select_first_task()` helper
 
-## Delegate Debugging
+## Delegate Debugging (emdx development only)
 
-### Stuck Delegate Diagnostics
-If a delegate appears stuck (no output beyond worktree creation):
+If an `emdx delegate` subprocess appears stuck:
 
 1. Check process: `ps -o etime=,%cpu= -p <PID>`
-2. Check TCP connections: `lsof -p <PID> 2>/dev/null | grep TCP | wc -l`
-   - **2+ connections** = healthy, waiting on API response
-   - **0 connections** = stuck, kill and re-dispatch
-3. Check worktree: `cd <worktree> && git status` — see if files were created
-4. Kill: `kill <PID>` then clean up worktree: `git worktree remove <path> --force`
-
-### Common Causes of Hanging
-- Shared virtualenv editable install pointing to deleted worktree (fix: `poetry lock && poetry install`)
+2. Check TCP connections: `lsof -p <PID> 2>/dev/null | grep TCP | wc -l` (2+ = healthy, 0 = stuck)
+3. Kill: `kill <PID>` then clean up worktree: `git worktree remove <path> --force`
+4. Common cause: shared virtualenv pointing to deleted worktree (fix: `poetry lock && poetry install`)
 
 ## Release Process
 
@@ -398,6 +334,6 @@ Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and 
 
 emdx ships as a Claude Code plugin with skills in the `skills/` directory. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
 
-**Available skills:** `/emdx:save`, `/emdx:delegate`, `/emdx:research`, `/emdx:prime`, `/emdx:wrapup`, `/emdx:tasks`
+**Available skills:** `/emdx:save`, `/emdx:research`, `/emdx:prime`, `/emdx:tasks`, `/emdx:wrapup`, `/emdx:delegate`
 
 The plugin manifest lives at `.claude-plugin/plugin.json`. Skills follow the [Agent Skills](https://agentskills.io) open standard.

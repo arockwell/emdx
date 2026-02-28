@@ -1,12 +1,23 @@
 ---
 name: delegate
-description: Dispatch parallel work to sub-agents via emdx delegate. Use when you need to run research, analysis, or code tasks in parallel — results persist to the knowledge base.
+description: Batch-dispatch tasks via emdx delegate with automatic KB persistence. Use for parallel CLI execution when results should auto-save to the knowledge base.
 disable-model-invocation: true
 ---
 
-# Delegate Work
+# Delegate (Batch Dispatch)
 
-Dispatch the following via emdx delegate: $ARGUMENTS
+Run tasks via emdx delegate: $ARGUMENTS
+
+## When to Use Delegate
+
+Use `emdx delegate` when you want **automatic KB persistence** — results are saved to the
+knowledge base without manual `emdx save`. This is useful for:
+- Batch parallel research (2-10 concurrent tasks)
+- Tasks where you want guaranteed output persistence
+- CLI-driven dispatch (not interactive Claude Code sessions)
+
+For interactive work, prefer using the Agent tool directly and saving results with
+`emdx save` afterward.
 
 ## Core Usage
 
@@ -58,19 +69,6 @@ emdx delegate --synthesize --tags "analysis" "task1" "task2"
 emdx delegate "task1" "task2" --synthesize
 ```
 
-## When to Delegate vs Do Inline
-
-**Delegate when:**
-- You need parallel research (2-10 tasks)
-- The task involves code changes that should become a PR
-- Results should persist to the KB for future reference
-- The work is independent and doesn't need your conversation context
-
-**Do inline when:**
-- Quick, single-step lookups (use Grep/Glob/Read directly)
-- The task depends on your current conversation state
-- You need to iterate interactively with the user
-
 ## Examples
 
 ```bash
@@ -82,9 +80,6 @@ emdx delegate --pr "fix the auth bug described in issue #123"
 
 # With document context
 emdx delegate --doc 42 "implement the plan described here"
-
-# Push branch without PR
-emdx delegate --branch -b develop "add feature X"
 
 # Use a faster model
 emdx delegate --sonnet "quick analysis of the config module"
