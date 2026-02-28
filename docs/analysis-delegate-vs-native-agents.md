@@ -2,185 +2,154 @@
 
 ## Context
 
-`emdx delegate` was built when Claude Code had no native sub-agent support. It solved
-a real problem: spawning Claude subprocess sessions with knowledge base integration.
-Claude Code now has the Agent tool with worktree isolation, model selection, and parallel
-execution. This analysis examines what delegate provides, what's now redundant, and what
-the migration path looks like.
+emdx is a knowledge base plugin used across multiple projects — not just for emdx
+development itself. The CLAUDE.md, hooks, and skills ship to every project that installs
+emdx as a plugin.
 
-## What delegate actually does
+`emdx delegate` was built when Claude Code had poor sub-agent support. It solved a real
+problem: spawning Claude subprocess sessions with automatic KB integration (save output,
+track tasks, inject context). Claude Code now has the Agent tool with worktree isolation,
+model selection, parallel execution, conversation context inheritance, and background
+execution.
 
-Decomposing `emdx delegate "task"` into its constituent operations:
+**The question:** Should the plugin continue mandating `emdx delegate` as the sub-agent
+mechanism, or should it teach Claude to use emdx commands (`save`, `find`, `task`)
+naturally alongside whatever execution model Claude Code provides?
 
-| Step | What delegate does | Could native Agent do it? |
-|------|-------------------|--------------------------|
-| 1. Create task | `_safe_create_task(title, status="active")` | No — needs explicit `emdx task add` call |
-| 2. Build prompt | Append PR/branch instructions | Yes — prompt construction is just text |
-| 3. Set env vars | `EMDX_TASK_ID`, `EMDX_DOC_ID`, `EMDX_AUTO_SAVE` | N/A — hooks would need different trigger |
-| 4. Spawn Claude | `subprocess.run(["claude", "--print"])` | Yes — Agent tool does this natively |
-| 5. Worktree | `create_worktree()` for isolation | Yes — `isolation: "worktree"` |
-| 6. Save output | `_safe_save_document(title, output, tags)` | No — needs explicit `emdx save` call |
-| 7. Update task | `_safe_update_task(task_id, status="done")` | No — needs explicit `emdx task done` call |
-| 8. Extract PR URL | Parse output for github PR URLs | No — but not needed if Agent creates PR |
-| 9. Print to stdout | Output visible to calling session | Yes — Agent tool returns results to parent |
+## What delegate provides (as a plugin feature)
 
-**Core insight:** Steps 4-5 (spawn + isolate) are fully replaced by the Agent tool.
-Steps 1, 6, 7 (KB integration) are the actual value — and they're just emdx CLI calls.
+When a user in *any* project runs `/emdx:delegate "analyze auth"`, delegate:
 
-## The three things delegate really provides
+1. Creates a task in the KB (`emdx task add`, status=active)
+2. Spawns `claude --print` as a subprocess
+3. Saves the output to the KB (`emdx save`)
+4. Updates the task (`emdx task done`)
+5. Prints output to stdout (visible to calling session)
 
-### 1. Automatic KB persistence (save output)
+For parallel tasks, it also:
+6. Runs up to 10 tasks concurrently
+7. Optionally synthesizes all outputs into one document
 
-Delegate auto-saves every sub-agent's output to the knowledge base. With native agents,
-this requires the calling session to explicitly run `emdx save` after the agent returns.
+**The entire value is steps 1, 3, 4** — KB integration. Steps 2 and 5 are just subprocess
+management that the native Agent tool now handles better.
 
-**Gap assessment:** Small. The calling Claude session gets the agent's result and can
-pipe it to `emdx save`. The CLAUDE.md already mandates saving significant outputs.
-
-### 2. Automatic task lifecycle (create → active → done)
-
-Delegate creates a task before execution and marks it done after. With native agents,
-this requires the calling session to use `emdx task add` / `emdx task done`.
-
-**Gap assessment:** Small. CLAUDE.md already mandates task tracking. The difference is
-whether it happens automatically (delegate) or explicitly (CLAUDE.md instructions).
-
-### 3. Parallel execution with synthesis
-
-Delegate can run 2-10 tasks concurrently via ThreadPoolExecutor, collect all outputs,
-and optionally run a synthesis pass that combines them into one document.
-
-**Gap assessment:** Medium. Claude Code's Agent tool can launch multiple agents in
-parallel (multiple Agent tool calls in one message). But there's no built-in synthesis —
-the calling session would need to read all results and synthesize itself.
-
-## What delegate does NOT provide that native agents do
+## Why native Agent tool is better for plugin users
 
 | Capability | Delegate | Native Agent tool |
 |-----------|----------|-------------------|
-| Access to conversation context | No — `claude --print` starts fresh | Yes — "access to current context" agents see full history |
-| Interactive tool approval | No — must pre-authorize all tools | Yes — user can approve/deny per tool |
-| Model flexibility | `--model` flag | `model` parameter (sonnet/opus/haiku) |
-| Resumability | No — fire and forget | Yes — agents can be resumed by ID |
-| Background execution | Blocks the terminal | `run_in_background: true` with notifications |
-| Cost visibility | Manual token tracking | Built into Claude Code |
-| Sub-agent recursion | Explicitly forbidden | Supported (agents can spawn agents) |
+| Conversation context | None — starts fresh | Full history — "investigate the error above" works |
+| User approval | Must pre-authorize all tools | Interactive approve/deny |
+| Background execution | Blocks the session | `run_in_background: true` |
+| Resumability | Fire and forget | Resume by agent ID |
+| Cost tracking | Manual | Built into Claude Code |
+| Model selection | `--model` flag | `model` parameter |
+| Worktree isolation | Custom worktree code | `isolation: "worktree"` |
+| Works in any project | Only if emdx installed | Always available |
 
-**The conversation context gap is significant.** When you say "investigate the error
-discussed above," a native Agent sees the full conversation. A delegate subprocess
-starts completely fresh and needs the entire context re-stated in the prompt.
+**The conversation context gap matters most.** When a user is debugging something and
+wants to spawn a sub-agent, the native Agent sees everything discussed so far. A delegate
+subprocess knows nothing — the user must re-explain the entire context in the prompt.
 
-## Proposed migration: "emdx as habit, not harness"
+## What gets lost without delegate
 
-### Philosophy shift
+### 1. Auto-save (medium risk)
 
-**Before:** "Use delegate to spawn sub-agents" (emdx controls execution)
-**After:** "Use emdx commands naturally" (emdx is a knowledge store, Claude Code controls execution)
+Delegate guarantees output persists to the KB. Without it, Claude must remember to
+`emdx save` after agent work. CLAUDE.md instructions help but aren't 100% reliable.
 
-The key reframe: emdx is a **knowledge base that AI agents populate and humans curate**.
-The CLI commands (`save`, `find`, `task`, `prime`) are the interface. How those commands
-get invoked — by a human, by Claude Code directly, by an Agent sub-agent, or by
-`emdx delegate` — doesn't matter.
+**Mitigation:** The `/emdx:wrapup` skill catches unsaved work at session end. The
+`prime.sh` hook reminds Claude of save obligations at session start.
 
-### What changes in CLAUDE.md
+### 2. Auto task tracking (low risk)
 
-#### Remove
-- The mandate "NEVER use the Task tool to spawn sub-agents. Use `emdx delegate` instead."
-- The separate "Delegate Sessions" behavioral rules (these become unnecessary when
-  delegate isn't the primary path)
+Delegate auto-creates and updates tasks. Without it, Claude must explicitly
+`emdx task add` / `emdx task done`.
 
-#### Reframe
-- "Mandatory Behaviors" become about **using emdx commands**, not about using delegate:
-  - Save significant findings: `emdx save`
-  - Track work: `emdx task add` / `emdx task done`
-  - Search before researching: `emdx find`
-  - Check context on session start: `emdx prime`
-  - Clean up on session end: `/emdx:wrapup`
+**Mitigation:** CLAUDE.md already mandates task tracking for multi-step work. This is
+the same instruction surface — it's just that delegate made it automatic.
 
-#### Keep delegate as option
-- Delegate remains useful for **batch CLI dispatch** (run 5 tasks from the terminal)
-- Delegate remains useful when you want **guaranteed auto-save** without trusting the
-  agent to remember
-- Remove the mandate; keep the docs
+### 3. Parallel synthesis (low risk)
 
-### What changes in skills
+Delegate's `--synthesize` combines N parallel outputs into one document. The native
+Agent tool has no synthesis step.
+
+**Mitigation:** The calling session receives all agent results and can synthesize them
+itself. This is arguably better — the calling session has the full conversation context
+to inform the synthesis.
+
+## The plugin perspective
+
+The key insight: emdx's value to plugin users is the **knowledge base**, not the
+**execution engine**. Users install emdx because they want:
+
+- Persistent memory across sessions (`save`, `find`)
+- Task tracking (`task add`, `task ready`, `task done`)
+- Session context (`prime`, `wrapup`)
+- Searchable research history (`find`, `view`)
+
+They don't install emdx because they want a different way to spawn sub-agents. The Agent
+tool is Claude Code's native mechanism for that, and it's better at it.
+
+## Proposed changes
+
+### CLAUDE.md (the instructions that ship to all projects)
+
+**Remove:**
+- "NEVER use the Task tool to spawn sub-agents. Use `emdx delegate` instead."
+- The separate "Delegate Sessions" behavioral section
+- References to delegate as the primary execution mechanism
+
+**Reframe mandatory behaviors as KB usage habits:**
+- Save significant findings: `emdx save`
+- Search before researching: `emdx find`
+- Track multi-step work: `emdx task add` / `emdx task done`
+- Prime on session start: `emdx prime` (hook does this)
+- Wrap up on session end: `/emdx:wrapup`
+
+**Keep delegate as documented option:**
+- Useful for batch CLI dispatch (run 5 tasks from terminal, not from Claude)
+- Useful when you specifically want guaranteed auto-save
+- Just not mandated as THE way to do sub-agent work
+
+### Skills
 
 | Skill | Change |
 |-------|--------|
-| `/emdx:delegate` | Keep, but rewrite description: "Batch dispatch for CLI use" |
-| `/emdx:save` | No change — already correct |
-| `/emdx:research` | No change — already correct |
-| `/emdx:prime` | No change — already correct |
-| `/emdx:tasks` | No change — already correct |
-| `/emdx:wrapup` | No change — already correct |
+| `/emdx:delegate` | Update description — "batch dispatch from CLI" not "how to do sub-agents" |
+| `/emdx:save` | No change |
+| `/emdx:research` | No change |
+| `/emdx:prime` | No change |
+| `/emdx:tasks` | No change |
+| `/emdx:wrapup` | No change |
 
-### What changes in hooks
+### Hooks
 
 | Hook | Change |
 |------|--------|
-| `prime.sh` | Keep as-is — still useful for both human and delegate sessions |
-| `save-output.sh` | Already deprecated (delegate saves inline). Can remove. |
-| `session-end.sh` | Keep — still marks tasks done for delegate sessions |
+| `prime.sh` | Update — remove delegate-specific branching, focus on universal priming |
+| `save-output.sh` | Already deprecated. Remove or keep as no-op. |
+| `session-end.sh` | Keep — still useful for delegate sessions that do happen |
 
-### What changes in code
+### Plugin metadata
 
-- `emdx/commands/delegate.py` — No code changes needed. It still works.
-- `emdx/models/tasks.py` — The `exclude_delegate` parameter becomes less important
-  but doesn't hurt.
-- No breaking changes required.
-
-## Proposed new CLAUDE.md section (replacing delegate mandate)
-
-```markdown
-### Using emdx with Sub-Agents
-
-When using the Agent tool for sub-tasks, ensure KB integration:
-
-**Before spawning:** Check if prior research exists
-    emdx find "topic" -s
-
-**After agent returns:** Save significant results
-    echo "<agent output>" | emdx save --title "Title" --tags "analysis"
-
-**For tracked work:** Use task lifecycle
-    emdx task add "Research auth patterns" --epic <id> --cat FEAT
-    # ... spawn agent, do work ...
-    emdx task done <id>
-
-**For batch/parallel dispatch:** `emdx delegate` remains available
-    emdx delegate --synthesize "task1" "task2" "task3"
-```
+Update `plugin.json` description from "delegate parallel work" emphasis to
+"persistent memory and knowledge management."
 
 ## Migration risks
 
-1. **Agent forgets to save** — Without delegate's auto-save, results might not
-   persist. Mitigation: strong CLAUDE.md instructions + the wrapup skill catches gaps.
+1. **Compliance gap** — Without auto-save, some findings won't get saved. The wrapup
+   skill is the safety net. If this proves insufficient, a post-Agent-tool hook could
+   prompt "save this result?"
 
-2. **Task tracking drops** — Without auto-create/update, tasks might not get tracked.
-   Mitigation: CLAUDE.md already requires task tracking for multi-step work.
+2. **Plugin users who learned delegate** — `/emdx:delegate` keeps working. No breakage.
+   The change is in what Claude reaches for by default.
 
-3. **Parallel synthesis gap** — No built-in synthesis with native agents.
-   Mitigation: The calling session can synthesize agent results itself, or use
-   delegate specifically for the synthesis use case.
-
-4. **Existing workflow disruption** — Users who've built muscle memory around
-   `/emdx:delegate` would need to adapt. Mitigation: Keep delegate working, just
-   remove the mandate.
+3. **CLAUDE.md complexity** — Current CLAUDE.md has a lot of delegate-specific content.
+   Removing it actually simplifies the instructions, which is good for plugin users
+   whose projects have their own CLAUDE.md instructions to absorb.
 
 ## Recommendation
 
-**Phase 1 (now):** Update CLAUDE.md to remove the delegate mandate. Reframe mandatory
-behaviors around using emdx CLI commands naturally. Keep delegate as a documented option.
-
-**Phase 2 (observe):** Watch whether Claude Code sessions actually save/track
-consistently without the delegate harness. If compliance drops, consider a lightweight
-"post-agent hook" that prompts to save.
-
-**Phase 3 (optional):** If delegate usage drops to zero, deprecate it formally.
-Remove the TUI delegate browser and execution tracking infrastructure.
-
-## Decision needed
-
-- **Scope:** Just CLAUDE.md + skills? Or also README, docs/cli-api.md, CHEATSHEET?
-- **Aggressiveness:** Remove delegate mandate but keep docs? Or actively discourage?
-- **Hooks:** Remove the deprecated `save-output.sh`? Or leave for backward compat?
+Update CLAUDE.md and skills to position emdx as a knowledge base that Claude uses
+naturally, not an execution harness that replaces Claude's native tools. Keep delegate
+as an option. No code changes needed.
