@@ -8,7 +8,7 @@ If $ARGUMENTS is provided, focus the audit on that area (e.g., "commands", "ui",
 
 ## Audit Categories
 
-Run these checks in parallel using `emdx delegate --synthesize`:
+Launch parallel agents (up to 6) to check each category simultaneously:
 
 1. **Dead code** — Unused imports, unreachable functions, orphaned files, unused variables
 2. **Error handling** — Bare `except:`, `except Exception: pass`, missing error handling on I/O operations
@@ -19,16 +19,9 @@ Run these checks in parallel using `emdx delegate --synthesize`:
 
 ## Execution
 
-```bash
-emdx delegate --synthesize \
-  "Scan emdx/ for dead code: unused imports, unreachable functions, orphaned files" \
-  "Scan emdx/ for error handling issues: bare except, swallowed errors, missing I/O error handling" \
-  "Identify public functions in emdx/ that have zero test coverage in tests/" \
-  "Scan emdx/ for security issues: SQL injection, command injection, hardcoded secrets" \
-  "Scan emdx/ for async issues: unawaited coroutines, async/sync mismatches" \
-  "Scan emdx/ for config issues: hardcoded paths, stale references, undefined variables" \
-  --tags audit
-```
+Use the Agent tool with `subagent_type: "Explore"` to run each category in parallel. Each agent should search the `emdx/` directory for its category's issues using Grep and Read tools.
+
+For scoped audits ($ARGUMENTS provided), launch only the relevant agents.
 
 ## Output
 
