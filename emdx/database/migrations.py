@@ -2965,6 +2965,43 @@ def migration_058_add_standing_queries(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_20260301_150000_add_entity_relationships(
+    conn: sqlite3.Connection,
+) -> None:
+    """Add entity_relationships table for LLM-extracted relationships.
+
+    Stores typed relationships between entities extracted from documents,
+    enabling richer knowledge graph traversal.
+    """
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS entity_relationships (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_entity_id INTEGER NOT NULL,
+            target_entity_id INTEGER NOT NULL,
+            relationship_type TEXT NOT NULL,
+            confidence REAL DEFAULT 1.0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (source_entity_id)
+                REFERENCES document_entities(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_entity_id)
+                REFERENCES document_entities(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entity_rel_source ON entity_relationships(source_entity_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entity_rel_target ON entity_relationships(target_entity_id)"
+    )
+
+    conn.commit()
+
+
 def migration_20260301_140000_add_schema_flags(conn: sqlite3.Connection) -> None:
     """Add schema_flags key-value table for tracking one-time operations."""
     conn.execute("""
@@ -3043,6 +3080,11 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("57", "Fix FTS5 update trigger for external content", migration_057_fix_fts5_update_trigger),
     ("58", "Add standing queries for saved searches", migration_058_add_standing_queries),
     ("20260301_140000", "Add schema_flags table", migration_20260301_140000_add_schema_flags),
+    (
+        "20260301_150000",
+        "Add entity relationships table",
+        migration_20260301_150000_add_entity_relationships,
+    ),
 ]
 
 
