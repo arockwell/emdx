@@ -39,7 +39,7 @@
     "PreToolUse": [],
     "SubagentStop": [
       {
-        "matcher": "",
+        "matcher": "Explore|general-purpose|Plan",
         "hooks": [
           {
             "type": "command",

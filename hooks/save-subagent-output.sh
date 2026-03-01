@@ -7,7 +7,10 @@
 #
 # Saves substantive output (200+ chars) with agent-type tags.
 # Skips delegate sessions (EMDX_AUTO_SAVE=1) to avoid double-saving.
-set -euo pipefail
+set -uo pipefail
+# Note: -e intentionally omitted — the Python heredoc's exit code must not
+# cause bash to report a non-zero exit, which Claude Code interprets as an
+# agent error. We handle errors explicitly and always exit 0.
 
 # Read stdin JSON to a temp file (env vars hit size limits on large payloads)
 TMPFILE=$(mktemp /tmp/emdx-hook-input.XXXXXX)
@@ -19,7 +22,7 @@ if [[ "${EMDX_AUTO_SAVE:-}" == "1" ]]; then
     exit 0
 fi
 
-python3 - "$TMPFILE" << 'PYEOF'
+python3 - "$TMPFILE" << 'PYEOF' || true
 import json
 import os
 import re
@@ -85,4 +88,9 @@ try:
     )
 except Exception:
     pass
+
+sys.exit(0)
 PYEOF
+
+# Always exit clean — a hook failure should never mark an agent as errored
+exit 0
