@@ -21,12 +21,14 @@ from emdx.utils.lazy_group import LazyTyperGroup, register_aliases, register_laz
 LAZY_SUBCOMMANDS = {
     "explore": "emdx.commands.explore:app",
     "distill": "emdx.commands.distill:app",
+    "compact": "emdx.commands.compact:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
 LAZY_HELP = {
     "explore": "Explore what your knowledge base knows",
     "distill": "Distill KB content into audience-aware summaries",
+    "compact": "Reduce KB redundancy through AI synthesis",
 }
 
 
