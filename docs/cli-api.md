@@ -125,6 +125,15 @@ emdx find --watch-list
 emdx find --watch-check
 emdx find --watch-remove 3
 
+# Machine-readable ask output (pipe-friendly)
+emdx find --ask --machine "What's our caching strategy?"
+
+# Scope ask/context to recent documents only
+emdx find --ask --recent-days 7 "latest deployment issues"
+
+# Combine filters
+emdx find --ask --tags "security" --recent-days 30 "auth vulnerabilities"
+
 # Show only wiki articles
 emdx find "authentication" --wiki
 
@@ -162,6 +171,8 @@ emdx find "auth" --all-types
 - `--watch-check` - Check all standing queries for new matches
 - `--watch-remove INTEGER` - Remove a standing query by ID
 - `--context` - Output retrieved context as plain text (for piping to claude)
+- `--machine` - Pipe-friendly ask output: `ANSWER:`, `SOURCES:`, `CONFIDENCE:` on stdout, metadata on stderr
+- `--recent-days INTEGER` - Scope `--ask`/`--context` retrieval to documents created in the last N days
 - `--wiki` - Show only wiki articles (`doc_type='wiki'`)
 - `--all-types` - Show all document types (user, wiki, etc.)
 
@@ -438,6 +449,43 @@ emdx maintain backup --json
 
 > **Tip:** Backups can be triggered automatically via Claude Code hooks (e.g., on session start). Use `--quiet` for silent hook-driven backups.
 
+#### **emdx maintain cloud-backup**
+Upload, list, and download knowledge base backups to cloud providers (GitHub Gists or Google Drive).
+
+```bash
+# Upload to GitHub Gists (default)
+emdx maintain cloud-backup upload
+
+# Upload to Google Drive
+emdx maintain cloud-backup upload --provider gdrive
+
+# Upload with description
+emdx maintain cloud-backup upload -d "Before migration"
+
+# List cloud backups
+emdx maintain cloud-backup list
+emdx maintain cloud-backup list --provider gdrive --json
+
+# Download a backup
+emdx maintain cloud-backup download <backup_id>
+
+# Set up authentication for a provider
+emdx maintain cloud-backup auth github
+emdx maintain cloud-backup auth gdrive
+```
+
+**Subcommands:**
+- `upload` - Upload current database as a cloud backup
+  - `--provider, -p TEXT` - Cloud provider: `github` or `gdrive` (default: github)
+  - `--description, -d TEXT` - Description for this backup
+  - `--json` - Output as JSON
+- `list` - List cloud backups
+  - `--provider, -p TEXT` - Cloud provider (default: github)
+  - `--json` - Output as JSON
+- `download` - Download a cloud backup by ID
+  - `--provider, -p TEXT` - Cloud provider (default: github)
+- `auth` - Set up authentication for a cloud backup provider
+
 #### **emdx maintain drift**
 Detect abandoned or forgotten work in your knowledge base. Analyzes task and epic timestamps to surface stale epics, orphaned active tasks, and documents linked to stale work.
 
@@ -614,9 +662,10 @@ emdx maintain entities --all --rebuild
 - `--wikify / --no-wikify` - Also create entity-match links (default: wikify)
 - `--rebuild` - Clear entity-match links before regenerating
 - `--cleanup` - Remove noisy entities and re-extract with current filters
+- `--json, -j` - Output as JSON
 
 #### **emdx maintain compact**
-AI-powered document synthesis to reduce knowledge base sprawl (moved from top-level `compact`).
+AI-powered document synthesis to reduce knowledge base sprawl. Also available as top-level `emdx compact`.
 
 ```bash
 # Dry run: show clusters without synthesizing (no API calls)
@@ -636,6 +685,9 @@ emdx maintain compact --threshold 0.7
 
 # Skip confirmation prompts
 emdx maintain compact --yes
+
+# JSON output
+emdx maintain compact --dry-run --json
 ```
 
 **Options:**
@@ -645,6 +697,7 @@ emdx maintain compact --yes
 - `--topic TEXT` - Filter to documents matching this topic
 - `--model, -m TEXT` - Model to use for synthesis
 - `--yes, -y` - Skip confirmation prompts
+- `--json, -j` - Output as JSON
 
 #### **emdx maintain index**
 Build and manage the embedding index (moved from `emdx ai index`).
@@ -852,8 +905,83 @@ emdx prime --quiet
 
 **Options:**
 - `--brief, -b` - Compact output: tasks + epics, no git/docs
+- `--smart, -s` - Context-aware priming: recent activity, key docs, knowledge map, stale detection (~500 tokens, no AI calls)
+- `--verbose, -v` - Include execution guidance, recent docs, stale docs
 - `--json` - Output as JSON
-- `--quiet, -q` - Suppress output (errors only)
+- `--quiet, -q` - Minimal output: just ready tasks
+
+### **emdx context**
+Walk the wiki link graph and assemble a token-budgeted context bundle for agent consumption.
+
+```bash
+# Context neighborhood for doc 87
+emdx context 87
+
+# Control depth and budget
+emdx context 87 --depth 3 --max-tokens 6000
+
+# Multiple seeds
+emdx context 87 42 63
+
+# Find seeds from a text query
+emdx context --seed "401 error session middleware"
+
+# JSON output for agents
+emdx context 87 --json
+
+# Dry run: show what would be included
+emdx context 87 --plan
+```
+
+**Options:**
+- `--seed, -s TEXT` - Text query to find seed documents
+- `--depth, -d INTEGER` - Maximum traversal depth (default: 2)
+- `--max-tokens, -t INTEGER` - Token budget for the context bundle (default: 4000)
+- `--json, -j` - Output as JSON for agent consumption
+- `--plan` - Dry run: show what would be included
+
+### **emdx stale**
+Show documents needing review, grouped by urgency tier (critical, warning, info).
+
+```bash
+# Show all stale documents
+emdx stale
+
+# Show only critical tier
+emdx stale --tier critical
+
+# Custom thresholds
+emdx stale --critical-days 15 --warning-days 7
+
+# Machine-readable output
+emdx stale --json
+```
+
+**Options:**
+- `--critical-days INTEGER` - Days threshold for high-importance docs (default: 30)
+- `--warning-days INTEGER` - Days threshold for medium-importance docs (default: 14)
+- `--info-days INTEGER` - Days threshold for low-importance docs (default: 60)
+- `--limit, -n INTEGER` - Maximum documents to show (default: 20)
+- `--project, -p TEXT` - Filter by project
+- `--tier, -t TEXT` - Filter by tier: critical, warning, info
+- `--json` - Output as JSON
+
+### **emdx touch**
+Mark documents as reviewed without incrementing view count. Updates `accessed_at` without changing `access_count`.
+
+```bash
+# Touch single document
+emdx touch 42
+
+# Touch multiple documents
+emdx touch 42 43 44
+
+# JSON output
+emdx touch 42 --json
+```
+
+**Options:**
+- `--json` - Output as JSON
 
 ## 🎨 **Interactive Interface**
 

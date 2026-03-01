@@ -214,6 +214,8 @@ emdx find "query" --watch              # Save as standing query (alerts on new m
 emdx find --watch-check                # Check standing queries for new matches
 emdx find --watch-list                 # List all standing queries
 emdx find --watch-remove 1             # Remove a standing query by ID
+emdx find --ask --machine "question"   # Pipe-friendly output (ANSWER/SOURCES/CONFIDENCE)
+emdx find --ask --recent-days 7 "q"    # Scope ask to recent docs only
 
 # View
 emdx view 42                           # View document content
@@ -232,6 +234,21 @@ emdx task cat rename OLD NEW           # Rename or merge categories
 # Tags
 emdx tag add 42 gameplan active
 emdx tag list
+
+# Priming
+emdx prime                             # Full context injection
+emdx prime --smart                     # Context-aware: recent activity, key docs, knowledge map
+emdx prime --brief                     # Compact: tasks + epics only
+
+# Context assembly
+emdx context 87                        # Graph-walk context bundle from doc 87
+emdx context --seed "auth error"       # Find seeds from text query
+emdx context 87 --depth 3 --max-tokens 6000  # Control traversal and budget
+
+# Staleness
+emdx stale                             # Show documents needing review by urgency
+emdx stale --tier critical             # Show only critical tier
+emdx touch 42                          # Mark doc as reviewed (no view count bump)
 
 # Status
 emdx status                            # Knowledge base overview
@@ -256,6 +273,10 @@ emdx maintain drift                    # Detect stale work items (default 30 day
 emdx maintain drift --days 7           # More aggressive threshold
 emdx maintain contradictions           # Find conflicting claims via NLI
 emdx maintain code-drift               # Detect code references that have drifted
+emdx maintain cloud-backup upload      # Upload backup to GitHub Gists
+emdx maintain cloud-backup list        # List cloud backups
+emdx maintain cloud-backup download <id>  # Download a cloud backup
+emdx compact --dry-run                 # Top-level alias for maintain compact
 
 # Wiki (top-level; `emdx maintain wiki ...` still works)
 emdx wiki                              # Compact wiki overview
