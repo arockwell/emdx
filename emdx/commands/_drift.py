@@ -128,7 +128,6 @@ def _find_orphaned_active_tasks(days: int) -> list[OrphanedTaskDict]:
                 ) AS days_idle
             FROM tasks t
             WHERE t.status = 'active'
-              AND t.prompt IS NULL
               AND CAST(
                   julianday('now')
                   - julianday(COALESCE(t.updated_at, t.created_at))
@@ -145,39 +144,6 @@ def _find_stale_linked_docs(days: int) -> list[StaleLinkedDocDict]:
     """Find documents linked to tasks that have gone stale."""
     with db.get_connection() as conn:
         results: list[StaleLinkedDocDict] = []
-
-        # Check output_doc_id links
-        cursor = conn.execute(
-            """
-            SELECT
-                d.id AS doc_id,
-                d.title AS doc_title,
-                t.id AS task_id,
-                t.title AS task_title,
-                'output' AS link_type,
-                CAST(
-                    julianday('now')
-                    - julianday(
-                        COALESCE(t.updated_at, t.created_at)
-                    )
-                    AS INTEGER
-                ) AS days_idle
-            FROM tasks t
-            JOIN documents d ON t.output_doc_id = d.id
-            WHERE t.status IN ('open', 'active', 'blocked')
-              AND d.is_deleted = FALSE
-              AND CAST(
-                  julianday('now')
-                  - julianday(
-                      COALESCE(t.updated_at, t.created_at)
-                  )
-                  AS INTEGER
-              ) > ?
-            ORDER BY days_idle DESC
-            """,
-            (days,),
-        )
-        results.extend(cast(StaleLinkedDocDict, dict(row)) for row in cursor.fetchall())
 
         # Check source_doc_id links
         cursor = conn.execute(

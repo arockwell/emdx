@@ -316,7 +316,7 @@ class TestSynthesisService:
     def test_synthesize_documents_success(self, mock_execute, clean_db):
         """synthesize_documents calls CLI and returns result."""
         from emdx.database import db
-        from emdx.services.synthesis_service import ExecutionResult, SynthesisService
+        from emdx.services.synthesis_service import PromptResult, SynthesisService
 
         # Create test documents
         with db.get_connection() as conn:
@@ -335,13 +335,9 @@ class TestSynthesisService:
             ids.append(cursor.lastrowid)
             conn.commit()
 
-        # Mock the unified executor
-        from pathlib import Path
-
-        mock_execute.return_value = ExecutionResult(
+        # Mock the prompt execution
+        mock_execute.return_value = PromptResult(
             success=True,
-            execution_id=1,
-            log_file=Path("/tmp/test.log"),
             output_content="# Python Programming Guide\n\nSynthesized.",
             input_tokens=500,
             output_tokens=100,

@@ -232,7 +232,6 @@ class TestCLIIntegration:
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
-        assert "delegate" in result.output
         assert "gui" in result.output
 
     def test_lazy_help_text_in_output(self) -> None:
@@ -243,16 +242,7 @@ class TestCLIIntegration:
 
         assert result.exit_code == 0
         # Check that our lazy help text appears (not the actual module help)
-        assert "One-shot AI execution" in result.output
-
-    def test_lazy_command_works_when_invoked(self) -> None:
-        """Test that lazy commands work when actually invoked."""
-        from emdx.main import app
-
-        result = runner.invoke(app, ["delegate", "--help"])
-
-        assert result.exit_code == 0
-        assert "delegate" in result.output.lower() or "execution" in result.output.lower()
+        assert "Explore what your knowledge base knows" in result.output
 
     def test_core_commands_still_work(self) -> None:
         """Test that core (eager) commands still work."""

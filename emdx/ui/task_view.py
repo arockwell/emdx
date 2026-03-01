@@ -813,7 +813,6 @@ class TaskView(Widget):
             task.get("title") or "",
             task.get("epic_key") or "",
             task.get("description") or "",
-            task.get("tags") or "",
         ]
         return any(q in f.lower() for f in fields)
 
@@ -1145,9 +1144,6 @@ class TaskView(Widget):
         if time_parts:
             target.write(f"[dim]{' · '.join(time_parts)}[/dim]")
 
-        if task.get("tags"):
-            target.write(f"Tags: {task['tags']}")
-
         # Dependencies
         try:
             deps = get_dependencies(task["id"])
@@ -1171,13 +1167,6 @@ class TaskView(Widget):
         except Exception as e:
             logger.debug(f"Error loading dependents: {e}")
 
-        # Execution info
-        if task.get("execution_id"):
-            target.write("")
-            target.write(f"[bold]Execution:[/bold] #{task['execution_id']}")
-        if task.get("output_doc_id"):
-            target.write(f"Output doc: #{task['output_doc_id']}")
-
     def _render_task_content(self, target: RichLog, task: TaskDict) -> None:
         """Write task content (description, error, work log) to a RichLog target."""
         content_w = self._detail_content_width(target)
@@ -1187,15 +1176,7 @@ class TaskView(Widget):
         if desc:
             target.write("")
             target.write("[bold]Description:[/bold]")
-            self._write_markdown_guttered(
-                target, desc, content_w, gutter="", gutter_width=0
-            )
-
-        # Error info
-        err = task.get("error") or ""
-        if err:
-            target.write("")
-            self._write_wrapped(target, err, content_w, prefix="[red bold]Error:[/red bold] ")
+            self._write_markdown_guttered(target, desc, content_w, gutter="", gutter_width=0)
 
         # Work log
         try:

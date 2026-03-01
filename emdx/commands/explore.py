@@ -325,10 +325,9 @@ def _build_topic_clusters(
 
 def _generate_questions(topics: list[TopicCluster]) -> list[TopicQuestions]:
     """Generate answerable questions for each topic cluster via Claude CLI."""
-    from ..services.unified_executor import ExecutionConfig, UnifiedExecutor
+    import subprocess
 
     results: list[TopicQuestions] = []
-    executor = UnifiedExecutor()
 
     for topic in topics:
         titles_str = "\n".join(f"- {t}" for t in topic["titles"][:10])
@@ -348,20 +347,17 @@ def _generate_questions(topics: list[TopicCluster]) -> list[TopicQuestions]:
             f"Document count: {topic['doc_count']}"
         )
 
-        config = ExecutionConfig(
-            prompt=prompt,
-            title=f"explore-questions: {topic['label']}",
-            allowed_tools=[],
-            timeout_seconds=120,
-            model="sonnet",
-        )
-
         try:
-            result = executor.execute(config)
-            if result.success and result.output_content:
+            proc = subprocess.run(
+                ["claude", "--print", "-p", prompt, "--model", "sonnet"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
                 questions = [
                     line.strip()
-                    for line in result.output_content.strip().splitlines()
+                    for line in proc.stdout.strip().splitlines()
                     if line.strip() and not line.strip().startswith("#")
                 ]
                 results.append(
@@ -374,7 +370,7 @@ def _generate_questions(topics: list[TopicCluster]) -> list[TopicQuestions]:
                 results.append(
                     TopicQuestions(
                         topic=topic["label"],
-                        questions=[f"(generation failed: {result.output_content or 'no output'})"],
+                        questions=[f"(generation failed: {proc.stderr or 'no output'})"],
                     )
                 )
         except Exception as e:
