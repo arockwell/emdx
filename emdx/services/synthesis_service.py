@@ -5,22 +5,33 @@ Provides two synthesis services:
 - SynthesisService: Used by compact command for merging related documents
 - DistillService: Used by distill command for audience-aware KB synthesis
 
-Uses Claude CLI (via UnifiedExecutor) for synthesis.
+Uses Claude CLI (--print mode) for synthesis.
 """
 
 from __future__ import annotations
 
 import logging
+import subprocess
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 from ..database import db
-from .unified_executor import ExecutionConfig, ExecutionResult, UnifiedExecutor
 
 logger = logging.getLogger(__name__)
 
 SYNTHESIS_TIMEOUT = 300
+
+
+@dataclass
+class PromptResult:
+    """Result from a Claude CLI --print execution."""
+
+    success: bool
+    output_content: str | None
+    error_message: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 def _execute_prompt(
@@ -28,40 +39,46 @@ def _execute_prompt(
     user_message: str,
     title: str,
     model: str | None = None,
-) -> ExecutionResult:
-    """Execute a synthesis prompt via the Claude CLI.
+) -> PromptResult:
+    """Execute a synthesis prompt via the Claude CLI --print mode.
 
     Combines system and user messages into a single prompt for --print mode.
 
     Args:
         system_prompt: System-level instructions
         user_message: The user message content
-        title: Title for the execution record
+        title: Title for logging (not used in execution)
         model: Optional model override
 
     Returns:
-        ExecutionResult from the CLI execution
+        PromptResult from the CLI execution
 
     Raises:
         RuntimeError: If the CLI execution fails
     """
     prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_message}"
 
-    config = ExecutionConfig(
-        prompt=prompt,
-        title=title,
-        allowed_tools=[],
-        timeout_seconds=SYNTHESIS_TIMEOUT,
-        model=model,
-    )
+    cmd = ["claude", "--print", prompt]
+    if model:
+        cmd.extend(["--model", model])
 
-    executor = UnifiedExecutor()
-    result = executor.execute(config)
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=SYNTHESIS_TIMEOUT,
+        )
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or f"Exit code {result.returncode}"
+            raise RuntimeError(f"Synthesis failed: {error_msg}")
 
-    if not result.success:
-        raise RuntimeError(f"Synthesis failed: {result.error_message or 'unknown error'}")
-
-    return result
+        return PromptResult(
+            success=True,
+            output_content=result.stdout.strip(),
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Synthesis timed out after {SYNTHESIS_TIMEOUT}s") from e
 
 
 # =============================================================================

@@ -30,33 +30,6 @@ class OverallHealthResult(TypedDict):
     timestamp: str
 
 
-# ── Execution Monitor types ───────────────────────────────────────────
-
-
-class ProcessHealthStatus(TypedDict):
-    """Health status of a single execution's process."""
-
-    execution_id: int
-    is_zombie: bool
-    is_running: bool
-    process_exists: bool
-    is_stale: bool
-    reason: str | None
-
-
-class ExecutionMetrics(TypedDict):
-    """Aggregate execution metrics."""
-
-    total_executions: int
-    status_breakdown: dict[str, int]
-    recent_24h: dict[str, int]
-    currently_running: int
-    unhealthy_running: int
-    average_duration_minutes: float
-    failure_rate_percent: float
-    metrics_timestamp: str
-
-
 # ── Duplicate Detector types ──────────────────────────────────────────
 
 
@@ -89,30 +62,6 @@ class DuplicateStats(TypedDict):
     total_duplicates: int
     space_wasted: int
     most_duplicated: MostDuplicated | None
-
-
-# ── Auto-tagger types ────────────────────────────────────────────────
-
-
-# ── Unified Executor types ────────────────────────────────────────────
-
-
-class ExecutionResultDict(TypedDict):
-    """Dict returned by ExecutionResult.to_dict()."""
-
-    success: bool
-    execution_id: int
-    log_file: str
-    output_doc_id: int | None
-    output_content: str | None
-    tokens_used: int
-    input_tokens: int
-    output_tokens: int
-    cost_usd: float
-    execution_time_ms: int
-    error_message: str | None
-    exit_code: int | None
-    cli_tool: str
 
 
 # ── Document Merger types ─────────────────────────────────────────────

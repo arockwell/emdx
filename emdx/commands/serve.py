@@ -33,10 +33,6 @@ from emdx.models.tags import (
     search_by_tags,
 )
 from emdx.models.tasks import (
-    get_active_delegate_tasks,
-    get_children,
-    get_failed_tasks,
-    get_recent_completed_tasks,
     get_task_log,
     list_tasks,
     log_progress,
@@ -157,19 +153,9 @@ def _task_log_progress(params: dict[str, Any]) -> dict[str, Any]:
 
 
 def _status(params: dict[str, Any]) -> dict[str, Any]:
-    active = get_active_delegate_tasks()
-    recent = get_recent_completed_tasks(limit=10)
-    failed = get_failed_tasks(limit=5)
-    # Enrich active tasks with children
-    active_dicts = []
-    for task in active:
-        d = dict(task)
-        d["children"] = [dict(c) for c in get_children(task["id"])]
-        active_dicts.append(d)
+    tasks = list_tasks(limit=20)
     return {
-        "active": active_dicts,
-        "recent": [dict(r) for r in recent],
-        "failed": [dict(r) for r in failed],
+        "tasks": [dict(t) for t in tasks],
     }
 
 

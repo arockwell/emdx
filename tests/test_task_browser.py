@@ -26,14 +26,10 @@ def make_task(
     status: str = "open",
     priority: int = 5,
     description: str | None = None,
-    error: str | None = None,
     epic_key: str | None = None,
     created_at: str | None = "2025-01-01T12:00:00",
     updated_at: str | None = None,
     completed_at: str | None = None,
-    tags: str | None = None,
-    execution_id: int | None = None,
-    output_doc_id: int | None = None,
     parent_task_id: int | None = None,
     **kwargs: object,
 ) -> TaskDict:
@@ -43,23 +39,16 @@ def make_task(
         "status": status,
         "priority": priority,
         "description": description,
-        "error": error,
         "epic_key": epic_key,
         "created_at": created_at,
         "updated_at": updated_at,
         "completed_at": completed_at,
-        "tags": tags,
-        "execution_id": execution_id,
-        "output_doc_id": output_doc_id,
         "gameplan_id": None,
         "project": None,
         "current_step": None,
-        "prompt": None,
         "type": "manual",
         "source_doc_id": None,
         "parent_task_id": parent_task_id,
-        "seq": None,
-        "retry_of": None,
         "epic_seq": None,
     }
     return base
@@ -508,21 +497,6 @@ class TestDetailPane:
             assert "This explains what to do." in text
 
     @pytest.mark.asyncio
-    async def test_shows_error_text(self, mock_task_data: MockDict) -> None:
-        """Detail pane shows error info for failed tasks."""
-        mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, status="failed", error="Timeout after 30s"),
-        ]
-        app = TaskTestApp()
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            await _select_first_task(pilot)
-            detail = app.query_one("#task-detail-log", RichLog)
-            text = _richlog_text(detail)
-            assert "Error:" in text
-            assert "Timeout after 30s" in text
-
-    @pytest.mark.asyncio
     async def test_shows_work_log_entries(self, mock_task_data: MockDict) -> None:
         """Detail pane shows work log entries."""
         mock_task_data["list_tasks"].return_value = [
@@ -726,14 +700,10 @@ class TestEdgeCases:
                 id=1,
                 status="open",
                 description=None,
-                error=None,
                 epic_key=None,
                 created_at=None,
                 updated_at=None,
                 completed_at=None,
-                tags=None,
-                execution_id=None,
-                output_doc_id=None,
             ),
         ]
         app = TaskTestApp()
@@ -977,28 +947,6 @@ class TestFilterBar:
             await pilot.pause()
             filter_input = app.query_one("#task-filter-input", Input)
             filter_input.value = "OAuth"
-            await pilot.pause(0.3)
-
-            table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            task_titles = [t for t in titles if t.strip() and "READY" not in t]
-            assert len(task_titles) == 1
-            assert "Task A" in task_titles[0]
-
-    @pytest.mark.asyncio
-    async def test_filter_by_tags(self, mock_task_data: MockDict) -> None:
-        """Filter matches against tags."""
-        mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Task A", status="open", tags="security,auth"),
-            make_task(id=2, title="Task B", status="open", tags="frontend,css"),
-        ]
-        app = TaskTestApp()
-        async with app.run_test() as pilot:
-            await pilot.pause()
-            await pilot.press("slash")
-            await pilot.pause()
-            filter_input = app.query_one("#task-filter-input", Input)
-            filter_input.value = "security"
             await pilot.pause(0.3)
 
             table = app.query_one("#task-table", DataTable)
@@ -1935,23 +1883,6 @@ class TestUrlLinkification:
                         assert "github.com" in meta["@click"]
                         found_click_meta = True
             assert found_click_meta, "No @click meta found in rendered detail pane"
-
-    @pytest.mark.asyncio
-    async def test_long_error_text_wraps(self, mock_task_data: MockDict) -> None:
-        """A long error message is wrapped, not rendered raw."""
-        long_err = "Error: " + "e" * 300
-        mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, status="failed", error=long_err),
-        ]
-        app = TaskTestApp()
-        async with app.run_test(size=(80, 30)) as pilot:
-            await pilot.pause()
-            await _select_first_task(pilot)
-            detail = app.query_one("#task-detail-log", RichLog)
-            text = _richlog_text(detail)
-            assert "Error:" in text
-            for line in detail.lines:
-                assert len(line.text) <= 80
 
     @pytest.mark.asyncio
     async def test_multiline_description_wraps_each_line(self, mock_task_data: MockDict) -> None:

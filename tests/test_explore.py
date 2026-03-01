@@ -6,13 +6,11 @@ Tests cover:
 - Integration tests for the explore CLI command
 """
 
-
 import pytest
 
 # Skip all tests if sklearn not installed
 sklearn = pytest.importorskip(
-    "sklearn",
-    reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')"
+    "sklearn", reason="scikit-learn not installed (install with: pip install 'emdx[similarity]')"
 )
 
 
@@ -147,13 +145,15 @@ class TestTfidfAndClustering:
         from emdx.commands.explore import _find_clusters
 
         # High similarity between docs 0,1 and between docs 2,3
-        matrix = np.array([
-            [1.0, 0.8, 0.1, 0.1, 0.05],
-            [0.8, 1.0, 0.1, 0.1, 0.05],
-            [0.1, 0.1, 1.0, 0.7, 0.05],
-            [0.1, 0.1, 0.7, 1.0, 0.05],
-            [0.05, 0.05, 0.05, 0.05, 1.0],
-        ])
+        matrix = np.array(
+            [
+                [1.0, 0.8, 0.1, 0.1, 0.05],
+                [0.8, 1.0, 0.1, 0.1, 0.05],
+                [0.1, 0.1, 1.0, 0.7, 0.05],
+                [0.1, 0.1, 0.7, 1.0, 0.05],
+                [0.05, 0.05, 0.05, 0.05, 1.0],
+            ]
+        )
         clusters = _find_clusters(matrix, [10, 11, 20, 21, 30], threshold=0.5)
 
         assert len(clusters) == 2
@@ -176,11 +176,13 @@ class TestTfidfAndClustering:
 
         from emdx.commands.explore import _find_clusters
 
-        matrix = np.array([
-            [1.0, 0.1, 0.05],
-            [0.1, 1.0, 0.05],
-            [0.05, 0.05, 1.0],
-        ])
+        matrix = np.array(
+            [
+                [1.0, 0.1, 0.05],
+                [0.1, 1.0, 0.05],
+                [0.05, 0.05, 1.0],
+            ]
+        )
         clusters = _find_clusters(matrix, [1, 2, 3], threshold=0.5)
         assert clusters == []
 
@@ -191,13 +193,15 @@ class TestTfidfAndClustering:
         from emdx.commands.explore import _find_clusters
 
         # 3-doc cluster and 2-doc cluster
-        matrix = np.array([
-            [1.0, 0.9, 0.8, 0.1, 0.1],
-            [0.9, 1.0, 0.9, 0.1, 0.1],
-            [0.8, 0.9, 1.0, 0.1, 0.1],
-            [0.1, 0.1, 0.1, 1.0, 0.7],
-            [0.1, 0.1, 0.1, 0.7, 1.0],
-        ])
+        matrix = np.array(
+            [
+                [1.0, 0.9, 0.8, 0.1, 0.1],
+                [0.9, 1.0, 0.9, 0.1, 0.1],
+                [0.8, 0.9, 1.0, 0.1, 0.1],
+                [0.1, 0.1, 0.1, 1.0, 0.7],
+                [0.1, 0.1, 0.1, 0.7, 1.0],
+            ]
+        )
         clusters = _find_clusters(matrix, [1, 2, 3, 4, 5], threshold=0.5)
 
         assert len(clusters) == 2
@@ -223,9 +227,7 @@ class TestTopicLabels:
         similarity_matrix = cosine_similarity(tfidf_matrix)
         clusters = _find_clusters(similarity_matrix, doc_ids, threshold=0.3)
 
-        labels = _extract_topic_labels(
-            tfidf_matrix, doc_ids, clusters, vectorizer, top_n=5
-        )
+        labels = _extract_topic_labels(tfidf_matrix, doc_ids, clusters, vectorizer, top_n=5)
 
         assert len(labels) == len(clusters)
         for label_terms in labels:
@@ -243,9 +245,7 @@ class TestTopicLabels:
         ]
         tfidf_matrix, doc_ids, vectorizer = _compute_tfidf(docs)
 
-        labels = _extract_topic_labels(
-            tfidf_matrix, doc_ids, [], vectorizer
-        )
+        labels = _extract_topic_labels(tfidf_matrix, doc_ids, [], vectorizer)
         assert labels == []
 
 

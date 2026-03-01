@@ -423,18 +423,7 @@ class ActivityView(HelpMixin, Widget):
 
         theme_indicator = get_theme_indicator(self.app.theme)
 
-        # Check for running delegates
-        active = 0
-        try:
-            from emdx.services.execution_service import get_running_count
-
-            active = get_running_count()
-        except Exception:
-            pass
-
         parts = []
-        if active > 0:
-            parts.append(f"[green]🟢 {active} Active[/green]")
         parts.append(f"📄 {docs_today} today")
         parts.append(format_cost(cost_today))
 

@@ -40,9 +40,3 @@ DEFAULT_TAGGING_CONFIDENCE = 0.75  # Default confidence for auto-tagging
 # =============================================================================
 
 DEFAULT_TASK_PRIORITY = 3  # Default priority for new tasks (1-5 scale)
-
-# =============================================================================
-# SUBPROCESS & NETWORK TIMEOUTS (in seconds)
-# =============================================================================
-
-DELEGATE_EXECUTION_TIMEOUT = 1800  # 30 min - delegates need time for complex tasks

@@ -53,9 +53,11 @@ EXAMPLE_CONFIG = """# EMDX Keybinding Configuration
 overrides: []
 """
 
+
 def get_config_path() -> Path:
     """Get the path to the keybindings config file."""
     return DEFAULT_CONFIG_PATH
+
 
 def load_config() -> dict[str, Any]:
     """
@@ -88,6 +90,7 @@ def load_config() -> dict[str, Any]:
         logger.error(f"Failed to load keybindings config: {e}")
         return {"overrides": []}
 
+
 def save_example_config() -> bool:
     """
     Save example config file if it doesn't exist.
@@ -109,6 +112,7 @@ def save_example_config() -> bool:
     except Exception as e:
         logger.error(f"Failed to create keybindings config: {e}")
         return False
+
 
 def parse_overrides(config: dict[str, Any]) -> list[KeybindingEntry]:
     """
@@ -153,6 +157,7 @@ def parse_overrides(config: dict[str, Any]) -> list[KeybindingEntry]:
 
     return entries
 
+
 def _parse_context(context_str: str) -> Context | None:
     """Parse a context string into a Context enum value."""
     # Try direct match
@@ -166,6 +171,7 @@ def _parse_context(context_str: str) -> Context | None:
             return ctx
 
     return None
+
 
 class KeybindingConfig:
     """

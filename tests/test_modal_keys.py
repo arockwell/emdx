@@ -83,6 +83,7 @@ class DeleteConfirmScreen(ModalScreen):
         print(f"DeleteConfirmScreen.on_key: key={event.key}, character={event.character}")
         # Don't stop propagation - let bindings handle it
 
+
 class ModalTestApp(App):
     """Test app to verify delete modal functionality."""
 
@@ -118,6 +119,7 @@ class ModalTestApp(App):
     def on_key(self, event) -> None:
         """Debug all key events."""
         print(f"App.on_key: key={event.key}, character={event.character}")
+
 
 if __name__ == "__main__":
     print("Starting modal key test app...")
