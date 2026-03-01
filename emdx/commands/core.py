@@ -421,6 +421,16 @@ def find(
     context: bool = typer.Option(
         False, "--context", help="Output retrieved context as plain text (for piping to claude)"
     ),
+    machine: bool = typer.Option(
+        False,
+        "--machine",
+        help="Machine-readable output for --ask (answer on stdout, metadata on stderr)",
+    ),
+    recent_days: int | None = typer.Option(
+        None,
+        "--recent-days",
+        help="Filter --ask/--context to docs created in the last N days",
+    ),
     wiki: bool = typer.Option(False, "--wiki", help="Show only wiki articles (doc_type='wiki')"),
     all_types: bool = typer.Option(
         False, "--all-types", help="Show all document types (user, wiki, etc.)"
@@ -466,6 +476,8 @@ def find(
     Use --debug to get Socratic diagnostic questions from your bug history.
     Use --cite to add inline citations to any AI-powered answer.
     Use --context to retrieve docs as plain text for piping to claude.
+    Use --machine to get pipe-friendly output (answer on stdout, metadata on stderr).
+    Use --recent-days N to scope --ask/--context to docs from the last N days.
     Use --wander for serendipity: surface surprising but related documents.
 
     Examples:
@@ -476,6 +488,9 @@ def find(
         emdx find --recent 10                            # recently accessed
         emdx find --similar 42                           # docs similar to #42
         emdx find --ask "What's our caching strategy?"   # RAG Q&A
+        emdx find --ask --tags "gameplan" "strategy?"    # scoped to tagged docs
+        emdx find --ask --recent-days 7 "what changed?"  # last 7 days only
+        emdx find --ask --machine "summarize auth"       # pipe-friendly output
         emdx find --think "rewrite in Rust"              # position paper
         emdx find --think --challenge "rewrite in Rust"  # devil's advocate
         emdx find --debug "TUI freezes on click"         # Socratic debugger
@@ -596,9 +611,11 @@ def find(
                 limit,
                 project,
                 tags,
+                recent_days=recent_days,
                 mode=ask_mode,
                 cite=cite,
                 json_output=json_output,
+                machine=machine,
             )
             return
 
@@ -607,7 +624,7 @@ def find(
             if not search_query:
                 console.print("[red]Error: --context requires a query[/red]")
                 raise typer.Exit(1)
-            _find_context(search_query, limit, project, tags)
+            _find_context(search_query, limit, project, tags, recent_days)
             return
 
         # Validate that we have something to search for
@@ -1146,11 +1163,15 @@ def _find_ask(
     limit: int,
     project: str | None,
     tags: str | None,
+    recent_days: int | None = None,
     mode: AskMode | None = None,
     cite: bool = False,
     json_output: bool = False,
+    machine: bool = False,
 ) -> None:
     """Answer a question using RAG (retrieves context + LLM)."""
+    import sys
+
     from ..services.ask_service import AskMode, AskService
 
     if mode is None:
@@ -1166,10 +1187,10 @@ def _find_ask(
 
     service = AskService()
     try:
-        # Suppress spinner in JSON mode to keep stdout clean for machine parsing
+        # Suppress spinner in JSON/machine mode to keep stdout clean
         status_ctx = (
             contextlib.nullcontext()
-            if json_output
+            if (json_output or machine)
             else console.status(f"[bold blue]{spinner_label}...", spinner="dots")
         )
         with status_ctx:
@@ -1178,12 +1199,36 @@ def _find_ask(
                 limit=limit,
                 project=project,
                 tags=tags,
+                recent_days=recent_days,
                 mode=mode,
                 cite=cite,
             )
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
+
+    # Machine-readable output mode (--machine)
+    if machine:
+        # Answer on stdout (clean, no markup)
+        print(f"ANSWER: {result.text}")
+        print()
+        print("SOURCES:")
+        if result.source_titles:
+            for doc_id, title in result.source_titles:
+                print(f'#{doc_id} "{title}"')
+        else:
+            print("(none)")
+        print()
+        print(f"CONFIDENCE: {result.confidence}")
+
+        # Metadata on stderr
+        print(
+            f"method={result.method} "
+            f"context_size={result.context_size} "
+            f"sources={len(result.sources)}",
+            file=sys.stderr,
+        )
+        return
 
     # JSON output mode
     if json_output:
@@ -1269,6 +1314,7 @@ def _find_context(
     limit: int,
     project: str | None,
     tags: str | None,
+    recent_days: int | None = None,
 ) -> None:
     """Retrieve context as plain text for piping to claude."""
     import sys
@@ -1278,9 +1324,21 @@ def _find_context(
     service = AskService()
     try:
         if not service._has_embeddings():
-            docs, method = service._retrieve_keyword(question, limit, project, tags=tags)
+            docs, method = service._retrieve_keyword(
+                question,
+                limit,
+                project,
+                tags=tags,
+                recent_days=recent_days,
+            )
         else:
-            docs, method = service._retrieve_semantic(question, limit, project, tags=tags)
+            docs, method = service._retrieve_semantic(
+                question,
+                limit,
+                project,
+                tags=tags,
+                recent_days=recent_days,
+            )
     except ImportError as e:
         console.print(f"[red]{e}[/red]", highlight=False)
         raise typer.Exit(1) from None
