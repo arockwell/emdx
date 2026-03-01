@@ -2,7 +2,7 @@
 
 ## 📋 **Command Overview**
 
-EMDX provides a comprehensive CLI for knowledge base management, execution tracking, and system maintenance.
+EMDX provides a comprehensive CLI for knowledge base management and system maintenance.
 
 ```bash
 emdx [OPTIONS] COMMAND [ARGS]...
@@ -281,129 +281,13 @@ emdx tag batch --limit 50 --execute
 - `--dry-run/--execute` - Preview or execute tagging (default: dry run)
 - `--limit, -l INTEGER` - Maximum documents to process
 
-## ⚡ **Execution Management**
-
-### **emdx delegate** (execution management)
-Manage and monitor delegate executions.
-
-#### **emdx delegate list**
-List recent executions.
-
-```bash
-# Show recent executions
-emdx delegate list
-
-# Show more executions
-emdx delegate list --limit 100
-```
-
-#### **emdx delegate show**
-Show execution details with integrated log viewer.
-
-```bash
-# Show execution with auto-follow for running executions
-emdx delegate show 42
-
-# Show specific number of log lines
-emdx delegate show 42 --lines 100
-
-# Show full log file
-emdx delegate show 42 --full
-
-# Just logs, no metadata
-emdx delegate logs 42
-
-# Follow logs (alias for show -f)
-emdx delegate tail 42
-```
-
-#### **emdx delegate logs**
-Show only the logs for an execution (no metadata header).
-
-```bash
-# Show last 50 lines of logs
-emdx delegate logs 42
-
-# Follow log output
-emdx delegate logs 42 --follow
-
-# Show specific number of lines
-emdx delegate logs 42 --lines 100
-```
-
-**Options:**
-- `--follow, -f` - Follow log output
-- `--lines, -n INTEGER` - Number of lines to show (default: 50)
-
-#### **emdx delegate tail**
-Follow the log of a running execution (alias for `delegate show -f`).
-
-```bash
-# Follow execution logs in real-time
-emdx delegate tail 42
-```
-
-#### **emdx delegate running**
-Show currently running executions.
-
-```bash
-# List all running executions
-emdx delegate running
-```
-
-#### **emdx delegate health**
-Show detailed health status of running executions.
-
-```bash
-# Health check with process details
-emdx delegate health
-```
-
-#### **emdx delegate monitor**
-Real-time monitoring of executions.
-
-```bash
-# Monitor with 5-second refresh
-emdx delegate monitor
-
-# Custom refresh interval
-emdx delegate monitor --interval 10
-
-# One-time check (no continuous monitoring)
-emdx delegate monitor --no-follow
-```
-
-#### **emdx delegate kill**
-Terminate running executions.
-
-```bash
-# Kill specific execution (use partial ID)
-emdx delegate kill 42ab8f
-
-# Show running executions to choose from
-emdx delegate kill
-
-# Kill ALL running executions (with confirmation)
-emdx delegate killall
-```
-
-#### **emdx delegate stats**
-Show execution statistics.
-
-```bash
-# Overall execution statistics
-emdx delegate stats
-```
-
----
-
 ## 🧹 **Maintenance Commands**
 
 ### **emdx maintain**
 System maintenance, cleanup, embedding index, and document linking.
 
 #### **emdx maintain cleanup**
-Clean up system resources used by delegate executions (branches, processes, stuck DB records).
+Clean up old worktree branches and system resources.
 
 ```bash
 # Show what cleanup would do (dry run)
@@ -412,50 +296,22 @@ emdx maintain cleanup --all
 # Actually perform cleanup
 emdx maintain cleanup --all --execute
 
-# Clean old execution branches only
+# Clean old worktree branches only
 emdx maintain cleanup --branches --execute
 
 # Force delete unmerged branches too
 emdx maintain cleanup --branches --force --execute
-
-# Kill zombie processes
-emdx maintain cleanup --processes --execute
-
-# Clean stuck execution records
-emdx maintain cleanup --executions --execute
 
 # Custom age threshold for branches (default: 7 days)
 emdx maintain cleanup --branches --age 14 --execute
 ```
 
 **Options:**
-- `--branches, -b` - Clean up old execution branches
-- `--processes, -p` - Clean up zombie processes
-- `--executions, -e` - Clean up stuck execution records
+- `--branches, -b` - Clean up old worktree branches
 - `--all, -a` - Clean up everything
-- `--execute / --dry-run` - Execute actions (default: dry run)
 - `--force, -f` - Force delete unmerged branches
-- `--age INTEGER` - Only clean branches older than N days (default: 7)
-- `--max-runtime INTEGER` - Max process runtime in hours before considering stuck (default: 2)
-- `--timeout INTEGER` - Minutes after which to consider execution stale (default: 30)
-
-#### **emdx maintain cleanup-dirs**
-Clean up temporary execution directories in `/tmp`.
-
-```bash
-# Show what would be cleaned (dry run)
-emdx maintain cleanup-dirs
-
-# Actually clean directories
-emdx maintain cleanup-dirs --execute
-
-# Clean dirs older than 48 hours (default: 24)
-emdx maintain cleanup-dirs --age 48 --execute
-```
-
-**Options:**
 - `--execute / --dry-run` - Execute actions (default: dry run)
-- `--age INTEGER` - Clean directories older than N hours (default: 24)
+- `--age INTEGER` - Only clean branches older than N days (default: 7)
 
 #### **emdx maintain backup**
 Create, list, or restore knowledge base backups. Uses SQLite's backup API for atomic, WAL-safe copies with optional gzip compression and logarithmic retention (~19 backups covering 2 years).
@@ -487,52 +343,6 @@ emdx maintain backup --json
 - `--no-retention` - Disable automatic pruning (keep all backups)
 - `--quiet, -q` - Suppress output (for hook use)
 - `--json` - Structured JSON output
-
-#### **emdx maintain analyze**
-Read-only analysis of your knowledge base — discover patterns, issues, and improvement opportunities.
-
-```bash
-# Show health overview with recommendations
-emdx maintain analyze
-
-# Detailed health metrics
-emdx maintain analyze --health
-
-# Find duplicate documents
-emdx maintain analyze --duplicates
-
-# Find similar documents (candidates for merging)
-emdx maintain analyze --similar
-
-# Find empty documents
-emdx maintain analyze --empty
-
-# Analyze tag coverage and patterns
-emdx maintain analyze --tags
-
-# Show project-level analysis
-emdx maintain analyze --projects
-
-# Run all analyses
-emdx maintain analyze --all
-
-# Filter by project
-emdx maintain analyze --project myapp
-
-# Output as JSON
-emdx maintain analyze --json
-```
-
-**Options:**
-- `--health, -h` - Show detailed health metrics
-- `--duplicates, -d` - Find duplicate documents
-- `--similar, -s` - Find similar documents for merging
-- `--empty, -e` - Find empty documents
-- `--tags, -t` - Analyze tag coverage and patterns
-- `--projects, -p` - Show project-level analysis
-- `--all, -a` - Run all analyses
-- `--project TEXT` - Filter by specific project
-- `--json` - Output results as JSON
 
 #### **emdx maintain wikify**
 Create title-match links between documents (auto-wikification). Scans document content for mentions of other documents' titles and creates links. No AI or embeddings required.
@@ -890,7 +700,6 @@ emdx gui --theme emdx-dark
 *Global:*
 - `1` - Switch to activity view (Docs)
 - `2` - Switch to task browser
-- `3` - Switch to delegate browser
 - `\` - Cycle theme
 - `Ctrl+t` - Toggle dark/light mode
 - `Ctrl+k` / `Ctrl+p` - Command palette
@@ -963,47 +772,8 @@ emdx gist 42 --update abc123def456
 
 ### **Environment Variables**
 - `EMDX_DATABASE_URL` - Custom database connection URL
-- `EMDX_SAFE_MODE` - Enable safe mode (see below)
 - `GITHUB_TOKEN` - For Gist integration
 - `EDITOR` - Default editor for `emdx edit`
-
-### **Safe Mode**
-
-Safe mode disables execution commands that can spawn external processes or make changes. This is useful for:
-- Read-only access to the knowledge base
-- Environments where external execution should be prevented
-- Security-conscious deployments
-
-**Enable safe mode:**
-
-```bash
-# Via environment variable
-export EMDX_SAFE_MODE=1
-emdx delegate "task"  # Will show: Command 'delegate' is disabled in safe mode.
-
-# Or set per-command
-EMDX_SAFE_MODE=1 emdx delegate "task"  # Will show disabled message
-```
-
-**Disabled commands in safe mode:**
-- `delegate` - One-shot AI execution
-
-**Always available commands:**
-- `save`, `find`, `view`, `edit`, `delete` - Document management
-- `tag` (add, remove, list, rename, merge, batch) - Tag management
-- `briefing` - Activity summary
-- `gui`, `prime`, `status` - Interface and overview
-- `maintain` (cleanup, compact, index, link, unlink, wikify, entities, analyze, wiki, stale) - Maintenance
-- `gist` - GitHub Gist integration
-- `explore` - Topic map and coverage analysis
-- `exec` - Execution monitoring (read-only)
-- `task` (including `task epic`, `task cat`, `task dep`, `task chain`, `task note`), `trash` - Organization commands
-
-**Error message:**
-When a disabled command is invoked, you'll see:
-```
-Command 'delegate' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.
-```
 
 ### **Default Locations**
 - **Database**: `~/.emdx/emdx.db`
@@ -1030,19 +800,6 @@ emdx save --file research.md --tags "analysis,done"
 emdx find --tags "analysis"
 ```
 
-### **Execution Monitoring**
-```bash
-# Start monitoring executions
-emdx delegate monitor
-
-# In another terminal, check specific execution
-emdx delegate show 42 --follow
-
-# Kill stuck executions
-emdx delegate health  # Check what's unhealthy
-emdx delegate kill <execution_id>
-```
-
 ### **Project Management**
 ```bash
 # Track project gameplan
@@ -1055,163 +812,6 @@ emdx tag remove 123 active
 # Review project progress
 emdx find --tags "gameplan" --project "myproject"
 ```
-
----
-
-## 📡 Delegate — One-Shot AI Execution (`emdx delegate`)
-
-`emdx delegate` is the **single command for all one-shot AI execution**. It handles single tasks, parallel execution, PR creation, worktree isolation, and document context — all in one command.
-
-**The Execution Ladder:**
-| Level | Command | Use When |
-|-------|---------|----------|
-| 1 | `emdx delegate` | All one-shot AI execution |
-
-### Basic Usage
-
-```bash
-# Single task
-emdx delegate "analyze the auth module"
-
-# Multiple tasks in parallel
-emdx delegate "task1" "task2" "task3"
-
-# Parallel with synthesis
-emdx delegate --synthesize "analyze" "review" "plan"
-
-# Control concurrency
-emdx delegate -j 3 "task1" "task2" "task3" "task4" "task5"
-
-# Set a title
-emdx delegate -T "Auth Analysis" "check login" "check logout"
-```
-
-### Document Context
-
-Use a saved document as input context for tasks:
-
-```bash
-# Use doc as context with a task
-emdx delegate --doc 42 "implement the plan described here"
-
-# Execute a doc directly (no extra prompt needed)
-emdx delegate --doc 42
-
-# Doc context with multiple parallel tasks
-emdx delegate --doc 42 "check for bugs" "review tests" "check docs"
-```
-
-### Task Association
-
-Link a delegate execution to an existing task ID. This sets `EMDX_TASK_ID` so hooks can track the task lifecycle automatically.
-
-```bash
-# Associate with an existing task
-emdx delegate --task 42 "implement the feature"
-
-# Combine with other options
-emdx delegate --task 42 --pr "fix the bug from this task"
-```
-
-### PR Creation
-
-Instruct the agent to create a PR after making code changes. `--pr` automatically creates an isolated git worktree.
-
-```bash
-# Single task with PR (worktree created automatically)
-emdx delegate --pr "fix the auth bug"
-
-# From a document with PR
-emdx delegate --doc 123 --pr "implement this plan"
-```
-
-### Worktree Isolation
-
-Run tasks in an isolated git worktree for clean environments:
-
-```bash
-# Single task in worktree
-emdx delegate --worktree "fix X"
-
-# Worktree with PR (worktree kept for the PR branch)
-emdx delegate --worktree --pr "fix X"
-
-```
-
-### Options Reference
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--tags` | `-t` | Tags to apply to outputs (comma-separated) |
-| `--title` | `-T` | Title for output document(s) |
-| `--synthesize` | `-s` | Combine parallel outputs with synthesis |
-| `--jobs` | `-j` | Max parallel tasks (default: auto) |
-| `--model` | `-m` | Override default model |
-| `--sonnet` | | Shortcut for `--model sonnet` |
-| `--opus` | | Shortcut for `--model opus` |
-| `--quiet` | `-q` | Suppress metadata on stderr |
-| `--doc` | `-d` | Document ID to use as input context |
-| `--task` | | Existing task ID to associate with this delegate (sets `EMDX_TASK_ID`) |
-| `--pr` | | Instruct agent to create a PR (implies `--worktree`) |
-| `--branch` | | Commit and push to origin branch (implies `--worktree`, no PR) |
-| `--draft` / `--no-draft` | | Create PR as draft (default: `--no-draft`) |
-| `--worktree` | `-w` | Run in isolated git worktree |
-| `--base-branch` | `-b` | Base branch for worktree (default: main) |
-| `--epic` | `-e` | Epic task ID to add tasks to |
-| `--cat` | `-c` | Category key for auto-numbered tasks |
-| `--tool` | | Extra allowed tool patterns (repeatable, e.g. `--tool 'Bash(gh:*)'`) |
-| `--cleanup` | | Remove stale delegate worktrees (>1 hour old) |
-| `--json` | | Structured JSON output (implies `--quiet`) |
-
-### JSON Output
-
-Use `--json` for structured, machine-readable output. Metadata on stderr is suppressed (same as `--quiet`).
-
-```bash
-# Single task with JSON output
-emdx delegate --json "analyze code"
-```
-
-**Single task output:**
-```json
-{
-  "task_id": 42,
-  "doc_id": 1234,
-  "output_doc_id": 1235,
-  "execution_id": 87,
-  "exit_code": 0,
-  "success": true,
-  "duration_seconds": 34.52,
-  "duration": "34s"
-}
-```
-
-Fields `pr_url`, `branch_name`, and `error` are included when applicable (e.g., `--pr` adds `pr_url`).
-
-**Parallel task output:**
-```json
-{
-  "parent_task_id": 50,
-  "task_count": 3,
-  "succeeded": 3,
-  "failed": 0,
-  "doc_ids": [1234, 1235, 1236],
-  "tasks": [
-    {"index": 0, "task_id": 51, "doc_id": 1234, "exit_code": 0, "success": true, "duration_seconds": 28.1, "duration": "28s"},
-    {"index": 1, "task_id": 52, "doc_id": 1235, "exit_code": 0, "success": true, "duration_seconds": 31.4, "duration": "31s"},
-    {"index": 2, "task_id": 53, "doc_id": 1236, "exit_code": 0, "success": true, "duration_seconds": 25.7, "duration": "25s"}
-  ],
-  "total_duration_seconds": 31.4,
-  "total_duration": "31s"
-}
-```
-
-When `--synthesize` is used, a `synthesis` object is added with the same fields as a single task result.
-
-### Output Format
-
-- **stdout**: Full content of the result (for reading inline)
-- **stderr**: `doc_id:XXXX tokens:N cost:$X.XX duration:Xs`
 
 ---
 
@@ -1522,6 +1122,47 @@ emdx explore --json --questions
 - `--json` - Output results as JSON
 - `--rich` - Enable colored Rich output
 - `--limit, -n INTEGER` - Max topics to show (0 = all, default: 0)
+
+---
+
+## 🧪 Distill (`emdx distill`)
+
+Surface and synthesize KB content into audience-aware summaries. Finds documents matching a topic or tags, then uses AI to produce a coherent synthesis tailored for the target audience.
+
+```bash
+# Distill all docs matching a topic
+emdx distill "authentication"
+
+# Distill docs matching tags
+emdx distill --tags "security,active"
+
+# Target a specific audience
+emdx distill --for docs "API design"
+emdx distill --for coworkers "sprint progress"
+
+# Save the distilled output to KB
+emdx distill "auth" --save --title "Auth Summary"
+
+# Quiet mode — output only the distilled content (no headers/stats)
+emdx distill "auth" --quiet
+
+# Limit number of source documents
+emdx distill "auth" --limit 10
+```
+
+**Options:**
+- `TOPIC` - Topic or search query to find and distill documents (positional)
+- `--tags, -t TEXT` - Comma-separated tags to filter documents
+- `--for, -f TEXT` - Target audience: `me` (personal, default), `docs` (documentation), `coworkers`/`team` (team briefing)
+- `--limit, -l INTEGER` - Maximum number of documents to include (default: 20)
+- `--save, -s` - Save the distilled output to the knowledge base
+- `--title TEXT` - Title for saved document (defaults to "Distilled: <topic>")
+- `--quiet, -q` - Output only the distilled content (no headers/stats)
+
+**Notes:**
+- Requires either a topic or `--tags` (or both)
+- When both topic and tags are provided, results are merged (tag matches first, then topic matches)
+- Saved documents are auto-tagged with `distilled` and `for-<audience>`
 
 ---
 
