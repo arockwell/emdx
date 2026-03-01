@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Generator
 from pathlib import Path
 
@@ -18,6 +19,13 @@ from emdx.database import db
 from emdx.main import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    return _ANSI_RE.sub("", text)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
@@ -70,9 +78,9 @@ class TestStaleTopLevel:
         assert "CRITICAL" in result.output
         assert "WARNING" in result.output
         assert "INFO" in result.output
-        assert "--tier" in result.output
-        assert "--json" in result.output
-        assert "--limit" in result.output
+        assert "--tier" in _strip_ansi(result.output)
+        assert "--json" in _strip_ansi(result.output)
+        assert "--limit" in _strip_ansi(result.output)
 
     def test_stale_empty_kb(self) -> None:
         """Empty knowledge base reports fresh status."""
@@ -257,7 +265,7 @@ class TestTouchTopLevel:
         result = runner.invoke(app, ["touch", "--help"])
         assert result.exit_code == 0
         assert "reviewed" in result.output.lower()
-        assert "--json" in result.output
+        assert "--json" in _strip_ansi(result.output)
 
     def test_touch_single_doc(self) -> None:
         """Touch a single document by ID."""
