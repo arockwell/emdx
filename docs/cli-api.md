@@ -119,6 +119,12 @@ emdx find --ask --cite "What's our caching strategy?"
 # Serendipity — surface surprising related documents
 emdx find --wander "authentication"
 
+# Standing queries — save a search and check for new matches
+emdx find --watch "deployment"
+emdx find --watch-list
+emdx find --watch-check
+emdx find --watch-remove 3
+
 # Show only wiki articles
 emdx find "authentication" --wiki
 
@@ -151,6 +157,10 @@ emdx find "auth" --all-types
 - `--debug` - Socratic debugger: diagnostic questions from your bug history
 - `--cite` - Add inline `[#ID]` citations using chunk-level retrieval
 - `--wander` - Serendipity mode: surface surprising but related documents
+- `--watch` - Save query as a standing query (alerts on new matches)
+- `--watch-list` - List all standing queries
+- `--watch-check` - Check all standing queries for new matches
+- `--watch-remove INTEGER` - Remove a standing query by ID
 - `--context` - Output retrieved context as plain text (for piping to claude)
 - `--wiki` - Show only wiki articles (`doc_type='wiki'`)
 - `--all-types` - Show all document types (user, wiki, etc.)
@@ -494,6 +504,50 @@ emdx maintain contradictions --json
 - `--limit, -n INTEGER` - Max pairs to check (default: 100)
 - `--project, -p TEXT` - Scope to project
 - `--threshold FLOAT` - Similarity threshold for candidate pairs (default: 0.7)
+- `--json` - Output as JSON
+
+#### **emdx maintain freshness**
+Score document freshness and identify stale documents. Combines multiple signals into a 0–1 freshness score: age decay, view recency, link health, content length, and tag signals.
+
+```bash
+# Score all documents
+emdx maintain freshness
+
+# Show only stale documents
+emdx maintain freshness --stale
+
+# Custom staleness threshold
+emdx maintain freshness --stale --threshold 0.5
+
+# JSON output
+emdx maintain freshness --json
+```
+
+**Options:**
+- `--stale` - Show only documents below the freshness threshold
+- `--threshold, -t FLOAT` - Staleness threshold (0–1, default: 0.3)
+- `--json` - Output as JSON
+
+#### **emdx maintain gaps**
+Detect knowledge gaps and areas with sparse coverage. Analyzes the KB for tags with few documents, dead-end documents, orphaned knowledge, stale topics, and projects with high task counts but low documentation.
+
+```bash
+# Show knowledge gaps
+emdx maintain gaps
+
+# Show more gaps per category
+emdx maintain gaps --top 20
+
+# Custom stale threshold
+emdx maintain gaps --stale-days 30
+
+# JSON output
+emdx maintain gaps --json
+```
+
+**Options:**
+- `--top, -n INTEGER` - Number of gaps to show per category (default: 10)
+- `--stale-days, -s INTEGER` - Days threshold for stale topics (default: 60)
 - `--json` - Output as JSON
 
 #### **emdx maintain wikify**
