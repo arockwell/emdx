@@ -1109,8 +1109,13 @@ def view(
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
     json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
     links: bool = typer.Option(False, "--links", help="Show document links (semantic and manual)"),
+    review: bool = typer.Option(False, "--review", "-R", help="Adversarial review of the document"),
 ) -> None:
     """View a document from the knowledge base"""
+    if review and raw:
+        console.print("[red]Error: --review and --raw are mutually exclusive[/red]")
+        raise typer.Exit(1)
+
     try:
         # Fetch document
         doc = get_document(identifier)
@@ -1118,6 +1123,11 @@ def view(
         if not doc:
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
+
+        # Handle --review: adversarial document review
+        if review:
+            _view_review(doc)
+            return
 
         doc_tags = get_document_tags(doc["id"])
 
@@ -1233,6 +1243,108 @@ def view(
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+def _view_review(doc: Mapping[str, Any]) -> None:
+    """Run an adversarial review of a document using an LLM.
+
+    Finds similar documents via embeddings (if available) and prompts
+    the LLM to check for contradictions, gaps, staleness, and
+    missing considerations.
+    """
+    import shutil
+
+    from rich.markup import escape
+
+    if not shutil.which("claude"):
+        console.print(
+            "[red]Error: Claude CLI is required for --review.[/red]\n"
+            "Install it from: https://docs.anthropic.com/claude-code"
+        )
+        raise typer.Exit(1)
+
+    doc_id: int = doc["id"]
+    title: str = doc["title"]
+    content: str = doc["content"]
+
+    console.print(f"[dim]Reviewing #{doc_id} '{escape(title)}'...[/dim]")
+
+    # Try to find similar documents for cross-referencing
+    similar_context = ""
+    similar_ids: list[int] = []
+    try:
+        from emdx.services.embedding_service import EmbeddingService
+
+        svc = EmbeddingService()
+        matches = svc.find_similar(doc_id, limit=10)
+        if matches:
+            parts: list[str] = []
+            for m in matches:
+                similar_ids.append(m.doc_id)
+                parts.append(
+                    f"## Similar Document #{m.doc_id}: {m.title}"
+                    f" (similarity: {m.similarity:.0%})\n"
+                    f"{m.snippet}"
+                )
+            similar_context = "\n\n".join(parts)
+    except Exception:
+        # No embeddings or import failure -- review in isolation
+        pass
+
+    # Build review prompt
+    system_prompt = (
+        "You are a critical document reviewer. Your job is to find "
+        "problems, gaps, and weaknesses in the document under review. "
+        "Be specific and cite evidence from the text.\n\n"
+        "Check for:\n"
+        "1. Internal contradictions within the document\n"
+        "2. Assumptions that conflict with the similar/related "
+        "documents provided (reference them by #ID)\n"
+        "3. Missing considerations or blind spots\n"
+        "4. Outdated information — flag temporal language like "
+        '"currently", "today", "now", or explicit dates\n'
+        "5. Completeness — is anything important about the topic "
+        "left unaddressed?\n\n"
+        "Format your review as a numbered list of findings. "
+        "For each finding, state the issue and quote the relevant "
+        "text. End with a brief overall assessment."
+    )
+
+    user_parts = [f"# Document Under Review (#{doc_id}: {title})\n\n{content}"]
+    if similar_context:
+        user_parts.append("# Related Documents for Cross-Reference\n\n" + similar_context)
+    else:
+        user_parts.append(
+            "(No similar documents available for cross-reference. "
+            "Review the document in isolation.)"
+        )
+    user_message = "\n\n---\n\n".join(user_parts)
+
+    try:
+        from emdx.services.ask_service import _execute_claude_prompt
+
+        result = _execute_claude_prompt(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            title=f"Review: {title[:50]}",
+            model="claude-sonnet-4-5-20250929",
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Review generation failed: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    # Display in a Rich panel
+    panel = Panel(
+        result,
+        title=f"Review of #{doc_id}: {escape(title)}",
+        border_style="yellow",
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+    if similar_ids:
+        id_list = ", ".join(f"#{sid}" for sid in similar_ids)
+        console.print(f"\n[dim]Similar docs referenced: {id_list}[/dim]")
 
 
 def _print_view_header_plain(doc: Mapping[str, Any], doc_tags: list[str]) -> None:
