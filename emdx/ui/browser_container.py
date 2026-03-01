@@ -248,8 +248,7 @@ class BrowserContainer(App[None]):
         def post_mount() -> None:
             if hasattr(browser, "focus"):
                 browser.focus()
-            # If a pending doc was requested (e.g. from delegate browser click),
-            # navigate to it now that the activity browser is mounted
+            # If a pending doc was requested, navigate to it once the activity browser is mounted
             pending = getattr(self, "_pending_doc_id", None)
             if pending is not None and browser_type == "activity":
                 self._pending_doc_id = None
@@ -280,10 +279,6 @@ class BrowserContainer(App[None]):
         """Quit the application."""
         logger.debug("action_quit called")
         self.exit()
-
-    async def on_activity_view_view_document(self, event: Any) -> None:
-        """Handle ViewDocument message from ActivityView - switch to document browser."""
-        await self._view_document(event.doc_id)
 
     async def _view_document(self, doc_id: int) -> None:
         """Switch to activity browser and view a specific document."""
@@ -323,30 +318,6 @@ class BrowserContainer(App[None]):
     async def view_document_fullscreen(self, doc_id: int) -> None:
         """View a document fullscreen - switch to document browser and open it."""
         await self._view_document(doc_id)
-
-    async def _show_document_preview(self, doc_id: int) -> None:
-        """Show document in a fullscreen preview."""
-        from emdx.ui.modals import DocumentPreviewScreen
-
-        def on_preview_result(result: dict | None) -> None:
-            if result:
-                import asyncio
-
-                asyncio.create_task(self._handle_preview_result(result))
-
-        self.push_screen(DocumentPreviewScreen(doc_id), on_preview_result)
-
-    async def _handle_preview_result(self, result: dict) -> None:
-        """Handle result from document preview modal."""
-        action = result.get("action")
-        doc_id = result.get("doc_id")
-
-        if action == "edit" and doc_id:
-            # Open in document browser for editing
-            await self._view_document(doc_id)
-        elif action == "open_full" and doc_id:
-            # Open in document browser
-            await self._view_document(doc_id)
 
     def _dump_widget_tree(self) -> None:
         """Debug function to dump the widget tree and regions (ctrl+d)."""

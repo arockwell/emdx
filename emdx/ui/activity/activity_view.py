@@ -13,7 +13,6 @@ from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
-from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Log, RichLog, Static
@@ -97,13 +96,6 @@ class ActivityView(HelpMixin, Widget):
     HELP_TITLE = "Activity View"
     """Document browser — flat table of recent documents."""
 
-    class ViewDocument(Message):
-        """Request to view a document fullscreen."""
-
-        def __init__(self, doc_id: int) -> None:
-            self.doc_id = doc_id
-            super().__init__()
-
     BINDINGS = [
         ("j", "cursor_down", "Down"),
         ("k", "cursor_up", "Up"),
@@ -111,8 +103,6 @@ class ActivityView(HelpMixin, Widget):
         ("f", "fullscreen", "Fullscreen"),
         ("r", "refresh", "Refresh"),
         ("i", "create_gist", "New Gist"),
-        ("tab", "focus_next", "Next Pane"),
-        ("shift+tab", "focus_prev", "Prev Pane"),
         ("question_mark", "show_help", "Help"),
         ("c", "toggle_copy_mode", "Copy Mode"),
         ("w", "cycle_doc_type_filter", "Filter Docs"),
@@ -202,16 +192,6 @@ class ActivityView(HelpMixin, Widget):
         height: 100%;
     }
 
-    /* ── Backward-compat aliases (existing zoom classes) ─ */
-    #activity-panel.zoom-hidden {
-        display: none;
-    }
-
-    #preview-panel.zoom-full {
-        height: 100%;
-        border-top: none;
-    }
-
     /* ── Table and headers ────────────────────────────── */
 
     #activity-header {
@@ -280,7 +260,6 @@ class ActivityView(HelpMixin, Widget):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.activity_items: list[ActivityItem] = []
-        self._fullscreen = False
         self._last_preview_key: tuple[str, int, str] | None = None
         self._preview_raw_content: str = ""
         self._copy_mode = False
@@ -816,14 +795,6 @@ class ActivityView(HelpMixin, Widget):
             activity_panel.remove_class("zoom-list")
             preview_panel.remove_class("zoom-list")
             self.query_one("#activity-table", ActivityTable).focus()
-
-    def action_focus_next(self) -> None:
-        """Focus next pane."""
-        pass
-
-    def action_focus_prev(self) -> None:
-        """Focus previous pane."""
-        pass
 
     async def action_cycle_doc_type_filter(self) -> None:
         """Cycle document type filter: user -> wiki -> all -> user."""

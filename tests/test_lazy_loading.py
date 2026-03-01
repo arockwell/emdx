@@ -77,7 +77,7 @@ class TestLazyTyperGroup:
     def test_lazy_command_not_loaded_until_invoked(self) -> None:
         """Test that lazy commands don't import their modules until invoked."""
         group = LazyTyperGroup(
-            lazy_subcommands={"test_cmd": "emdx.commands.delegate:app"},
+            lazy_subcommands={"test_cmd": "emdx.commands.explore:app"},
             lazy_help={"test_cmd": "Test help"},
         )
 
@@ -150,8 +150,8 @@ class TestLazyCommand:
         """Test that invoke loads the real command."""
         group = LazyTyperGroup()
         cmd = LazyCommand(
-            name="delegate",
-            import_path="emdx.commands.delegate:app",
+            name="explore",
+            import_path="emdx.commands.explore:app",
             help_text="Test help",
             parent_group=group,
         )
@@ -190,8 +190,8 @@ class TestCLIIntegration:
         """Test that --help doesn't load lazy modules."""
         # Track which modules are loaded
         lazy_modules = [
-            "emdx.commands.delegate",
-            "emdx.commands.claude_execute",
+            "emdx.commands.explore",
+            "emdx.commands.distill",
         ]
 
         # Clear any cached imports

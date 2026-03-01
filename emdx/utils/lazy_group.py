@@ -6,7 +6,7 @@ This module provides:
 - AliasGroup: A lighter TyperGroup subclass that adds alias support
   without lazy loading, suitable for subcommand groups (e.g. task).
 
-Heavy commands (delegate, ai, etc.) are only imported
+Heavy commands (gui, ai, etc.) are only imported
 when actually invoked, not on every CLI call.
 """
 

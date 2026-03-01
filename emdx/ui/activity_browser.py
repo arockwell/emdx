@@ -1,6 +1,5 @@
 """Activity Browser - wraps ActivityView for the browser container."""
 
-import logging
 from typing import Self
 
 from textual.app import ComposeResult
@@ -9,15 +8,9 @@ from textual.widgets import Static
 
 from .activity.activity_view import ActivityView
 
-logger = logging.getLogger(__name__)
-
 
 class ActivityBrowser(Widget):
     """Browser wrapper for ActivityView - Mission Control."""
-
-    BINDINGS = [
-        ("?", "show_help", "Help"),
-    ]
 
     DEFAULT_CSS = """
     ActivityBrowser {
@@ -44,27 +37,13 @@ class ActivityBrowser(Widget):
         self.activity_view = ActivityView(id="activity-view")
         yield self.activity_view
         yield Static(
-            "[dim]1[/dim] Docs  [dim]2[/dim] Tasks  [dim]3[/dim] Delegates  "
+            "[dim]1[/dim] Docs  [dim]2[/dim] Tasks  "
             "[dim]j/k[/dim] Navigate  "
             "[dim]Enter[/dim] Open  "
             "[dim]/[/dim] Filter  "
             "[dim]?[/dim] Help",
             id="help-bar",
         )
-
-    def on_activity_view_view_document(self, event: ActivityView.ViewDocument) -> None:
-        """Handle request to view document fullscreen."""
-        # Forward to parent app for document viewing
-        if hasattr(self.app, "view_document_fullscreen"):
-            self.app.view_document_fullscreen(event.doc_id)
-        else:
-            # Fallback: switch to document browser and select the doc
-            logger.info(f"Would view document #{event.doc_id}")
-
-    def action_show_help(self) -> None:
-        """Show help."""
-        # Could show a help modal here
-        pass
 
     def update_status(self, text: str) -> None:
         """Update status - for compatibility with browser container."""
