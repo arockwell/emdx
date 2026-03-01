@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from ..backup_types import BackupMetadata, ProviderAuthStatus
 
 if TYPE_CHECKING:
-    from googleapiclient.discovery import Resource as DriveService
+    from googleapiclient.discovery import Resource as DriveService  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
