@@ -1041,5 +1041,10 @@ app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness track
 # Register contradictions command
 app.command(name="contradictions")(contradictions)
 
+# Register cloud-backup as a subcommand group
+from emdx.commands.backup import app as cloud_backup_app  # noqa: E402
+
+app.add_typer(cloud_backup_app, name="cloud-backup", help="Cloud backup operations")
+
 if __name__ == "__main__":
     app()
