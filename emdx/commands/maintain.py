@@ -767,6 +767,62 @@ def _format_contradiction(result: ContradictionResult) -> str:
     return "\n".join(lines)
 
 
+def freshness(
+    stale: bool = typer.Option(
+        False, "--stale", help="Show only documents below the freshness threshold"
+    ),
+    threshold: float = typer.Option(
+        0.3, "--threshold", "-t", help="Staleness threshold (0-1, default 0.3)"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Score document freshness and identify stale documents.
+
+    Combines multiple signals into a 0-1 freshness score:
+    - Age decay (exponential, ~30-day half-life)
+    - View recency (when last accessed)
+    - Link health (are linked docs still active?)
+    - Content length (short stubs score lower)
+    - Tag signals ("active" boosts, "done" penalizes)
+
+    Examples:
+        emdx maintain freshness              # Score all documents
+        emdx maintain freshness --stale      # Show only stale docs
+        emdx maintain freshness -t 0.5       # Custom threshold
+        emdx maintain freshness --json       # Machine-readable output
+    """
+    from emdx.commands._freshness import run_freshness
+
+    run_freshness(threshold=threshold, stale_only=stale, json_output=json_output)
+
+
+def gaps(
+    top: int = typer.Option(10, "--top", "-n", help="Number of gaps to show per category"),
+    stale_days: int = typer.Option(
+        60, "--stale-days", "-s", help="Days threshold for stale topics"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Detect knowledge gaps and areas with sparse coverage.
+
+    Analyzes the knowledge base to identify:
+    - Tags with very few documents compared to the average
+    - Documents with incoming links but no outgoing links (dead-ends)
+    - Documents with zero links (orphaned knowledge)
+    - Tags where all documents are old with no recent activity
+    - Projects with few documents relative to their task count
+
+    Examples:
+        emdx maintain gaps              # Default gap analysis
+        emdx maintain gaps --top 5      # Show top 5 gaps per category
+        emdx maintain gaps --stale-days 30  # 30-day staleness threshold
+        emdx maintain gaps --json       # Machine-readable output
+    """
+    from emdx.commands._gaps import run_gaps
+
+    run_gaps(top=top, stale_days=stale_days, json_output=json_output)
+
+
 # Create typer app for this module
 app = typer.Typer(help="Database maintenance and cleanup operations")
 
@@ -807,6 +863,8 @@ def maintain_callback(
 
 app.command(name="cleanup")(cleanup_main)
 app.command(name="drift")(drift)
+app.command(name="freshness")(freshness)
+app.command(name="gaps")(gaps)
 
 # Register code-drift as a direct subcommand of maintain
 from emdx.commands.code_drift import code_drift_command  # noqa: E402

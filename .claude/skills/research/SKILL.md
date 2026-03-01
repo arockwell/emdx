@@ -85,4 +85,4 @@ emdx find "session management" -s
 
 - Use `emdx view <id>` to read full documents
 - Reference existing work instead of redoing it
-- If nothing exists, proceed with new research and save results with `/emdx:save`
+- If nothing exists, proceed with new research and save results with `/save`
