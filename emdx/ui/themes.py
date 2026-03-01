@@ -16,17 +16,17 @@ from textual.theme import Theme
 
 EMDX_DARK = Theme(
     name="emdx-dark",
-    primary="#0178D4",      # Blue - matches Textual default
-    secondary="#004578",    # Darker blue - secondary accent
-    accent="#ffa62b",       # Orange - selection/highlight
-    foreground="#e0e0e0",   # Primary text
-    background="#121212",   # Dark background
-    surface="#1e1e1e",      # Slightly lighter for cards/panels
-    panel="#252526",        # Sidebar backgrounds
-    boost="#2d2d2d",        # Status bars, headers
-    success="#4EBF71",      # Green - success states
-    warning="#ffa62b",      # Orange - warning states
-    error="#ba3c5b",        # Red - error states
+    primary="#0178D4",  # Blue - matches Textual default
+    secondary="#004578",  # Darker blue - secondary accent
+    accent="#ffa62b",  # Orange - selection/highlight
+    foreground="#e0e0e0",  # Primary text
+    background="#121212",  # Dark background
+    surface="#1e1e1e",  # Slightly lighter for cards/panels
+    panel="#252526",  # Sidebar backgrounds
+    boost="#2d2d2d",  # Status bars, headers
+    success="#4EBF71",  # Green - success states
+    warning="#ffa62b",  # Orange - warning states
+    error="#ba3c5b",  # Red - error states
     dark=True,
 )
 
@@ -37,17 +37,17 @@ EMDX_DARK = Theme(
 
 EMDX_LIGHT = Theme(
     name="emdx-light",
-    primary="#0969DA",      # Blue - main accent
-    secondary="#8250DF",    # Purple - secondary accent
-    accent="#BF3989",       # Magenta - selection/highlight
-    foreground="#1F2328",   # Primary text (near black)
-    background="#FFFFFF",   # Pure white
-    surface="#F6F8FA",      # Light gray for cards/panels
-    panel="#F0F2F5",        # Slightly darker for sidebars
-    boost="#DFE3E8",        # Status bars, headers
-    success="#1A7F37",      # Dark green - visible on light
-    warning="#9A6700",      # Dark amber - visible on light
-    error="#CF222E",        # Dark red - visible on light
+    primary="#0969DA",  # Blue - main accent
+    secondary="#8250DF",  # Purple - secondary accent
+    accent="#BF3989",  # Magenta - selection/highlight
+    foreground="#1F2328",  # Primary text (near black)
+    background="#FFFFFF",  # Pure white
+    surface="#F6F8FA",  # Light gray for cards/panels
+    panel="#F0F2F5",  # Slightly darker for sidebars
+    boost="#DFE3E8",  # Status bars, headers
+    success="#1A7F37",  # Dark green - visible on light
+    warning="#9A6700",  # Dark amber - visible on light
+    error="#CF222E",  # Dark red - visible on light
     dark=False,
 )
 
@@ -58,17 +58,17 @@ EMDX_LIGHT = Theme(
 
 EMDX_NORD = Theme(
     name="emdx-nord",
-    primary="#88C0D0",      # Frost blue
-    secondary="#B48EAD",    # Aurora purple
-    accent="#EBCB8B",       # Aurora yellow
-    foreground="#ECEFF4",   # Snow storm
-    background="#2E3440",   # Polar night
-    surface="#3B4252",      # Polar night (lighter)
-    panel="#434C5E",        # Polar night (lighter)
-    boost="#4C566A",        # Polar night (lightest)
-    success="#A3BE8C",      # Aurora green
-    warning="#EBCB8B",      # Aurora yellow
-    error="#BF616A",        # Aurora red
+    primary="#88C0D0",  # Frost blue
+    secondary="#B48EAD",  # Aurora purple
+    accent="#EBCB8B",  # Aurora yellow
+    foreground="#ECEFF4",  # Snow storm
+    background="#2E3440",  # Polar night
+    surface="#3B4252",  # Polar night (lighter)
+    panel="#434C5E",  # Polar night (lighter)
+    boost="#4C566A",  # Polar night (lightest)
+    success="#A3BE8C",  # Aurora green
+    warning="#EBCB8B",  # Aurora yellow
+    error="#BF616A",  # Aurora red
     dark=True,
 )
 
@@ -79,17 +79,17 @@ EMDX_NORD = Theme(
 
 EMDX_SOLARIZED_DARK = Theme(
     name="emdx-solarized-dark",
-    primary="#268BD2",      # Blue
-    secondary="#6C71C4",    # Violet
-    accent="#2AA198",       # Cyan
-    foreground="#839496",   # Base0
-    background="#002B36",   # Base03
-    surface="#073642",      # Base02
-    panel="#073642",        # Base02
-    boost="#586E75",        # Base01
-    success="#859900",      # Green
-    warning="#B58900",      # Yellow
-    error="#DC322F",        # Red
+    primary="#268BD2",  # Blue
+    secondary="#6C71C4",  # Violet
+    accent="#2AA198",  # Cyan
+    foreground="#839496",  # Base0
+    background="#002B36",  # Base03
+    surface="#073642",  # Base02
+    panel="#073642",  # Base02
+    boost="#586E75",  # Base01
+    success="#859900",  # Green
+    warning="#B58900",  # Yellow
+    error="#DC322F",  # Red
     dark=True,
 )
 
@@ -100,17 +100,17 @@ EMDX_SOLARIZED_DARK = Theme(
 
 EMDX_SOLARIZED_LIGHT = Theme(
     name="emdx-solarized-light",
-    primary="#268BD2",      # Blue
-    secondary="#6C71C4",    # Violet
-    accent="#2AA198",       # Cyan
-    foreground="#657B83",   # Base00
-    background="#FDF6E3",   # Base3
-    surface="#EEE8D5",      # Base2
-    panel="#EEE8D5",        # Base2
-    boost="#93A1A1",        # Base1
-    success="#859900",      # Green
-    warning="#B58900",      # Yellow
-    error="#DC322F",        # Red
+    primary="#268BD2",  # Blue
+    secondary="#6C71C4",  # Violet
+    accent="#2AA198",  # Cyan
+    foreground="#657B83",  # Base00
+    background="#FDF6E3",  # Base3
+    surface="#EEE8D5",  # Base2
+    panel="#EEE8D5",  # Base2
+    boost="#93A1A1",  # Base1
+    success="#859900",  # Green
+    warning="#B58900",  # Yellow
+    error="#DC322F",  # Red
     dark=False,
 )
 

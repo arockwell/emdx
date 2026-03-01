@@ -89,7 +89,7 @@ class SupersedeCandidate(TypedDict):
     parent_id: int | None
 
 
-class SearchResult(TypedDict):
+class SearchResult(TypedDict, total=False):
     """Search result from FTS5 queries."""
 
     id: int
@@ -99,6 +99,7 @@ class SearchResult(TypedDict):
     updated_at: datetime | None
     snippet: str | None
     rank: float
+    doc_type: str
 
 
 class MostViewedDoc(TypedDict):

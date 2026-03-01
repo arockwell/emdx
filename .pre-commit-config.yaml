@@ -17,3 +17,4 @@ repos:
           - types-setuptools
         args: [--ignore-missing-imports]
         pass_filenames: true
+        exclude: ^tests/

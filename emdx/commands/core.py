@@ -399,6 +399,11 @@ def find(
     all_types: bool = typer.Option(
         False, "--all-types", help="Show all document types (user, wiki, etc.)"
     ),
+    wander: bool = typer.Option(
+        False,
+        "--wander",
+        help="Serendipity mode: surface surprising but related documents",
+    ),
 ) -> None:
     """Search the knowledge base with full-text search.
 
@@ -412,6 +417,7 @@ def find(
     Use --similar N to find documents similar to doc #N.
     Use --ask to get an AI-powered answer to your question.
     Use --context to retrieve docs as plain text for piping to claude.
+    Use --wander for serendipity: surface surprising but related documents.
 
     Examples:
         emdx find "authentication patterns"              # hybrid search
@@ -422,19 +428,25 @@ def find(
         emdx find --similar 42                           # docs similar to #42
         emdx find --ask "What's our caching strategy?"   # RAG Q&A
         emdx find --context "auth" | claude              # pipe context to claude
+        emdx find --wander                               # random serendipity
+        emdx find --wander "machine learning"            # serendipity from topic
     """
     search_query = " ".join(query) if query else ""
 
-    # Determine doc_type filter: --wiki -> 'wiki', --all-types -> None, default -> 'user'
+    # Record search event (non-critical, best-effort)
+    if search_query:
+        from emdx.models.events import record_event
+
+        record_event("search", query=search_query)
+
+    # Determine doc_type filter: --wiki -> 'wiki', default -> None (all types)
     if wiki and all_types:
         console.print("[red]Error: --wiki and --all-types are mutually exclusive[/red]")
         raise typer.Exit(1)
     if wiki:
         doc_type: str | None = "wiki"
-    elif all_types:
-        doc_type = None
     else:
-        doc_type = "user"
+        doc_type = None
 
     try:
         # Handle --all: list all documents
@@ -450,6 +462,11 @@ def find(
         # Handle --similar: find documents similar to a given one
         if similar is not None:
             _find_similar(similar, limit, json_output)
+            return
+
+        # Handle --wander: serendipity search
+        if wander:
+            _find_wander(search_query, limit, project, json_output)
             return
 
         # Handle --ask: RAG Q&A
@@ -581,14 +598,17 @@ def find(
 
         for i, result in enumerate(hybrid_results, 1):
             # Display result header with chunk heading if available
+            wiki_badge = " [magenta]\\[wiki][/magenta]" if result.doc_type == "wiki" else ""
             if result.chunk_heading:
                 console.print(
-                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold] "
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold]"
+                    f"{wiki_badge} "
                     f"[dim]{result.chunk_heading}[/dim]"
                 )
             else:
                 console.print(
-                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold]"
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] "
+                    f"[bold]{result.title}[/bold]{wiki_badge}"
                 )
 
             # Display metadata
@@ -790,6 +810,176 @@ def _find_similar(
         table.add_row(str(r.doc_id), f"{r.similarity:.0%}", r.title)
 
     console.print(table)
+
+
+def _find_wander(
+    search_query: str,
+    limit: int,
+    project: str | None,
+    json_output: bool,
+) -> None:
+    """Serendipity search using the Goldilocks similarity band.
+
+    Surfaces documents in the 0.2-0.4 cosine similarity range --
+    related enough to be interesting, different enough to surprise.
+    """
+    import random
+
+    try:
+        from ..services.embedding_service import EmbeddingService
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    from ..database import db
+
+    service = EmbeddingService()
+
+    # Check how many docs have embeddings
+    stats = service.stats()
+    if stats.indexed_documents < 10:
+        msg = (
+            f"Serendipity works better with 50+ documents. "
+            f"You have {stats.indexed_documents}. "
+            f"Try `emdx maintain index` first."
+        )
+        if json_output:
+            print(json.dumps({"error": msg}))
+        else:
+            console.print(f"[yellow]{msg}[/yellow]")
+        return
+
+    # Get the seed embedding
+    seed_doc_id: int | None = None
+    if search_query:
+        # Use query text as seed
+        seed_embedding = service.embed_text(search_query)
+    else:
+        # Pick a random recently-accessed document as seed
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            query_sql = (
+                "SELECT d.id FROM documents d "
+                "JOIN document_embeddings e "
+                "ON d.id = e.document_id "
+                "WHERE d.is_deleted = 0 AND e.model_name = ? "
+                "ORDER BY d.accessed_at DESC NULLS LAST "
+                "LIMIT 20"
+            )
+            params: list[str | int] = [service.MODEL_NAME]
+            cursor.execute(query_sql, params)
+            recent_ids = [row[0] for row in cursor.fetchall()]
+
+        if not recent_ids:
+            msg = "No documents with embeddings found."
+            if json_output:
+                print(json.dumps({"error": msg}))
+            else:
+                console.print(f"[yellow]{msg}[/yellow]")
+            return
+
+        chosen_id: int = random.choice(recent_ids)
+        seed_doc_id = chosen_id
+        seed_embedding = service.embed_document(chosen_id)
+
+    # Load all embeddings and find docs in the Goldilocks band
+    try:
+        import numpy as np
+    except ImportError:
+        console.print(
+            "[red]numpy is required for --wander. Install with: pip install 'emdx[ai]'[/red]"
+        )
+        raise typer.Exit(1) from None
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        base_sql = (
+            "SELECT e.document_id, e.embedding, d.title, "
+            "d.project, SUBSTR(d.content, 1, 200) as snippet "
+            "FROM document_embeddings e "
+            "JOIN documents d ON e.document_id = d.id "
+            "WHERE e.model_name = ? AND d.is_deleted = 0"
+        )
+        sql_params: list[str | int] = [service.MODEL_NAME]
+
+        if project:
+            base_sql += " AND d.project = ?"
+            sql_params.append(project)
+
+        cursor.execute(base_sql, sql_params)
+        rows = cursor.fetchall()
+
+    # Compute similarities and filter to Goldilocks band
+    goldilocks_min = 0.2
+    goldilocks_max = 0.4
+    candidates = []
+    for doc_id, emb_bytes, title, doc_project, snippet in rows:
+        # Skip the seed document
+        if doc_id == seed_doc_id:
+            continue
+
+        doc_embedding = np.frombuffer(emb_bytes, dtype=np.float32)
+        similarity = float(np.dot(seed_embedding, doc_embedding))
+
+        if goldilocks_min <= similarity <= goldilocks_max:
+            clean_snippet = ""
+            if snippet:
+                clean_snippet = snippet.replace("\n", " ")[:100]
+            candidates.append(
+                {
+                    "id": doc_id,
+                    "title": title,
+                    "project": doc_project,
+                    "similarity": round(similarity, 3),
+                    "snippet": clean_snippet,
+                }
+            )
+
+    if not candidates:
+        msg = (
+            "No surprising connections found. "
+            "Your KB might be too focused -- "
+            "try saving docs on different topics!"
+        )
+        if json_output:
+            print(json.dumps({"error": msg}))
+        else:
+            console.print(f"[yellow]{msg}[/yellow]")
+        return
+
+    # Sort by similarity descending (prefer more-related end)
+    candidates.sort(key=lambda x: x["similarity"], reverse=True)
+
+    # Cap results
+    effective_limit = min(limit, 5)
+    results = candidates[:effective_limit]
+
+    if json_output:
+        output = {
+            "seed": search_query if search_query else f"doc #{seed_doc_id}",
+            "results": results,
+        }
+        print(json.dumps(output, indent=2))
+        return
+
+    # Human-readable output
+    seed_desc = f"'{search_query}'" if search_query else f"doc #{seed_doc_id}"
+    console.print(
+        f"\n[bold]Wandering from {seed_desc} ({len(results)} surprising connections):[/bold]\n"
+    )
+    for i, r in enumerate(results, 1):
+        console.print(f"[bold cyan]#{r['id']}[/bold cyan] [bold]{r['title']}[/bold]")
+        meta = []
+        if r["project"]:
+            meta.append(f"[green]{r['project']}[/green]")
+        meta.append(f"[dim]similarity: {r['similarity']:.3f}[/dim]")
+        console.print(" | ".join(meta))
+        if r["snippet"]:
+            console.print(f"[dim]{r['snippet']}[/dim]")
+        if i < len(results):
+            console.print()
+
+    console.print("\n[dim]Use 'emdx view <id>' to explore a document[/dim]")
 
 
 def _find_ask(
@@ -1059,7 +1249,10 @@ def _find_keyword_search(
 
     for i, result in enumerate(results, 1):
         # Display result header
-        console.print(f"[bold cyan]#{result['id']}[/bold cyan] [bold]{result['title']}[/bold]")
+        wiki_badge = " [magenta]\\[wiki][/magenta]" if result.get("doc_type") == "wiki" else ""
+        console.print(
+            f"[bold cyan]#{result['id']}[/bold cyan] [bold]{result['title']}[/bold]{wiki_badge}"
+        )
 
         # Display metadata
         metadata = []
@@ -1109,8 +1302,13 @@ def view(
     no_header: bool = typer.Option(False, "--no-header", help="Hide document header information"),
     json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
     links: bool = typer.Option(False, "--links", help="Show document links (semantic and manual)"),
+    review: bool = typer.Option(False, "--review", "-R", help="Adversarial review of the document"),
 ) -> None:
     """View a document from the knowledge base"""
+    if review and raw:
+        console.print("[red]Error: --review and --raw are mutually exclusive[/red]")
+        raise typer.Exit(1)
+
     try:
         # Fetch document
         doc = get_document(identifier)
@@ -1118,6 +1316,16 @@ def view(
         if not doc:
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
+
+        # Handle --review: adversarial document review
+        if review:
+            _view_review(doc)
+            return
+
+        # Record view event (non-critical, best-effort)
+        from emdx.models.events import record_event
+
+        record_event("view", doc_id=doc["id"])
 
         doc_tags = get_document_tags(doc["id"])
 
@@ -1233,6 +1441,108 @@ def view(
     except Exception as e:
         console.print(f"[red]Error viewing document: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+def _view_review(doc: Mapping[str, Any]) -> None:
+    """Run an adversarial review of a document using an LLM.
+
+    Finds similar documents via embeddings (if available) and prompts
+    the LLM to check for contradictions, gaps, staleness, and
+    missing considerations.
+    """
+    import shutil
+
+    from rich.markup import escape
+
+    if not shutil.which("claude"):
+        console.print(
+            "[red]Error: Claude CLI is required for --review.[/red]\n"
+            "Install it from: https://docs.anthropic.com/claude-code"
+        )
+        raise typer.Exit(1)
+
+    doc_id: int = doc["id"]
+    title: str = doc["title"]
+    content: str = doc["content"]
+
+    console.print(f"[dim]Reviewing #{doc_id} '{escape(title)}'...[/dim]")
+
+    # Try to find similar documents for cross-referencing
+    similar_context = ""
+    similar_ids: list[int] = []
+    try:
+        from emdx.services.embedding_service import EmbeddingService
+
+        svc = EmbeddingService()
+        matches = svc.find_similar(doc_id, limit=10)
+        if matches:
+            parts: list[str] = []
+            for m in matches:
+                similar_ids.append(m.doc_id)
+                parts.append(
+                    f"## Similar Document #{m.doc_id}: {m.title}"
+                    f" (similarity: {m.similarity:.0%})\n"
+                    f"{m.snippet}"
+                )
+            similar_context = "\n\n".join(parts)
+    except Exception:
+        # No embeddings or import failure -- review in isolation
+        pass
+
+    # Build review prompt
+    system_prompt = (
+        "You are a critical document reviewer. Your job is to find "
+        "problems, gaps, and weaknesses in the document under review. "
+        "Be specific and cite evidence from the text.\n\n"
+        "Check for:\n"
+        "1. Internal contradictions within the document\n"
+        "2. Assumptions that conflict with the similar/related "
+        "documents provided (reference them by #ID)\n"
+        "3. Missing considerations or blind spots\n"
+        "4. Outdated information — flag temporal language like "
+        '"currently", "today", "now", or explicit dates\n'
+        "5. Completeness — is anything important about the topic "
+        "left unaddressed?\n\n"
+        "Format your review as a numbered list of findings. "
+        "For each finding, state the issue and quote the relevant "
+        "text. End with a brief overall assessment."
+    )
+
+    user_parts = [f"# Document Under Review (#{doc_id}: {title})\n\n{content}"]
+    if similar_context:
+        user_parts.append("# Related Documents for Cross-Reference\n\n" + similar_context)
+    else:
+        user_parts.append(
+            "(No similar documents available for cross-reference. "
+            "Review the document in isolation.)"
+        )
+    user_message = "\n\n---\n\n".join(user_parts)
+
+    try:
+        from emdx.services.ask_service import _execute_claude_prompt
+
+        result = _execute_claude_prompt(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            title=f"Review: {title[:50]}",
+            model="claude-sonnet-4-5-20250929",
+        )
+    except RuntimeError as e:
+        console.print(f"[red]Review generation failed: {e}[/red]")
+        raise typer.Exit(1) from e
+
+    # Display in a Rich panel
+    panel = Panel(
+        result,
+        title=f"Review of #{doc_id}: {escape(title)}",
+        border_style="yellow",
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+    if similar_ids:
+        id_list = ", ".join(f"#{sid}" for sid in similar_ids)
+        console.print(f"\n[dim]Similar docs referenced: {id_list}[/dim]")
 
 
 def _print_view_header_plain(doc: Mapping[str, Any], doc_tags: list[str]) -> None:

@@ -71,7 +71,6 @@ class BrowserContainer(App[None]):
     BINDINGS = [
         Binding("1", "switch_activity", "Docs", show=True),
         Binding("2", "switch_tasks", "Tasks", show=True),
-        Binding("3", "switch_delegates", "Delegates", show=True),
         Binding("backslash", "cycle_theme", "Theme", show=True),
         Binding("ctrl+k", "open_command_palette", "Search", show=True),
         Binding("ctrl+p", "open_command_palette", "Search", show=False),
@@ -220,10 +219,6 @@ class BrowserContainer(App[None]):
                     self.browsers[browser_type] = Static(
                         f"Activity browser failed to load:\n{escape(str(e))}"
                     )  # noqa: E501
-            elif browser_type == "log":
-                from .log_browser import LogBrowser
-
-                self.browsers[browser_type] = LogBrowser()
             elif browser_type == "task":
                 try:
                     from .task_browser import TaskBrowser
@@ -237,18 +232,6 @@ class BrowserContainer(App[None]):
                     self.browsers[browser_type] = Static(
                         f"Task browser failed to load:\n{escape(str(e))}\n\nCheck logs for details."
                     )  # noqa: E501
-            elif browser_type == "delegate":
-                try:
-                    from .delegate_browser import DelegateBrowser
-
-                    self.browsers[browser_type] = DelegateBrowser()
-                    logger.debug("DelegateBrowser created")
-                except Exception as e:
-                    logger.error(f"Failed to create DelegateBrowser: {e}", exc_info=True)
-                    from textual.widgets import Static
-
-                    msg = f"Delegate browser failed to load:\n{escape(str(e))}"
-                    self.browsers[browser_type] = Static(msg)
             else:
                 # Unknown browser type - fallback to activity
                 logger.warning(f"Unknown browser type: {browser_type}, falling back to activity")
@@ -293,10 +276,6 @@ class BrowserContainer(App[None]):
         """Switch to the Tasks browser."""
         await self.switch_browser("task")
 
-    async def action_switch_delegates(self) -> None:
-        """Switch to the Delegate browser."""
-        await self.switch_browser("delegate")
-
     async def action_quit(self) -> None:
         """Quit the application."""
         logger.debug("action_quit called")
@@ -332,16 +311,10 @@ class BrowserContainer(App[None]):
         if key == "q" and len(self.screen_stack) > 1:
             return
 
-        # Q to quit from activity, task, or delegate browser
-        if key == "q" and self.current_browser in ["activity", "task", "delegate"]:
+        # Q to quit from activity or task browser
+        if key == "q" and self.current_browser in ["activity", "task"]:
             logger.debug(f"Q pressed in {self.current_browser} - exiting")
             self.exit()
-            event.stop()
-            return
-
-        # Q from sub-browsers goes back to activity (the new default)
-        if key == "q" and self.current_browser in ["log"]:
-            await self.switch_browser("activity")
             event.stop()
             return
 
@@ -444,10 +417,6 @@ class BrowserContainer(App[None]):
             await self.switch_browser("activity")
         elif command_id == "nav.tasks":
             await self.switch_browser("task")
-        elif command_id == "nav.delegates":
-            await self.switch_browser("delegate")
-        elif command_id == "nav.logs":
-            await self.switch_browser("log")
 
         # Theme command
         elif command_id == "theme.select":

@@ -1,6 +1,6 @@
 # emdx
 
-[![Version](https://img.shields.io/badge/version-0.25.0-blue.svg)](https://github.com/arockwell/emdx/releases)
+[![Version](https://img.shields.io/badge/version-0.25.1-blue.svg)](https://github.com/arockwell/emdx/releases)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
@@ -141,6 +141,26 @@ $ emdx find --context "How does auth work?" | claude
 $ emdx find --ask "What did we decide about the API redesign?"
 ```
 
+## Wiki
+
+Auto-generate a wiki from your knowledge base:
+
+```bash
+# Bootstrap: build index, extract entities, discover topics
+$ emdx wiki setup
+
+# Generate articles from topic clusters
+$ emdx wiki generate -c 3
+📝 Generated 47/52 articles ($0.83)
+
+# Search and view wiki articles
+$ emdx wiki search "authentication"
+$ emdx wiki view 42
+
+# Export as a static MkDocs site
+$ emdx wiki export ./wiki-site --build
+```
+
 ## More features
 
 ```bash
@@ -167,6 +187,8 @@ emdx gui                                         # Interactive TUI browser
 | Add a task | `emdx task add "title" --cat FEAT` |
 | See ready tasks | `emdx task ready` |
 | Ask your KB a question | `emdx find --context "question" \| claude` |
+| Generate a wiki | `emdx wiki setup && emdx wiki generate` |
+| Search wiki articles | `emdx wiki search "query"` |
 
 ## Documentation
 

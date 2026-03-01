@@ -2,7 +2,6 @@
 GUI interface for emdx - seamless textual browser
 """
 
-
 import typer
 
 from emdx.utils.output import console

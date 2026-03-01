@@ -23,6 +23,7 @@ from .types import (
     ReadyTask,
     RecentDoc,
     StaleDoc,
+    WikiPrimeStatus,
 )
 
 console = Console()
@@ -36,6 +37,9 @@ def prime(
         False, "--verbose", "-v", help="Include execution guidance, recent docs, stale docs"
     ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output - just ready tasks"),
+    brief: bool = typer.Option(
+        False, "--brief", "-b", help="Compact output: tasks + epics, no git/docs"
+    ),
 ) -> None:
     """
     Output priming context for Claude Code session injection.
@@ -47,6 +51,9 @@ def prime(
     Examples:
         # Basic priming
         emdx prime
+
+        # Compact (tasks + epics only)
+        emdx prime --brief
 
         # With full context (execution guidance, recent docs)
         emdx prime --verbose
@@ -60,9 +67,9 @@ def prime(
     project = get_git_project()
 
     if format == "json":
-        _output_json(project, verbose, quiet)
+        _output_json(project, verbose, quiet, brief)
     else:
-        _output_text(project, verbose, quiet)
+        _output_text(project, verbose, quiet, brief=brief)
 
 
 # ---------------------------------------------------------------------------
@@ -76,16 +83,29 @@ def _output_text(
     quiet: bool,
     markdown: bool = False,
     execution: bool = False,
+    brief: bool = False,
 ) -> None:
-    """Output priming context as text."""
+    """Output priming context as text.
+
+    Modes (in priority order):
+    - quiet: tasks only, no header/epics/git/docs
+    - brief: tasks + epics, no git/docs (ignores verbose)
+    - default: tasks + epics + git context
+    - verbose: default + recent docs, key docs, stale docs
+    """
+    # quiet takes priority over brief
+    if quiet:
+        brief = False
+
     lines = []
 
     # One-line header with project + branch
     if not quiet:
         header = f"● emdx — {project}" if project else "● emdx"
-        branch = _get_current_branch()
-        if branch:
-            header += f" ({branch})"
+        if not brief:
+            branch = _get_current_branch()
+            if branch:
+                header += f" ({branch})"
         lines.append(header)
         lines.append("")
 
@@ -96,7 +116,10 @@ def _output_text(
             lines.append("ACTIVE EPICS:")
             lines.append("")
             for e in epics:
-                lines.append(_format_epic_line(e))
+                if brief:
+                    lines.append(_format_epic_brief(e))
+                else:
+                    lines.append(_format_epic_line(e))
             lines.append("")
 
     # Ready tasks
@@ -106,14 +129,17 @@ def _output_text(
         lines.append("")
         for task in ready_tasks[:15]:
             label = _task_label(task)
-            doc_ref = f" (doc #{task['source_doc_id']})" if task.get("source_doc_id") else ""
-            lines.append(f"  {label}  {task['title']}{doc_ref}")
-            description = task.get("description")
-            if description and verbose:
-                desc = description[:100]
-                if len(description) > 100:
-                    desc += "..."
-                lines.append(f"         {desc}")
+            if brief:
+                lines.append(f"  {label}  {task['title']}")
+            else:
+                doc_ref = f" (doc #{task['source_doc_id']})" if task.get("source_doc_id") else ""
+                lines.append(f"  {label}  {task['title']}{doc_ref}")
+                description = task.get("description")
+                if description and verbose:
+                    desc = description[:100]
+                    if len(description) > 100:
+                        desc += "..."
+                    lines.append(f"         {desc}")
         lines.append("")
     else:
         lines.append("No ready tasks. Create new tasks with 'emdx task add'.")
@@ -129,8 +155,8 @@ def _output_text(
             lines.append(f"  {label}  {in_prog_task['title']}")
         lines.append("")
 
-    # Git context (always shown, not quiet-only)
-    if not quiet:
+    # Git context — skipped in brief mode
+    if not quiet and not brief:
         git_ctx = _get_git_context()
         if git_ctx["branch"] or git_ctx["commits"] or git_ctx["prs"]:
             lines.append("GIT CONTEXT:")
@@ -147,8 +173,19 @@ def _output_text(
                     lines.append(f"    #{pr['number']} {pr['title']} ({pr['headRefName']})")
             lines.append("")
 
-    # Verbose additions
-    if verbose and not quiet:
+    # Wiki status
+    if not quiet:
+        wiki_status = _get_wiki_status()
+        if wiki_status:
+            gen = wiki_status["articles_generated"]
+            total = wiki_status["total_topics"]
+            stale = wiki_status["stale_articles"]
+            stale_note = f" ({stale} stale)" if stale else ""
+            lines.append(f"WIKI: {gen}/{total} articles generated{stale_note}")
+            lines.append("")
+
+    # Verbose additions — skipped in brief mode
+    if verbose and not quiet and not brief:
         # Stale documents needing review
         stale_docs = _get_stale_docs()
         if stale_docs:
@@ -213,6 +250,15 @@ def _format_epic_line(epic: EpicInfo) -> str:
 
     name = epic["title"][:30]
     return f"  {cat:<5}{name:<32}{progress}"
+
+
+def _format_epic_brief(epic: EpicInfo) -> str:
+    """Format an epic as a compact one-liner for brief mode."""
+    done = epic["children_done"]
+    total = epic["child_count"]
+    cat = epic.get("epic_key") or ""
+    prefix = f"{cat}: " if cat else ""
+    return f"  {prefix}{epic['title']} — {done}/{total} done"
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +484,32 @@ def _get_key_docs(limit: int = 5) -> list[KeyDoc]:
 # ---------------------------------------------------------------------------
 
 
+def _get_wiki_status() -> WikiPrimeStatus | None:
+    """Get lightweight wiki status for priming context.
+
+    Returns None if wiki tables don't exist yet.
+    """
+    try:
+        with db.get_connection() as conn:
+            topics = conn.execute(
+                "SELECT COUNT(*) FROM wiki_topics WHERE status != 'skipped'"
+            ).fetchone()
+            articles = conn.execute("SELECT COUNT(*) FROM wiki_articles").fetchone()
+            stale = conn.execute("SELECT COUNT(*) FROM wiki_articles WHERE is_stale = 1").fetchone()
+
+        total_topics = topics[0] if topics else 0
+        if total_topics == 0:
+            return None
+
+        return WikiPrimeStatus(
+            total_topics=total_topics,
+            articles_generated=articles[0] if articles else 0,
+            stale_articles=stale[0] if stale else 0,
+        )
+    except Exception:
+        return None
+
+
 def _get_current_branch() -> str | None:
     """Get the current git branch name, or None if not in a repo."""
     try:
@@ -477,9 +549,18 @@ def _get_execution_methods_json() -> list[ExecutionMethod]:
     ]
 
 
-def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
+def _output_json(
+    project: str | None,
+    verbose: bool,
+    quiet: bool,
+    brief: bool = False,
+) -> None:
     """Output priming context as JSON."""
     import json
+
+    # quiet takes priority over brief
+    if quiet:
+        brief = False
 
     data: PrimeOutput = {
         "project": project,
@@ -487,10 +568,15 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
         "active_epics": _get_active_epics(),
         "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
-        "git_context": _get_git_context(),
+        "wiki_status": _get_wiki_status(),
     }
 
-    if verbose:
+    # Git context — skip in brief mode
+    if not brief:
+        data["git_context"] = _get_git_context()
+
+    # Verbose additions — skip in brief mode
+    if verbose and not brief:
         data["execution_methods"] = _get_execution_methods_json()
         data["recent_docs"] = _get_recent_docs()
         data["key_docs"] = _get_key_docs()
@@ -501,7 +587,7 @@ def _output_json(project: str | None, verbose: bool, quiet: bool) -> None:
                 StaleDoc(
                     id=d["id"],
                     title=d["title"],
-                    level=d["level"].value if hasattr(d["level"], "value") else d["level"],
+                    level=(d["level"].value if hasattr(d["level"], "value") else d["level"]),
                     days_stale=d["days_stale"],
                 )
                 for d in stale_docs

@@ -24,24 +24,11 @@ class TaskDict(TypedDict):
     created_at: str | None
     updated_at: str | None
     completed_at: str | None
-    prompt: str | None
     type: str
-    execution_id: int | None
-    output_doc_id: int | None
     source_doc_id: int | None
     parent_task_id: int | None
-    seq: int | None
-    retry_of: int | None
-    error: str | None
-    tags: str | None
     epic_key: str | None
     epic_seq: int | None
-
-
-class ActiveDelegateTaskDict(TaskDict):
-    child_count: int
-    children_done: int
-    children_active: int
 
 
 class EpicTaskDict(TaskDict):
@@ -96,11 +83,3 @@ class TagSearchResultDict(TypedDict):
     created_at: str | None
     access_count: int
     tags: str
-
-
-class ExecutionStatsDict(TypedDict):
-    total: int
-    recent_24h: int
-    running: int
-    completed: int
-    failed: int

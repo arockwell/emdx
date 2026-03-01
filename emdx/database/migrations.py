@@ -32,10 +32,50 @@ def foreign_keys_disabled(conn: sqlite3.Connection) -> Generator[None, None, Non
         cursor.execute("PRAGMA foreign_keys = ON")
 
 
-def get_schema_version(conn: sqlite3.Connection) -> int:
-    """Get the current schema version."""
-    cursor = conn.cursor()
-    cursor.execute(
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    """Check if a table exists in the database."""
+    cursor = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+        (table_name,),
+    )
+    return cursor.fetchone() is not None
+
+
+def get_applied_migrations(conn: sqlite3.Connection) -> set[str]:
+    """Get set of applied migration versions.
+
+    Reads from schema_migrations (new system) if it exists, falls back to
+    schema_version (legacy) for pre-transition databases.
+    """
+    if _table_exists(conn, "schema_migrations"):
+        cursor = conn.execute("SELECT version FROM schema_migrations")
+        return {row[0] for row in cursor.fetchall()}
+
+    # Legacy fallback: read from schema_version (integer-based)
+    if _table_exists(conn, "schema_version"):
+        cursor = conn.execute("SELECT version FROM schema_version")
+        return {str(row[0]) for row in cursor.fetchall()}
+
+    return set()
+
+
+def record_migration(conn: sqlite3.Connection, version: str) -> None:
+    """Record a migration as applied.
+
+    Writes to schema_migrations if it exists (post-transition), otherwise
+    falls back to schema_version for legacy migrations running before
+    the transition migration creates schema_migrations.
+    """
+    if _table_exists(conn, "schema_migrations"):
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)",
+            (version,),
+        )
+        conn.commit()
+        return
+
+    # Legacy fallback: write to schema_version (integer-based)
+    conn.execute(
         """
         CREATE TABLE IF NOT EXISTS schema_version (
             version INTEGER PRIMARY KEY,
@@ -43,19 +83,30 @@ def get_schema_version(conn: sqlite3.Connection) -> int:
         )
     """
     )
-
-    cursor.execute("SELECT MAX(version) FROM schema_version")
-    result = cursor.fetchone()
-    # Return -1 for completely fresh installations (no version recorded yet)
-    # This ensures migration 0 will run for new installations
-    return result[0] if result[0] is not None else -1
-
-
-def set_schema_version(conn: sqlite3.Connection, version: int) -> None:
-    """Set the schema version."""
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO schema_version (version) VALUES (?)", (version,))
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_version (version) VALUES (?)",
+        (int(version),),
+    )
     conn.commit()
+
+
+def get_schema_version(conn: sqlite3.Connection) -> int:
+    """Get the current schema version (legacy, deprecated).
+
+    Kept for backward compatibility with tests. New code should use
+    get_applied_migrations() instead.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY,
+            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    )
+    cursor = conn.execute("SELECT MAX(version) FROM schema_version")
+    result = cursor.fetchone()
+    return result[0] if result[0] is not None else -1
 
 
 def migration_000_create_documents_table(conn: sqlite3.Connection) -> None:
@@ -2689,91 +2740,306 @@ def migration_052_add_wiki_editorial_prompt(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_053_remove_delegate_system(conn: sqlite3.Connection) -> None:
+    """Remove the delegate execution system.
+
+    The delegate system (emdx delegate) has been replaced by native Claude Code
+    Agent tool + SubagentStop hooks. This migration:
+
+    1. Drops the executions table and related tables
+    2. Recreates the tasks table without delegate-specific columns:
+       prompt, execution_id, output_doc_id, seq, retry_of, error, tags
+    3. Keeps task organization columns: epic_key, epic_seq, type,
+       source_doc_id, parent_task_id
+    """
+    cursor = conn.cursor()
+
+    with foreign_keys_disabled(conn):
+        # 1. Drop execution-related tables
+        cursor.execute("DROP TABLE IF EXISTS task_executions")
+        cursor.execute("DROP TABLE IF EXISTS executions")
+
+        # 2. Recreate tasks table without delegate columns
+        cursor.execute("DROP TABLE IF EXISTS tasks_new")
+        cursor.execute("""
+            CREATE TABLE tasks_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT,
+                status TEXT DEFAULT 'open',
+                priority INTEGER DEFAULT 3,
+                gameplan_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+                project TEXT,
+                current_step TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                type TEXT DEFAULT 'single',
+                source_doc_id INTEGER REFERENCES documents(id),
+                parent_task_id INTEGER REFERENCES tasks_new(id),
+                epic_key TEXT REFERENCES categories(key),
+                epic_seq INTEGER
+            )
+        """)
+
+        # Copy data from old table (only columns that still exist)
+        cursor.execute("""
+            INSERT INTO tasks_new (
+                id, title, description, status, priority, gameplan_id,
+                project, current_step, created_at, updated_at, completed_at,
+                type, source_doc_id, parent_task_id, epic_key, epic_seq
+            )
+            SELECT
+                id, title, description, status, priority, gameplan_id,
+                project, current_step, created_at, updated_at, completed_at,
+                type, source_doc_id, parent_task_id, epic_key, epic_seq
+            FROM tasks
+        """)
+
+        cursor.execute("DROP TABLE tasks")
+        cursor.execute("ALTER TABLE tasks_new RENAME TO tasks")
+
+        # Recreate task_deps (references tasks)
+        cursor.execute("DROP TABLE IF EXISTS task_deps_new")
+        cursor.execute("""
+            CREATE TABLE task_deps_new (
+                task_id INTEGER NOT NULL,
+                depends_on INTEGER NOT NULL,
+                PRIMARY KEY (task_id, depends_on),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (depends_on) REFERENCES tasks(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO task_deps_new SELECT * FROM task_deps
+        """)
+        cursor.execute("DROP TABLE task_deps")
+        cursor.execute("ALTER TABLE task_deps_new RENAME TO task_deps")
+
+        # Recreate task_log (references tasks)
+        cursor.execute("DROP TABLE IF EXISTS task_log_new")
+        cursor.execute("""
+            CREATE TABLE task_log_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                message TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO task_log_new SELECT * FROM task_log
+        """)
+        cursor.execute("DROP TABLE task_log")
+        cursor.execute("ALTER TABLE task_log_new RENAME TO task_log")
+
+    # Recreate indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_gameplan ON tasks(gameplan_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_epic_key ON tasks(epic_key)")
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_epic_seq
+        ON tasks(epic_key, epic_seq)
+        WHERE epic_key IS NOT NULL AND epic_seq IS NOT NULL
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_log_task ON task_log(task_id)")
+
+    conn.commit()
+
+
+def migration_054_set_based_migration_tracking(conn: sqlite3.Connection) -> None:
+    """Transition from sequential integer versioning to set-based migration tracking.
+
+    Creates schema_migrations table with TEXT keys and copies all applied versions
+    from the legacy schema_version table. This is the LAST sequential integer migration.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+        SELECT CAST(version AS TEXT), applied_at FROM schema_version
+    """)
+    conn.commit()
+
+
+def migration_055_add_knowledge_events(conn: sqlite3.Connection) -> None:
+    """Add knowledge_events table for tracking KB interactions."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            doc_id INTEGER,
+            query TEXT,
+            session_id TEXT,
+            metadata_json TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_type_created "
+        "ON knowledge_events(event_type, created_at)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_doc ON knowledge_events(doc_id)")
+    conn.commit()
+
+
+def migration_056_add_document_versions(conn: sqlite3.Connection) -> None:
+    """Add document_versions table for content history tracking."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            version_number INTEGER NOT NULL,
+            title TEXT,
+            content TEXT NOT NULL,
+            content_hash TEXT,
+            char_delta INTEGER,
+            change_source TEXT DEFAULT 'manual',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_doc_ver "
+        "ON document_versions(document_id, version_number)"
+    )
+    conn.commit()
+
+
+def migration_057_fix_fts5_update_trigger(conn: sqlite3.Connection) -> None:
+    """Fix FTS5 update trigger for external content table.
+
+    The original documents_au trigger used UPDATE on the FTS table, which is
+    incorrect for external-content FTS5 tables (content=documents).  External
+    content tables require a delete+insert pattern to keep the inverted index
+    consistent.  The old UPDATE pattern corrupts the FTS index under certain
+    connection sequences (e.g. plain sqlite3.connect for migrations followed
+    by detect_types connections for data).
+    """
+    cursor = conn.cursor()
+    cursor.execute("DROP TRIGGER IF EXISTS documents_au")
+    cursor.execute(
+        """
+        CREATE TRIGGER documents_au AFTER UPDATE ON documents BEGIN
+            INSERT INTO documents_fts(documents_fts, rowid, title, content, project)
+            VALUES ('delete', old.id, old.title, old.content, old.project);
+            INSERT INTO documents_fts(rowid, title, content, project)
+            VALUES (new.id, new.title, new.content, new.project);
+        END
+        """
+    )
+    # Rebuild FTS index to fix any existing corruption from the old trigger
+    cursor.execute("INSERT INTO documents_fts(documents_fts) VALUES('rebuild')")
+    conn.commit()
+
+
 # List of all migrations in order
-MIGRATIONS: list[tuple[int, str, Callable]] = [
-    (0, "Create documents table", migration_000_create_documents_table),
-    (1, "Add tags system", migration_001_add_tags),
-    (2, "Add executions tracking", migration_002_add_executions),
-    (3, "Add document relationships", migration_003_add_document_relationships),
-    (4, "Add execution PID tracking", migration_004_add_execution_pid),
-    (5, "Add execution heartbeat tracking", migration_005_add_execution_heartbeat),
-    (6, "Convert to numeric execution IDs", migration_006_numeric_execution_ids),
-    (7, "Add agent system tables", migration_007_add_agent_tables),
-    (8, "Add workflow orchestration tables", migration_008_add_workflow_tables),
-    (9, "Add tasks system", migration_009_add_tasks),
-    (10, "Add task executions join table", migration_010_add_task_executions),
-    (11, "Add dynamic workflow mode", migration_011_add_dynamic_workflow_mode),
-    (12, "Add Google Docs exports", migration_012_add_gdocs),
-    (13, "Make execution doc_id nullable", migration_013_make_execution_doc_id_nullable),
-    (14, "Fix individual_runs FK to executions", migration_014_fix_individual_runs_fk),
-    (15, "Add export profiles", migration_015_add_export_profiles),
-    (16, "Add input/output tokens to individual runs", migration_016_add_input_output_tokens),
-    (17, "Add cost_usd to individual runs", migration_017_add_cost_usd),
-    (18, "Add document hierarchy columns", migration_018_add_document_hierarchy),
-    (19, "Add document sources bridge table", migration_019_add_document_sources),
-    (20, "Add synthesis cost tracking", migration_020_add_synthesis_cost),
-    (21, "Add workflow presets", migration_021_add_workflow_presets),
-    (22, "Add document groups system", migration_022_add_document_groups),
-    (23, "Deactivate legacy builtin workflows", migration_023_deactivate_legacy_workflows),
-    (24, "Remove agent system tables", migration_024_remove_agent_tables),
-    (25, "Add standalone presets", migration_025_add_standalone_presets),
-    (26, "Add embeddings for semantic search", migration_026_add_embeddings),
-    (27, "Add synthesizing status to stage runs", migration_027_add_synthesizing_status),
-    (28, "Add document stage for cascade", migration_028_add_document_stage),
-    (29, "Add document PR URL for cascade", migration_029_add_document_pr_url),
-    (30, "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
-    (31, "Add cascade runs tracking", migration_031_add_cascade_runs),
-    (32, "Extract cascade metadata to dedicated table", migration_032_extract_cascade_metadata),
-    (33, "Add mail config and read receipts", migration_033_add_mail_config),
-    (34, "Add delegate activity tracking", migration_034_delegate_activity_tracking),
-    (35, "Remove workflow system tables", migration_035_remove_workflow_tables),
-    (36, "Add execution metrics and task linkage", migration_036_add_execution_metrics),
-    (37, "Add ON DELETE CASCADE to foreign keys", migration_037_add_cascade_delete_fks),
-    (38, "Add LOWER(title) index for case-insensitive search", migration_038_add_title_lower_index),
-    (39, "Add categories and epic fields to tasks", migration_039_add_categories_and_epic_fields),
-    (40, "Add chunk embeddings for semantic search", migration_040_add_chunk_embeddings),
-    (41, "Add output_text to executions", migration_041_add_execution_output_text),
-    (42, "Convert emoji tags to text", migration_042_convert_emoji_tags_to_text),
-    (43, "Add document links table", migration_043_add_document_links),
-    (44, "Add document entities table", migration_044_add_document_entities),
-    (45, "Add wiki system tables", migration_045_add_wiki_tables),
-    (46, "Add doc_type column to documents", migration_046_add_doc_type),
-    (47, "Add wiki runs tracking", migration_047_add_wiki_runs),
-    (48, "Add previous_content to wiki_articles", migration_048_add_wiki_previous_content),
-    (49, "Add step-level timing to wiki articles", migration_049_add_wiki_article_timing),
-    (50, "Add wiki article quality rating", migration_050_add_wiki_article_rating),
-    (51, "Add per-topic model override for wiki", migration_051_add_wiki_topic_model_override),
-    (52, "Add editorial prompt to wiki topics", migration_052_add_wiki_editorial_prompt),
+MIGRATIONS: list[tuple[str, str, Callable]] = [
+    ("0", "Create documents table", migration_000_create_documents_table),
+    ("1", "Add tags system", migration_001_add_tags),
+    ("2", "Add executions tracking", migration_002_add_executions),
+    ("3", "Add document relationships", migration_003_add_document_relationships),
+    ("4", "Add execution PID tracking", migration_004_add_execution_pid),
+    ("5", "Add execution heartbeat tracking", migration_005_add_execution_heartbeat),
+    ("6", "Convert to numeric execution IDs", migration_006_numeric_execution_ids),
+    ("7", "Add agent system tables", migration_007_add_agent_tables),
+    ("8", "Add workflow orchestration tables", migration_008_add_workflow_tables),
+    ("9", "Add tasks system", migration_009_add_tasks),
+    ("10", "Add task executions join table", migration_010_add_task_executions),
+    ("11", "Add dynamic workflow mode", migration_011_add_dynamic_workflow_mode),
+    ("12", "Add Google Docs exports", migration_012_add_gdocs),
+    ("13", "Make execution doc_id nullable", migration_013_make_execution_doc_id_nullable),
+    ("14", "Fix individual_runs FK to executions", migration_014_fix_individual_runs_fk),
+    ("15", "Add export profiles", migration_015_add_export_profiles),
+    ("16", "Add input/output tokens to individual runs", migration_016_add_input_output_tokens),
+    ("17", "Add cost_usd to individual runs", migration_017_add_cost_usd),
+    ("18", "Add document hierarchy columns", migration_018_add_document_hierarchy),
+    ("19", "Add document sources bridge table", migration_019_add_document_sources),
+    ("20", "Add synthesis cost tracking", migration_020_add_synthesis_cost),
+    ("21", "Add workflow presets", migration_021_add_workflow_presets),
+    ("22", "Add document groups system", migration_022_add_document_groups),
+    ("23", "Deactivate legacy builtin workflows", migration_023_deactivate_legacy_workflows),
+    ("24", "Remove agent system tables", migration_024_remove_agent_tables),
+    ("25", "Add standalone presets", migration_025_add_standalone_presets),
+    ("26", "Add embeddings for semantic search", migration_026_add_embeddings),
+    ("27", "Add synthesizing status to stage runs", migration_027_add_synthesizing_status),
+    ("28", "Add document stage for cascade", migration_028_add_document_stage),
+    ("29", "Add document PR URL for cascade", migration_029_add_document_pr_url),
+    ("30", "Remove unused tables and dead code", migration_030_cleanup_unused_tables),
+    ("31", "Add cascade runs tracking", migration_031_add_cascade_runs),
+    ("32", "Extract cascade metadata to dedicated table", migration_032_extract_cascade_metadata),
+    ("33", "Add mail config and read receipts", migration_033_add_mail_config),
+    ("34", "Add delegate activity tracking", migration_034_delegate_activity_tracking),
+    ("35", "Remove workflow system tables", migration_035_remove_workflow_tables),
+    ("36", "Add execution metrics and task linkage", migration_036_add_execution_metrics),
+    ("37", "Add ON DELETE CASCADE to foreign keys", migration_037_add_cascade_delete_fks),
+    (
+        "38",
+        "Add LOWER(title) index for case-insensitive search",
+        migration_038_add_title_lower_index,
+    ),
+    ("39", "Add categories and epic fields to tasks", migration_039_add_categories_and_epic_fields),
+    ("40", "Add chunk embeddings for semantic search", migration_040_add_chunk_embeddings),
+    ("41", "Add output_text to executions", migration_041_add_execution_output_text),
+    ("42", "Convert emoji tags to text", migration_042_convert_emoji_tags_to_text),
+    ("43", "Add document links table", migration_043_add_document_links),
+    ("44", "Add document entities table", migration_044_add_document_entities),
+    ("45", "Add wiki system tables", migration_045_add_wiki_tables),
+    ("46", "Add doc_type column to documents", migration_046_add_doc_type),
+    ("47", "Add wiki runs tracking", migration_047_add_wiki_runs),
+    ("48", "Add previous_content to wiki_articles", migration_048_add_wiki_previous_content),
+    ("49", "Add step-level timing to wiki articles", migration_049_add_wiki_article_timing),
+    ("50", "Add wiki article quality rating", migration_050_add_wiki_article_rating),
+    ("51", "Add per-topic model override for wiki", migration_051_add_wiki_topic_model_override),
+    ("52", "Add editorial prompt to wiki topics", migration_052_add_wiki_editorial_prompt),
+    ("53", "Remove delegate execution system", migration_053_remove_delegate_system),
+    ("54", "Set-based migration tracking", migration_054_set_based_migration_tracking),
+    ("55", "Add knowledge events table", migration_055_add_knowledge_events),
+    ("56", "Add document versions table", migration_056_add_document_versions),
+    ("57", "Fix FTS5 update trigger for external content", migration_057_fix_fts5_update_trigger),
 ]
 
 
 def run_migrations(db_path: str | Path | None = None) -> None:
-    """Run all pending migrations."""
+    """Run all pending migrations.
+
+    Uses set-based tracking: each migration is identified by a string version
+    and only runs if it hasn't been applied yet. This prevents collisions when
+    branches diverge (unlike sequential integer max-based tracking).
+    """
     if db_path is None:
         db_path = get_db_path()
-    # Don't return early - we need to run migrations even for new databases
-    # The database file will be created when we connect to it
 
     conn = None
     try:
         conn = sqlite3.connect(db_path)
-        # Enable foreign keys for this connection (migrations use foreign_keys_disabled()
-        # context manager when they need to temporarily disable them for table recreation)
         conn.execute("PRAGMA foreign_keys = ON")
 
-        current_version = get_schema_version(conn)
+        applied = get_applied_migrations(conn)
 
         for version, description, migration_func in MIGRATIONS:
-            if version > current_version:
+            if version not in applied:
                 print(f"Running migration {version}: {description}")
                 try:
                     migration_func(conn)
                 except Exception as e:
-                    # Rollback any uncommitted changes from the failed migration
                     conn.rollback()
                     raise RuntimeError(f"Migration {version} ({description}) failed: {e}") from e
-                set_schema_version(conn, version)
-                print(f"✅ Migration {version} completed")
+                record_migration(conn, version)
+                print(f"Migration {version} completed")
 
     finally:
         if conn is not None:

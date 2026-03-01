@@ -1,4 +1,5 @@
 """Event-driven log file streaming with file watching."""
+
 from __future__ import annotations
 
 import logging
@@ -13,6 +14,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 class LogStreamSubscriber(ABC):
     """Interface for components that consume log updates."""
 
@@ -25,6 +27,7 @@ class LogStreamSubscriber(ABC):
     def on_log_error(self, error: Exception) -> None:
         """Called when log reading encounters an error."""
         pass
+
 
 class LogStream:
     """Event-driven log file streaming with file watching."""
@@ -64,7 +67,7 @@ class LogStream:
             return ""
 
         try:
-            with open(self.path, encoding='utf-8', errors='replace') as f:
+            with open(self.path, encoding="utf-8", errors="replace") as f:
                 content = f.read()
                 self.position = f.tell()
                 return content
@@ -76,6 +79,7 @@ class LogStream:
         """Start file system watching."""
         try:
             from .file_watcher import FileWatcher
+
             self.watcher = FileWatcher(self.path, self._on_file_changed)
             self.watcher.start()
             self.is_watching = True
@@ -126,7 +130,7 @@ class LogStream:
             return ""
 
         try:
-            with open(self.path, encoding='utf-8', errors='replace') as f:
+            with open(self.path, encoding="utf-8", errors="replace") as f:
                 f.seek(self.position)
                 new_content = f.read()
                 self.position = f.tell()
