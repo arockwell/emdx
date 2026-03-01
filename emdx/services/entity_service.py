@@ -5,16 +5,21 @@ technical terms, proper nouns) from documents using heuristics, then
 cross-references them to create links between documents that share
 entities — even if their titles don't match.
 
-Zero cost: no AI, no embeddings. Uses markdown structure and text
-patterns to identify entities.
+Supports two extraction modes:
+- Heuristic (default): Zero cost, uses markdown structure and text patterns.
+- LLM (opt-in via --llm): Uses Claude for richer entity types and
+  relationship extraction.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import re
+import subprocess
 from dataclasses import dataclass, field
+from typing import TypedDict
 
 from ..database import db, document_links
 
@@ -399,6 +404,17 @@ def _get_document_content(doc_id: int) -> tuple[str, str] | None:
         return (row[0], row[1]) if row else None
 
 
+def _get_document_project(doc_id: int) -> str | None:
+    """Fetch document project by ID."""
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT project FROM documents WHERE id = ? AND is_deleted = 0",
+            (doc_id,),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+
 def _get_entities_for_doc(doc_id: int) -> dict[str, float]:
     """Get entity → confidence mapping for a document."""
     with db.get_connection() as conn:
@@ -426,14 +442,35 @@ def _get_total_doc_count() -> int:
         return int(row[0]) if row else 0
 
 
-def _find_docs_with_entity(entity: str, exclude_doc_id: int) -> list[int]:
-    """Find all documents that have a specific entity."""
+def _find_docs_with_entity(
+    entity: str,
+    exclude_doc_id: int,
+    project: str | None = None,
+) -> list[int]:
+    """Find all documents that have a specific entity.
+
+    Args:
+        entity: The entity text to search for.
+        exclude_doc_id: Document ID to exclude from results.
+        project: If set, only return docs in this project.
+    """
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT DISTINCT document_id FROM document_entities "
-            "WHERE entity = ? AND document_id != ?",
-            (entity, exclude_doc_id),
-        )
+        if project is not None:
+            cursor = conn.execute(
+                "SELECT DISTINCT de.document_id "
+                "FROM document_entities de "
+                "JOIN documents d ON de.document_id = d.id "
+                "WHERE de.entity = ? AND de.document_id != ? "
+                "AND d.project = ? AND d.is_deleted = 0",
+                (entity, exclude_doc_id, project),
+            )
+        else:
+            cursor = conn.execute(
+                "SELECT DISTINCT document_id "
+                "FROM document_entities "
+                "WHERE entity = ? AND document_id != ?",
+                (entity, exclude_doc_id),
+            )
         return [row[0] for row in cursor.fetchall()]
 
 
@@ -464,6 +501,7 @@ def entity_match_wikify(
     doc_id: int,
     entity_doc_freq: dict[str, int] | None = None,
     total_docs: int | None = None,
+    cross_project: bool = False,
 ) -> EntityWikifyResult:
     """Cross-reference a document's entities to find and link related docs.
 
@@ -475,6 +513,8 @@ def entity_match_wikify(
         doc_id: The document to wikify via entity matching.
         entity_doc_freq: Pre-computed entity doc frequencies (for batch).
         total_docs: Pre-computed total doc count (for batch).
+        cross_project: If True, match entities across all projects.
+            If False, only match within the document's project.
 
     Returns:
         EntityWikifyResult with details of entities and links.
@@ -491,6 +531,11 @@ def entity_match_wikify(
 
     if not entities:
         return EntityWikifyResult(doc_id=doc_id, entities_extracted=0, links_created=0)
+
+    # Determine project scope
+    scope_project: str | None = None
+    if not cross_project:
+        scope_project = _get_document_project(doc_id)
 
     # Lazy-load frequencies if not provided (single-doc mode)
     if entity_doc_freq is None:
@@ -513,7 +558,7 @@ def entity_match_wikify(
         df = entity_doc_freq.get(entity.normalized, 1)
         if df > max_docs:
             continue  # Too common to be informative
-        matching_doc_ids = _find_docs_with_entity(entity.normalized, doc_id)
+        matching_doc_ids = _find_docs_with_entity(entity.normalized, doc_id, project=scope_project)
         for mid in matching_doc_ids:
             if mid not in existing:
                 if mid not in target_shared:
@@ -585,14 +630,16 @@ def entity_match_wikify(
 def entity_wikify_all(
     *,
     rebuild: bool = False,
+    cross_project: bool = False,
 ) -> tuple[int, int, int]:
-    """Backfill entity extraction and cross-referencing for all documents.
+    """Backfill entity extraction and cross-referencing for all docs.
 
     Args:
-        rebuild: If True, delete all entity_match links before regenerating.
+        rebuild: If True, delete all entity_match links first.
+        cross_project: If True, match entities across all projects.
 
     Returns:
-        Tuple of (total_entities_extracted, total_links_created, docs_processed).
+        Tuple of (total_entities, total_links, docs_processed).
     """
     if rebuild:
         with db.get_connection() as conn:
@@ -616,6 +663,7 @@ def entity_wikify_all(
             did,
             entity_doc_freq=entity_doc_freq,
             total_docs=total_docs,
+            cross_project=cross_project,
         )
         total_entities += result.entities_extracted
         total_links += result.links_created
@@ -700,3 +748,331 @@ def cleanup_noisy_entities() -> tuple[int, int]:
             re_extracted += 1
 
     return total_deleted, re_extracted
+
+
+# ── LLM-powered entity extraction ────────────────────────────────────
+
+
+# LLM entity types — richer than heuristic types
+LLM_ENTITY_TYPES = frozenset(
+    {
+        "person",
+        "organization",
+        "technology",
+        "concept",
+        "location",
+        "event",
+        "project",
+        "tool",
+        "api",
+        "library",
+    }
+)
+
+LLM_EXTRACTION_TIMEOUT = 120  # seconds
+
+# Model name mapping for CLI convenience
+MODEL_MAP: dict[str, str] = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-5-20250929",
+    "opus": "claude-opus-4-6",
+}
+
+# Pricing per 1M tokens
+MODEL_PRICING: dict[str, tuple[float, float]] = {
+    "haiku": (0.25, 1.25),
+    "sonnet": (3.0, 15.0),
+    "opus": (15.0, 75.0),
+}
+
+
+class LLMEntityDict(TypedDict):
+    """An entity extracted by the LLM."""
+
+    name: str
+    entity_type: str
+    confidence: float
+
+
+class LLMRelationshipDict(TypedDict):
+    """A relationship between entities extracted by the LLM."""
+
+    source: str
+    target: str
+    relationship: str
+    confidence: float
+
+
+class LLMExtractionResult(TypedDict):
+    """Full result from LLM entity extraction."""
+
+    entities: list[LLMEntityDict]
+    relationships: list[LLMRelationshipDict]
+
+
+@dataclass
+class LLMExtractionReport:
+    """Report from LLM entity extraction for a single document."""
+
+    doc_id: int
+    entities_extracted: int
+    relationships_extracted: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
+    model: str
+
+
+ENTITY_EXTRACTION_PROMPT = """\
+Extract named entities and relationships from this document.
+
+Return a JSON object with two keys:
+- "entities": array of objects with "name", "entity_type", "confidence"
+- "relationships": array of objects with "source", "target", \
+"relationship", "confidence"
+
+Valid entity_type values: person, organization, technology, concept, \
+location, event, project, tool, api, library.
+
+Rules:
+- confidence should be 0.0–1.0
+- Only extract meaningful, specific entities (skip generic words)
+- Relationship "source" and "target" must match entity names exactly
+- Relationship types should be verb phrases like "uses", "depends-on", \
+"is-part-of", "created-by", "works-at"
+- Return ONLY the JSON object, no markdown fences or explanation
+
+Example output:
+{"entities": [{"name": "Redis", "entity_type": "technology", \
+"confidence": 0.95}], "relationships": [{"source": "Django", \
+"target": "Redis", "relationship": "uses", "confidence": 0.8}]}\
+"""
+
+
+def _resolve_model(model: str | None) -> str:
+    """Resolve a model shorthand to a full model ID."""
+    if model is None:
+        return MODEL_MAP["haiku"]
+    return MODEL_MAP.get(model, model)
+
+
+def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Estimate cost in USD for a given model and token counts."""
+    for key, (inp, out) in MODEL_PRICING.items():
+        if key in model:
+            return (input_tokens / 1_000_000) * inp + (output_tokens / 1_000_000) * out
+    # Default to sonnet pricing
+    return (input_tokens / 1_000_000) * 3.0 + (output_tokens / 1_000_000) * 15.0
+
+
+def _call_claude_for_entities(
+    content: str,
+    title: str,
+    model: str,
+) -> tuple[LLMExtractionResult, int, int]:
+    """Call Claude CLI to extract entities from document content.
+
+    Returns (parsed_result, input_tokens, output_tokens).
+    """
+    # Truncate very long content to stay within context limits
+    max_chars = 30_000
+    if len(content) > max_chars:
+        content = content[:max_chars] + "\n\n[... truncated ...]"
+
+    user_message = f"Document title: {title}\n\nDocument content:\n{content}"
+    prompt = f"<system>\n{ENTITY_EXTRACTION_PROMPT}\n</system>\n\n{user_message}"
+
+    cmd = ["claude", "--print", prompt, "--model", model]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=LLM_EXTRACTION_TIMEOUT,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Entity extraction timed out after {LLM_EXTRACTION_TIMEOUT}s") from e
+
+    if result.returncode != 0:
+        error_msg = result.stderr.strip() or f"Exit code {result.returncode}"
+        raise RuntimeError(f"Entity extraction failed: {error_msg}")
+
+    raw_output = result.stdout.strip()
+
+    # Estimate tokens from character counts (~4 chars per token)
+    input_tokens = (len(prompt)) // 4
+    output_tokens = len(raw_output) // 4
+
+    # Parse JSON from output — strip markdown fences if present
+    json_str = raw_output
+    if json_str.startswith("```"):
+        lines = json_str.split("\n")
+        # Remove first and last lines (fences)
+        lines = [ln for ln in lines if not ln.strip().startswith("```")]
+        json_str = "\n".join(lines)
+
+    try:
+        parsed: LLMExtractionResult = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.warning("Failed to parse LLM entity output: %s", e)
+        parsed = {"entities": [], "relationships": []}
+
+    # Validate structure
+    if "entities" not in parsed:
+        parsed["entities"] = []
+    if "relationships" not in parsed:
+        parsed["relationships"] = []
+
+    return parsed, input_tokens, output_tokens
+
+
+def extract_entities_llm(
+    content: str,
+    title: str,
+    doc_id: int,
+    model: str | None = None,
+) -> LLMExtractionReport:
+    """Extract entities from a document using Claude LLM.
+
+    This is the opt-in LLM-powered alternative to heuristic extraction.
+    Uses Claude CLI (--print mode) for structured entity extraction.
+
+    Args:
+        content: Document content to extract from.
+        title: Document title.
+        doc_id: Document ID for saving entities.
+        model: Model shorthand ("haiku", "sonnet", "opus") or full ID.
+
+    Returns:
+        LLMExtractionReport with extraction details and token usage.
+    """
+    resolved_model = _resolve_model(model)
+    parsed, input_tokens, output_tokens = _call_claude_for_entities(content, title, resolved_model)
+
+    cost = _estimate_cost(resolved_model, input_tokens, output_tokens)
+
+    # Convert LLM entities to ExtractedEntity and save
+    entities: list[ExtractedEntity] = []
+    for ent in parsed["entities"]:
+        name = ent.get("name", "").strip()
+        etype = ent.get("entity_type", "concept")
+        conf = float(ent.get("confidence", 0.8))
+
+        if not name or len(name) < MIN_ENTITY_LENGTH:
+            continue
+
+        # Validate entity type
+        if etype not in LLM_ENTITY_TYPES:
+            etype = "concept"
+
+        normalized = _normalize_entity(name)
+        if normalized in STOPWORD_ENTITIES:
+            continue
+
+        entities.append(
+            ExtractedEntity(
+                text=name,
+                normalized=normalized,
+                entity_type=etype,
+                confidence=conf,
+            )
+        )
+
+    saved = _save_entities(doc_id, entities)
+
+    # Save relationships
+    relationships_saved = _save_relationships(doc_id, parsed.get("relationships", []))
+
+    return LLMExtractionReport(
+        doc_id=doc_id,
+        entities_extracted=saved,
+        relationships_extracted=relationships_saved,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,
+        model=resolved_model,
+    )
+
+
+def _save_relationships(
+    doc_id: int,
+    relationships: list[LLMRelationshipDict],
+) -> int:
+    """Save LLM-extracted relationships to entity_relationships table.
+
+    Looks up entity IDs from the document_entities table by matching
+    the normalized entity name for this document.
+
+    Returns count of relationships saved.
+    """
+    if not relationships:
+        return 0
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+
+        # Build entity name → id map for this document
+        rows = cursor.execute(
+            "SELECT id, entity FROM document_entities WHERE document_id = ?",
+            (doc_id,),
+        ).fetchall()
+        entity_map: dict[str, int] = {row[1]: row[0] for row in rows}
+
+        saved = 0
+        for rel in relationships:
+            source_name = _normalize_entity(rel.get("source", ""))
+            target_name = _normalize_entity(rel.get("target", ""))
+            rel_type = rel.get("relationship", "related-to")
+            confidence = float(rel.get("confidence", 0.5))
+
+            source_id = entity_map.get(source_name)
+            target_id = entity_map.get(target_name)
+
+            if source_id is None or target_id is None:
+                continue
+
+            try:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO entity_relationships "
+                    "(source_entity_id, target_entity_id, "
+                    "relationship_type, confidence) "
+                    "VALUES (?, ?, ?, ?)",
+                    (
+                        source_id,
+                        target_id,
+                        rel_type,
+                        confidence,
+                    ),
+                )
+                if cursor.rowcount > 0:
+                    saved += 1
+            except Exception:
+                logger.debug(
+                    "Failed to save relationship %s -> %s",
+                    source_name,
+                    target_name,
+                )
+
+        conn.commit()
+
+    return saved
+
+
+def extract_and_save_entities_llm(
+    doc_id: int,
+    model: str | None = None,
+) -> LLMExtractionReport | None:
+    """Extract entities from a document using LLM and save them.
+
+    Convenience wrapper that fetches document content, calls the LLM,
+    and saves results.
+
+    Returns LLMExtractionReport or None if document not found.
+    """
+    doc = _get_document_content(doc_id)
+    if doc is None:
+        return None
+
+    title, content = doc
+    return extract_entities_llm(content, title, doc_id, model=model)
