@@ -15,7 +15,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "Explore|general-purpose",
+        "matcher": "Explore|general-purpose|Plan",
         "hooks": [
           {
             "type": "command",
