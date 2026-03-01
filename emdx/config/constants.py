@@ -45,6 +45,19 @@ DEFAULT_TASK_PRIORITY = 3  # Default priority for new tasks (1-5 scale)
 # BACKUP CONFIGURATION
 # =============================================================================
 
+# =============================================================================
+# LINKING DEFAULTS
+# =============================================================================
+
+# Whether to allow auto-linking across projects by default.
+# When False (default), title-match and entity-match wikification
+# only link documents within the same project.
+DEFAULT_CROSS_PROJECT_LINKING = False
+
+# =============================================================================
+# BACKUP CONFIGURATION
+# =============================================================================
+
 EMDX_BACKUP_DIR = EMDX_CONFIG_DIR / "backups"
 # Logarithmic retention tiers (days)
 BACKUP_DAILY_DAYS = 7  # Keep all from last 7 days

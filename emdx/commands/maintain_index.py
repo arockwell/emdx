@@ -207,6 +207,11 @@ def wikify_command(
     doc_id: int | None = typer.Argument(None, help="Document ID to wikify"),
     all_docs: bool = typer.Option(False, "--all", help="Wikify all documents"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show matches without creating links"),
+    cross_project: bool = typer.Option(
+        False,
+        "--cross-project",
+        help="Match across all projects (default: same project only)",
+    ),
 ) -> None:
     """Create title-match links between documents (auto-wikification).
 
@@ -217,7 +222,7 @@ def wikify_command(
         emdx maintain wikify 42                # Wikify a single document
         emdx maintain wikify --all             # Backfill all documents
         emdx maintain wikify 42 --dry-run      # Preview matches
-        emdx maintain wikify --all --dry-run   # Preview all matches
+        emdx maintain wikify --all --cross-project  # Cross-project
     """
     from ..services.wikify_service import title_match_wikify, wikify_all
 
@@ -228,7 +233,7 @@ def wikify_command(
             console=console,
         ) as progress:
             task = progress.add_task("Wikifying all documents...", total=None)
-            total_created, docs_processed = wikify_all(dry_run=dry_run)
+            total_created, docs_processed = wikify_all(dry_run=dry_run, cross_project=cross_project)
             progress.update(task, completed=True)
 
         if dry_run:
@@ -247,7 +252,7 @@ def wikify_command(
         console.print("[red]Error: provide a document ID or use --all[/red]")
         raise typer.Exit(1)
 
-    result = title_match_wikify(doc_id, dry_run=dry_run)
+    result = title_match_wikify(doc_id, dry_run=dry_run, cross_project=cross_project)
 
     if dry_run:
         if result.dry_run_matches:
@@ -279,11 +284,140 @@ def wikify_command(
         console.print(msg)
 
 
+def _entities_llm(
+    *,
+    doc_id: int | None,
+    all_docs: bool,
+    model: str,
+    json_output: bool,
+) -> None:
+    """Handle LLM-powered entity extraction (--llm flag)."""
+    from ..services.entity_service import extract_and_save_entities_llm
+
+    if doc_id is None and not all_docs:
+        if json_output:
+            print(json.dumps({"error": "Provide a document ID or use --all"}))
+        else:
+            console.print("[red]Error: provide a document ID or use --all[/red]")
+        raise typer.Exit(1)
+
+    if all_docs:
+        from ..database import db
+
+        with db.get_connection() as conn:
+            cursor = conn.execute("SELECT id FROM documents WHERE is_deleted = 0")
+            doc_ids_list = [row[0] for row in cursor.fetchall()]
+
+        total_entities = 0
+        total_relationships = 0
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_cost = 0.0
+        docs_processed = 0
+        used_model = ""
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            disable=json_output,
+        ) as progress:
+            task = progress.add_task("Extracting entities with LLM...", total=None)
+            for did in doc_ids_list:
+                report = extract_and_save_entities_llm(did, model=model)
+                if report is not None:
+                    total_entities += report.entities_extracted
+                    total_relationships += report.relationships_extracted
+                    total_input_tokens += report.input_tokens
+                    total_output_tokens += report.output_tokens
+                    total_cost += report.cost_usd
+                    used_model = report.model
+                    docs_processed += 1
+            progress.update(task, completed=True)
+
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "action": "llm_extract",
+                        "entities_extracted": total_entities,
+                        "relationships_extracted": total_relationships,
+                        "docs_processed": docs_processed,
+                        "input_tokens": total_input_tokens,
+                        "output_tokens": total_output_tokens,
+                        "cost_usd": round(total_cost, 4),
+                        "model": used_model,
+                    }
+                )
+            )
+        else:
+            console.print(
+                f"[green]Extracted {total_entities} entities, "
+                f"{total_relationships} relationships "
+                f"from {docs_processed} documents[/green]"
+            )
+            console.print(
+                f"[dim]Tokens: {total_input_tokens:,} in / "
+                f"{total_output_tokens:,} out | "
+                f"Cost: ${total_cost:.4f} ({used_model})[/dim]"
+            )
+    else:
+        assert doc_id is not None
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            disable=json_output,
+        ) as progress:
+            task = progress.add_task(
+                f"Extracting entities from #{doc_id} with LLM...",
+                total=None,
+            )
+            report = extract_and_save_entities_llm(doc_id, model=model)
+            progress.update(task, completed=True)
+
+        if report is None:
+            if json_output:
+                print(json.dumps({"error": f"Document {doc_id} not found"}))
+            else:
+                console.print(f"[red]Document #{doc_id} not found[/red]")
+            raise typer.Exit(1)
+
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "action": "llm_extract",
+                        "doc_id": doc_id,
+                        "entities_extracted": report.entities_extracted,
+                        "relationships_extracted": (report.relationships_extracted),
+                        "input_tokens": report.input_tokens,
+                        "output_tokens": report.output_tokens,
+                        "cost_usd": round(report.cost_usd, 4),
+                        "model": report.model,
+                    }
+                )
+            )
+        else:
+            console.print(
+                f"Extracted [cyan]{report.entities_extracted}[/cyan] entities, "
+                f"[cyan]{report.relationships_extracted}[/cyan] relationships "
+                f"from document #{doc_id}"
+            )
+            console.print(
+                f"[dim]Tokens: {report.input_tokens:,} in / "
+                f"{report.output_tokens:,} out | "
+                f"Cost: ${report.cost_usd:.4f} ({report.model})[/dim]"
+            )
+
+
 def entities_command(
     doc_id: int | None = typer.Argument(None, help="Document ID to extract entities from"),
     all_docs: bool = typer.Option(False, "--all", help="Extract entities for all documents"),
     wikify: bool = typer.Option(
-        True, "--wikify/--no-wikify", help="Also create entity-match links"
+        True,
+        "--wikify/--no-wikify",
+        help="Also create entity-match links",
     ),
     rebuild: bool = typer.Option(
         False,
@@ -295,6 +429,21 @@ def entities_command(
         "--cleanup",
         help="Remove noisy entities and re-extract with current filters",
     ),
+    cross_project: bool = typer.Option(
+        False,
+        "--cross-project",
+        help="Match across all projects (default: same project only)",
+    ),
+    llm: bool = typer.Option(
+        False,
+        "--llm",
+        help="Use Claude LLM for richer entity extraction (costs tokens)",
+    ),
+    model: str = typer.Option(
+        "haiku",
+        "--model",
+        help="Model for LLM extraction: haiku (default), sonnet, opus",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Extract entities from documents and create entity-match links.
@@ -302,14 +451,18 @@ def entities_command(
     Extracts key concepts, technical terms, and proper nouns from
     markdown structure (headings, backtick terms, bold text, capitalized
     phrases). Then cross-references entities across documents to
-    create links. No AI required.
+    create links.
+
+    Use --llm for Claude-powered extraction with richer entity types
+    (person, organization, technology, etc.) and relationship discovery.
 
     Examples:
-        emdx maintain entities 42              # Extract + link one document
+        emdx maintain entities 42              # Extract + link one doc
         emdx maintain entities --all           # Backfill all documents
         emdx maintain entities 42 --no-wikify  # Extract only, no linking
-        emdx maintain entities --cleanup       # Clean noise + re-extract
+        emdx maintain entities --cleanup       # Clean + re-extract
         emdx maintain entities --all --json    # JSON output
+        emdx maintain entities --all --cross-project  # Cross-project
     """
     from ..services.entity_service import (
         cleanup_noisy_entities,
@@ -317,6 +470,15 @@ def entities_command(
         entity_wikify_all,
         extract_and_save_entities,
     )
+
+    if llm:
+        _entities_llm(
+            doc_id=doc_id,
+            all_docs=all_docs,
+            model=model,
+            json_output=json_output,
+        )
+        return
 
     if cleanup:
         with Progress(
@@ -340,7 +502,9 @@ def entities_command(
                 disable=json_output,
             ) as progress:
                 task = progress.add_task("Rebuilding entity-match links...", total=None)
-                total_entities, total_links, docs = entity_wikify_all(rebuild=True)
+                total_entities, total_links, docs = entity_wikify_all(
+                    rebuild=True, cross_project=cross_project
+                )
                 progress.update(task, completed=True)
 
         if json_output:
@@ -378,6 +542,7 @@ def entities_command(
                 task = progress.add_task("Extracting entities & linking...", total=None)
                 total_entities, total_links, docs = entity_wikify_all(
                     rebuild=rebuild,
+                    cross_project=cross_project,
                 )
                 progress.update(task, completed=True)
             if json_output:
@@ -439,7 +604,7 @@ def entities_command(
         raise typer.Exit(1)
 
     if wikify:
-        result = entity_match_wikify(doc_id)
+        result = entity_match_wikify(doc_id, cross_project=cross_project)
         if json_output:
             print(
                 json.dumps(
