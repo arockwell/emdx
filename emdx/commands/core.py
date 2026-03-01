@@ -399,6 +399,11 @@ def find(
     all_types: bool = typer.Option(
         False, "--all-types", help="Show all document types (user, wiki, etc.)"
     ),
+    wander: bool = typer.Option(
+        False,
+        "--wander",
+        help="Serendipity mode: surface surprising but related documents",
+    ),
 ) -> None:
     """Search the knowledge base with full-text search.
 
@@ -412,6 +417,7 @@ def find(
     Use --similar N to find documents similar to doc #N.
     Use --ask to get an AI-powered answer to your question.
     Use --context to retrieve docs as plain text for piping to claude.
+    Use --wander for serendipity: surface surprising but related documents.
 
     Examples:
         emdx find "authentication patterns"              # hybrid search
@@ -422,6 +428,8 @@ def find(
         emdx find --similar 42                           # docs similar to #42
         emdx find --ask "What's our caching strategy?"   # RAG Q&A
         emdx find --context "auth" | claude              # pipe context to claude
+        emdx find --wander                               # random serendipity
+        emdx find --wander "machine learning"            # serendipity from topic
     """
     search_query = " ".join(query) if query else ""
 
@@ -450,6 +458,11 @@ def find(
         # Handle --similar: find documents similar to a given one
         if similar is not None:
             _find_similar(similar, limit, json_output)
+            return
+
+        # Handle --wander: serendipity search
+        if wander:
+            _find_wander(search_query, limit, project, json_output)
             return
 
         # Handle --ask: RAG Q&A
@@ -790,6 +803,176 @@ def _find_similar(
         table.add_row(str(r.doc_id), f"{r.similarity:.0%}", r.title)
 
     console.print(table)
+
+
+def _find_wander(
+    search_query: str,
+    limit: int,
+    project: str | None,
+    json_output: bool,
+) -> None:
+    """Serendipity search using the Goldilocks similarity band.
+
+    Surfaces documents in the 0.2-0.4 cosine similarity range --
+    related enough to be interesting, different enough to surprise.
+    """
+    import random
+
+    try:
+        from ..services.embedding_service import EmbeddingService
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    from ..database import db
+
+    service = EmbeddingService()
+
+    # Check how many docs have embeddings
+    stats = service.stats()
+    if stats.indexed_documents < 10:
+        msg = (
+            f"Serendipity works better with 50+ documents. "
+            f"You have {stats.indexed_documents}. "
+            f"Try `emdx maintain index` first."
+        )
+        if json_output:
+            print(json.dumps({"error": msg}))
+        else:
+            console.print(f"[yellow]{msg}[/yellow]")
+        return
+
+    # Get the seed embedding
+    seed_doc_id: int | None = None
+    if search_query:
+        # Use query text as seed
+        seed_embedding = service.embed_text(search_query)
+    else:
+        # Pick a random recently-accessed document as seed
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            query_sql = (
+                "SELECT d.id FROM documents d "
+                "JOIN document_embeddings e "
+                "ON d.id = e.document_id "
+                "WHERE d.is_deleted = 0 AND e.model_name = ? "
+                "ORDER BY d.accessed_at DESC NULLS LAST "
+                "LIMIT 20"
+            )
+            params: list[str | int] = [service.MODEL_NAME]
+            cursor.execute(query_sql, params)
+            recent_ids = [row[0] for row in cursor.fetchall()]
+
+        if not recent_ids:
+            msg = "No documents with embeddings found."
+            if json_output:
+                print(json.dumps({"error": msg}))
+            else:
+                console.print(f"[yellow]{msg}[/yellow]")
+            return
+
+        chosen_id: int = random.choice(recent_ids)
+        seed_doc_id = chosen_id
+        seed_embedding = service.embed_document(chosen_id)
+
+    # Load all embeddings and find docs in the Goldilocks band
+    try:
+        import numpy as np
+    except ImportError:
+        console.print(
+            "[red]numpy is required for --wander. Install with: pip install 'emdx[ai]'[/red]"
+        )
+        raise typer.Exit(1) from None
+
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        base_sql = (
+            "SELECT e.document_id, e.embedding, d.title, "
+            "d.project, SUBSTR(d.content, 1, 200) as snippet "
+            "FROM document_embeddings e "
+            "JOIN documents d ON e.document_id = d.id "
+            "WHERE e.model_name = ? AND d.is_deleted = 0"
+        )
+        sql_params: list[str | int] = [service.MODEL_NAME]
+
+        if project:
+            base_sql += " AND d.project = ?"
+            sql_params.append(project)
+
+        cursor.execute(base_sql, sql_params)
+        rows = cursor.fetchall()
+
+    # Compute similarities and filter to Goldilocks band
+    goldilocks_min = 0.2
+    goldilocks_max = 0.4
+    candidates = []
+    for doc_id, emb_bytes, title, doc_project, snippet in rows:
+        # Skip the seed document
+        if doc_id == seed_doc_id:
+            continue
+
+        doc_embedding = np.frombuffer(emb_bytes, dtype=np.float32)
+        similarity = float(np.dot(seed_embedding, doc_embedding))
+
+        if goldilocks_min <= similarity <= goldilocks_max:
+            clean_snippet = ""
+            if snippet:
+                clean_snippet = snippet.replace("\n", " ")[:100]
+            candidates.append(
+                {
+                    "id": doc_id,
+                    "title": title,
+                    "project": doc_project,
+                    "similarity": round(similarity, 3),
+                    "snippet": clean_snippet,
+                }
+            )
+
+    if not candidates:
+        msg = (
+            "No surprising connections found. "
+            "Your KB might be too focused -- "
+            "try saving docs on different topics!"
+        )
+        if json_output:
+            print(json.dumps({"error": msg}))
+        else:
+            console.print(f"[yellow]{msg}[/yellow]")
+        return
+
+    # Sort by similarity descending (prefer more-related end)
+    candidates.sort(key=lambda x: x["similarity"], reverse=True)
+
+    # Cap results
+    effective_limit = min(limit, 5)
+    results = candidates[:effective_limit]
+
+    if json_output:
+        output = {
+            "seed": search_query if search_query else f"doc #{seed_doc_id}",
+            "results": results,
+        }
+        print(json.dumps(output, indent=2))
+        return
+
+    # Human-readable output
+    seed_desc = f"'{search_query}'" if search_query else f"doc #{seed_doc_id}"
+    console.print(
+        f"\n[bold]Wandering from {seed_desc} ({len(results)} surprising connections):[/bold]\n"
+    )
+    for i, r in enumerate(results, 1):
+        console.print(f"[bold cyan]#{r['id']}[/bold cyan] [bold]{r['title']}[/bold]")
+        meta = []
+        if r["project"]:
+            meta.append(f"[green]{r['project']}[/green]")
+        meta.append(f"[dim]similarity: {r['similarity']:.3f}[/dim]")
+        console.print(" | ".join(meta))
+        if r["snippet"]:
+            console.print(f"[dim]{r['snippet']}[/dim]")
+        if i < len(results):
+            console.print()
+
+    console.print("\n[dim]Use 'emdx view <id>' to explore a document[/dim]")
 
 
 def _find_ask(
