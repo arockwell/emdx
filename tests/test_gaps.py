@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Generator
 
@@ -19,6 +20,13 @@ from emdx.commands._gaps import (
 )
 from emdx.database import db
 from emdx.main import app
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
 
 runner = CliRunner()
 
@@ -445,8 +453,9 @@ class TestGapsCLI:
         """Gaps command shows help."""
         result = runner.invoke(app, ["maintain", "gaps", "--help"])
         assert result.exit_code == 0
-        assert "gaps" in result.output.lower()
-        assert "--top" in result.output
+        plain = _strip_ansi(result.output)
+        assert "gaps" in plain.lower()
+        assert "--top" in plain
 
     def test_gaps_no_results(self) -> None:
         """No gaps shows friendly message."""
