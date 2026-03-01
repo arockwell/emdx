@@ -16,7 +16,10 @@ def gui(
     ),
 ) -> None:
     """TUI browser for the EMDX knowledge base."""
+    from emdx.onboarding import maybe_seed_onboarding
     from emdx.ui.run_browser import run_browser
+
+    maybe_seed_onboarding()
 
     try:
         run_browser(theme=theme)

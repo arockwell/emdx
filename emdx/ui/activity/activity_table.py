@@ -67,13 +67,19 @@ class ActivityTable(DataTable[str | Text]):
         self.zebra_stripes = True
         self.show_header = False
 
+    # Fixed column widths (content chars, excluding cell_padding)
+    _ICON_WIDTH = 3
+    _TIME_WIDTH = 4
+    _ID_WIDTH = 8
+
     def on_mount(self) -> None:
-        """Set up columns."""
-        self.add_column("icon", key="icon", width=3)
-        self.add_column("title", key="title", width=self._max_title_width())
-        self.add_column("time", key="time", width=4)
-        self.add_column("id", key="id", width=7)
-        # Disable auto-width on title so it doesn't shrink to content
+        """Set up columns — title starts at 1, synced to real width after layout."""
+        self.add_column("icon", key="icon", width=self._ICON_WIDTH)
+        # Start title at 1 to avoid rendering stale widths before layout.
+        # _sync_title_width runs after first resize to set the real value.
+        self.add_column("title", key="title", width=1)
+        self.add_column("time", key="time", width=self._TIME_WIDTH)
+        self.add_column("id", key="id", width=self._ID_WIDTH)
         try:
             from textual.widgets._data_table import ColumnKey
 
@@ -89,7 +95,9 @@ class ActivityTable(DataTable[str | Text]):
 
     def _sync_title_width(self) -> None:
         """Set the title column to fill remaining horizontal space."""
-        w = self._max_title_width()
+        w = self._title_fill_width()
+        if w is None:
+            return
         try:
             from textual.widgets._data_table import ColumnKey
 
@@ -100,12 +108,20 @@ class ActivityTable(DataTable[str | Text]):
         except Exception:
             pass
 
-    def _max_title_width(self) -> int:
-        """Calculate max title width from available table width."""
-        overhead = 3 + 4 + 7 + 4  # icon + time + id + borders/padding
-        if self.size.width > 0:
-            return max(20, self.size.width - overhead)
-        return 60
+    def _title_fill_width(self) -> int | None:
+        """Calculate title column width to exactly fill the table.
+
+        Returns None if the widget hasn't been laid out yet.
+        """
+        if self.size.width <= 0:
+            return None
+        # Each column's render_width = 2*cell_padding + column.width.
+        # Scrollbar (always 1 when rows overflow) reduces usable space.
+        pad = self.cell_padding * 2
+        fixed = (self._ICON_WIDTH + pad) + (self._TIME_WIDTH + pad) + (self._ID_WIDTH + pad)
+        scrollbar = max(self.scrollbar_size_vertical, 1)
+        usable = self.size.width - scrollbar
+        return max(10, usable - fixed - pad)
 
     def _format_time(self, item: ActivityItem) -> str:
         """Format timestamp as compact relative time."""
@@ -124,10 +140,21 @@ class ActivityTable(DataTable[str | Text]):
         self._key_to_item = {_item_key(item): item for item in items}
         self.clear()
 
-        for item in items:
-            self._add_item_row(item)
+        if not items:
+            self.add_row(
+                "",
+                Text("No documents yet — save one with: emdx save file.md", style="dim"),
+                "",
+                "",
+                key="empty:0",
+            )
+        else:
+            for item in items:
+                self._add_item_row(item)
 
         self._sync_title_width()
+        # Deferred sync: scrollbar may appear after rows trigger a layout pass.
+        self.call_after_refresh(self._sync_title_width)
 
     def _add_item_row(self, item: ActivityItem) -> None:
         """Add a single item row to the table."""
