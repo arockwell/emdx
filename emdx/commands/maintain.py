@@ -6,6 +6,8 @@ Uses the MaintenanceApplication service layer to orchestrate maintenance
 operations, breaking bidirectional dependencies between commands and services.
 """
 
+from __future__ import annotations
+
 import logging
 import subprocess
 import time
@@ -13,6 +15,7 @@ import time
 # Removed CommandDefinition import - using standard typer pattern
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich import box
@@ -22,6 +25,9 @@ from rich.prompt import Confirm
 
 from ..applications import MaintenanceApplication
 from ..utils.output import console, is_non_interactive
+
+if TYPE_CHECKING:
+    from ..services.contradiction_service import ContradictionResult
 
 logger = logging.getLogger(__name__)
 
@@ -1068,6 +1074,131 @@ def cleanup_temp_dirs(
         console.print(f"[yellow]⚠️ Failed to remove {failed} directories (check logs)[/yellow]")
 
 
+def contradictions(
+    limit: int = typer.Option(100, "--limit", "-n", help="Max pairs to check"),
+    project: str = typer.Option(None, "--project", "-p", help="Scope to project"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    threshold: float = typer.Option(
+        0.7, "--threshold", help="Similarity threshold for candidate pairs"
+    ),
+) -> None:
+    """
+    Detect conflicting information across documents.
+
+    Uses a 3-stage funnel:
+    1. Find candidate pairs via embedding similarity
+    2. Screen for contradictions (NLI model or heuristic fallback)
+    3. Report contradicting excerpts with confidence levels
+
+    Examples:
+        emdx maintain contradictions
+        emdx maintain contradictions --threshold 0.8 --limit 50
+        emdx maintain contradictions --project myproject --json
+    """
+    import json as json_mod
+
+    from ..services.contradiction_service import ContradictionService
+
+    svc = ContradictionService()
+
+    # Check embeddings exist
+    if not svc._check_embeddings_exist():
+        if json_output:
+            print(
+                json_mod.dumps(
+                    {
+                        "error": "No embedding index found",
+                        "hint": "Run `emdx maintain index` first",
+                    }
+                )
+            )
+        else:
+            console.print(
+                "[yellow]Run `emdx maintain index` first to enable "
+                "contradiction detection.[/yellow]"
+            )
+        raise typer.Exit(1)
+
+    # Show method info
+    use_nli = svc._check_nli_available()
+    if not json_output:
+        method = "NLI (cross-encoder)" if use_nli else "heuristic"
+        if not use_nli:
+            console.print(
+                "[dim]NLI model not available, using heuristic "
+                "fallback. Install sentence-transformers for "
+                "higher accuracy.[/dim]\n"
+            )
+        console.print(
+            f"[bold cyan]Scanning for contradictions[/bold cyan] "
+            f"(method={method}, threshold={threshold}, "
+            f"limit={limit})\n"
+        )
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Finding candidate pairs...", total=None)
+
+        results = svc.find_contradictions(
+            limit=limit,
+            project=project if project else None,
+            threshold=threshold,
+        )
+
+        progress.update(task, description="Done", completed=True)
+
+    # Stage 3: Report
+    if json_output:
+        print(
+            json_mod.dumps(
+                [r.to_dict() for r in results],
+                indent=2,
+            )
+        )
+        return
+
+    if not results:
+        console.print("No contradictions detected across checked document pairs. [green]OK[/green]")
+        return
+
+    console.print(f"[bold red]Found {len(results)} contradicting document pair(s):[/bold red]\n")
+
+    for result in results:
+        console.print(
+            Panel(
+                _format_contradiction(result),
+                title=(
+                    f"#{result.doc1_id} vs #{result.doc2_id} (similarity: {result.similarity:.2f})"
+                ),
+                box=box.ROUNDED,
+            )
+        )
+
+
+def _format_contradiction(result: ContradictionResult) -> str:
+    """Format a ContradictionResult for Rich display."""
+    lines = [
+        f"[bold]{result.doc1_title}[/bold] (#{result.doc1_id})",
+        f"  vs  [bold]{result.doc2_title}[/bold] (#{result.doc2_id})",
+        "",
+    ]
+
+    for i, match in enumerate(result.matches, 1):
+        confidence_color = "red" if match.confidence > 0.7 else "yellow"
+        lines.append(
+            f"  [{confidence_color}]Contradiction {i}[/{confidence_color}]"
+            f" ({match.method}, confidence: {match.confidence:.2f})"
+        )
+        lines.append(f"    Doc A: {match.excerpt1[:120]}...")
+        lines.append(f"    Doc B: {match.excerpt2[:120]}...")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
 # Create typer app for this module
 app = typer.Typer(help="Database maintenance and cleanup operations")
 
@@ -1139,6 +1270,9 @@ app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 from emdx.commands.stale import app as stale_app  # noqa: E402
 
 app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
+
+# Register contradictions command
+app.command(name="contradictions")(contradictions)
 
 if __name__ == "__main__":
     app()
