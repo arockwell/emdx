@@ -4,8 +4,10 @@ Tests cover:
 - Unit tests for clustering logic
 - Unit tests for SynthesisService with mocked Anthropic API
 - Integration tests for the compact command
+- JSON output mode tests
 """
 
+import json
 import re
 from unittest.mock import patch
 
@@ -490,3 +492,172 @@ class TestCompactCommand:
         # Should filter to only Python documents
         output = result.stdout.lower()
         assert "python" in output or "filtered" in output
+
+
+class TestCompactJsonOutput:
+    """Tests for compact --json output mode."""
+
+    def test_json_empty_db(self, clean_db):
+        """Empty database outputs JSON with empty clusters."""
+        from typer.testing import CliRunner
+
+        from emdx.main import app
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["clusters"] == []
+        assert "message" in data
+
+    def test_json_dry_run_shows_clusters(self, sample_docs_for_clustering):
+        """--dry-run --json outputs cluster data as JSON."""
+        from typer.testing import CliRunner
+
+        from emdx.main import app
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["maintain", "compact", "--dry-run", "--json", "--threshold", "0.3"],
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert "clusters" in data
+        assert data["dry_run"] is True
+        assert data["threshold"] == 0.3
+        assert data["cluster_count"] >= 1
+        # Each cluster should have expected fields
+        cluster = data["clusters"][0]
+        assert "cluster_index" in cluster
+        assert "document_count" in cluster
+        assert "documents" in cluster
+        assert len(cluster["documents"]) > 0
+        doc = cluster["documents"][0]
+        assert "id" in doc
+        assert "title" in doc
+        assert "project" in doc
+
+    def test_json_no_clusters(self, clean_db):
+        """No clusters with --json outputs empty clusters array."""
+        from typer.testing import CliRunner
+
+        from emdx.database import db
+        from emdx.main import app
+
+        # Create very different documents
+        with db.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO documents
+                   (title, content, project, is_deleted)
+                   VALUES (?, ?, ?, 0)""",
+                (
+                    "Python Doc",
+                    "Python is a programming language for data science." * 10,
+                    "test",
+                ),
+            )
+            conn.execute(
+                """INSERT INTO documents
+                   (title, content, project, is_deleted)
+                   VALUES (?, ?, ?, 0)""",
+                (
+                    "Cooking Recipe",
+                    "Mix flour eggs and sugar to bake a cake." * 10,
+                    "test",
+                ),
+            )
+            conn.commit()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["maintain", "compact", "--dry-run", "--json", "--threshold", "0.95"],
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["clusters"] == []
+        assert data["threshold"] == 0.95
+
+    def test_json_topic_filter_no_match(self, clean_db):
+        """--topic with no match outputs JSON with empty clusters."""
+        from typer.testing import CliRunner
+
+        from emdx.database import db
+        from emdx.main import app
+
+        with db.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO documents
+                   (title, content, project, is_deleted)
+                   VALUES (?, ?, ?, 0)""",
+                ("Some Doc", "Content here" * 10, "test"),
+            )
+            conn.commit()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["maintain", "compact", "--dry-run", "--json", "--topic", "nonexistent"],
+        )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["clusters"] == []
+
+    def test_json_specific_docs_not_found(self, clean_db):
+        """Specifying non-existent doc IDs with --json outputs error JSON."""
+        from typer.testing import CliRunner
+
+        from emdx.database import db
+        from emdx.main import app
+
+        with db.get_connection() as conn:
+            conn.execute(
+                """INSERT INTO documents
+                   (title, content, project, is_deleted)
+                   VALUES (?, ?, ?, 0)""",
+                ("Existing Doc", "Some content here" * 10, "test"),
+            )
+            conn.commit()
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["maintain", "compact", "--json", "99999", "99998"])
+
+        data = json.loads(result.stdout)
+        assert "error" in data
+        assert "not found" in data["error"].lower()
+
+    def test_json_requires_at_least_two_docs(self, clean_db):
+        """Single doc with --json outputs error JSON."""
+        from typer.testing import CliRunner
+
+        from emdx.database import db
+        from emdx.main import app
+
+        with db.get_connection() as conn:
+            cursor = conn.execute(
+                """INSERT INTO documents
+                   (title, content, project, is_deleted)
+                   VALUES (?, ?, ?, 0)""",
+                ("Single Doc", "Content here" * 10, "test"),
+            )
+            doc_id = cursor.lastrowid
+            # Need another doc so fetch doesn't return empty
+            conn.execute(
+                """INSERT INTO documents
+                   (title, content, project, is_deleted)
+                   VALUES (?, ?, ?, 0)""",
+                ("Another Doc", "Different content" * 10, "test"),
+            )
+            conn.commit()
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["maintain", "compact", "--json", str(doc_id)])
+
+        data = json.loads(result.stdout)
+        assert "error" in data
+        assert "at least 2" in data["error"].lower()

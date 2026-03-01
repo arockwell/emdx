@@ -7,6 +7,7 @@ using TF-IDF clustering for discovery and Claude for synthesis.
 
 from __future__ import annotations
 
+import json
 from typing import Any, TypedDict
 
 import typer
@@ -39,6 +40,22 @@ class SynthesisResultDict(TypedDict):
     input_tokens: int
     output_tokens: int
     source_ids: list[int]
+
+
+class ClusterDocJson(TypedDict):
+    """A document within a cluster for JSON output."""
+
+    id: int
+    title: str
+    project: str | None
+
+
+class ClusterJson(TypedDict):
+    """A cluster of similar documents for JSON output."""
+
+    cluster_index: int
+    document_count: int
+    documents: list[ClusterDocJson]
 
 
 def _fetch_all_documents() -> list[ClusterDocumentDict]:
@@ -199,6 +216,7 @@ def compact(
         None, "--model", "-m", help="Model to use for synthesis (default: claude-opus-4)"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Compact related documents through AI-powered synthesis.
 
@@ -220,13 +238,19 @@ def compact(
     try:
         _require_sklearn()
     except ImportError as e:
-        console.print(f"[red]Error: {e}[/red]")
+        if json_output:
+            print(json.dumps({"error": str(e)}))
+        else:
+            console.print(f"[red]Error: {e}[/red]")
         raise typer.Exit(1) from e
 
     # Fetch all documents
     documents = _fetch_all_documents()
     if not documents:
-        console.print("[yellow]No documents found in knowledge base[/yellow]")
+        if json_output:
+            print(json.dumps({"clusters": [], "message": "No documents found"}))
+        else:
+            console.print("[yellow]No documents found in knowledge base[/yellow]")
         raise typer.Exit(0)
 
     # Filter by topic if specified
@@ -238,9 +262,13 @@ def compact(
             if topic_lower in doc["title"].lower() or topic_lower in doc["content"].lower()
         ]
         if not documents:
-            console.print(f"[yellow]No documents found matching '{topic}'[/yellow]")
+            if json_output:
+                print(json.dumps({"clusters": [], "message": f"No documents matching '{topic}'"}))
+            else:
+                console.print(f"[yellow]No documents found matching '{topic}'[/yellow]")
             raise typer.Exit(0)
-        console.print(f"[dim]Filtered to {len(documents)} documents matching '{topic}'[/dim]")
+        if not json_output:
+            console.print(f"[dim]Filtered to {len(documents)} documents matching '{topic}'[/dim]")
 
     doc_map = {doc["id"]: doc for doc in documents}
 
@@ -249,77 +277,179 @@ def compact(
         # Validate all IDs exist
         missing = [doc_id for doc_id in doc_ids if doc_id not in doc_map]
         if missing:
-            console.print(f"[red]Error: Documents not found: {missing}[/red]")
+            if json_output:
+                print(json.dumps({"error": f"Documents not found: {missing}"}))
+            else:
+                console.print(f"[red]Error: Documents not found: {missing}[/red]")
             raise typer.Exit(1)
 
         if len(doc_ids) < 2:
-            console.print("[red]Error: Need at least 2 documents to compact[/red]")
+            if json_output:
+                print(json.dumps({"error": "Need at least 2 documents to compact"}))
+            else:
+                console.print("[red]Error: Need at least 2 documents to compact[/red]")
             raise typer.Exit(1)
 
-        # Show what we're compacting
-        console.print(f"\n[bold]Compacting {len(doc_ids)} documents:[/bold]")
-        for doc_id in doc_ids:
-            doc = doc_map[doc_id]
-            console.print(f"  • #{doc_id}: {doc['title'][:60]}")
+        if not json_output:
+            # Show what we're compacting
+            console.print(f"\n[bold]Compacting {len(doc_ids)} documents:[/bold]")
+            for doc_id in doc_ids:
+                doc = doc_map[doc_id]
+                console.print(f"  - #{doc_id}: {doc['title'][:60]}")
 
-        # Estimate cost
-        from ..services.synthesis_service import SynthesisService
+            # Estimate cost
+            from ..services.synthesis_service import SynthesisService
 
-        service = SynthesisService(model=model)
-        cost_est = service.estimate_cost(doc_ids)
+            service = SynthesisService(model=model)
+            cost_est = service.estimate_cost(doc_ids)
 
-        console.print(
-            f"\n[dim]Estimated: ~{cost_est['input_tokens']:,} input tokens, "
-            f"~{cost_est['output_tokens']:,} output tokens, "
-            f"~${cost_est['estimated_cost']:.4f}[/dim]"
-        )
+            console.print(
+                f"\n[dim]Estimated: ~{cost_est['input_tokens']:,} input tokens, "
+                f"~{cost_est['output_tokens']:,} output tokens, "
+                f"~${cost_est['estimated_cost']:.4f}[/dim]"
+            )
 
         # Confirm
-        if not yes and not dry_run and not is_non_interactive():
+        if not yes and not dry_run and not json_output and not is_non_interactive():
             if not typer.confirm("Proceed with synthesis?"):
                 console.print("[yellow]Cancelled[/yellow]")
                 raise typer.Exit(0)
 
         if dry_run:
-            console.print("\n[dim]Dry run - no synthesis performed[/dim]")
+            if json_output:
+                cluster_docs: list[ClusterDocJson] = [
+                    ClusterDocJson(
+                        id=did,
+                        title=doc_map[did]["title"],
+                        project=doc_map[did].get("project"),
+                    )
+                    for did in doc_ids
+                ]
+                print(
+                    json.dumps(
+                        {
+                            "dry_run": True,
+                            "clusters": [
+                                ClusterJson(
+                                    cluster_index=1,
+                                    document_count=len(doc_ids),
+                                    documents=cluster_docs,
+                                )
+                            ],
+                        }
+                    )
+                )
+            else:
+                console.print("\n[dim]Dry run - no synthesis performed[/dim]")
             raise typer.Exit(0)
 
         # Synthesize
         total_chars = sum(len(doc_map[did].get("content", "")) for did in doc_ids)
-        status_msg = f"Synthesizing {len(doc_ids)} documents ({total_chars:,} chars)"
-        with console.status(f"[bold]{status_msg}[/bold]"):
+        if not json_output:
+            status_msg = f"Synthesizing {len(doc_ids)} documents ({total_chars:,} chars)"
+            with console.status(f"[bold]{status_msg}[/bold]"):
+                result = _synthesize_cluster(doc_ids, model=model)
+        else:
             result = _synthesize_cluster(doc_ids, model=model)
 
         # Save
         original_docs = [doc_map[doc_id] for doc_id in doc_ids]
         new_id = _save_synthesis(result, original_docs)
 
-        console.print(f"\n[green]✅ Created #{new_id}:[/green] {result['title']}")
-        console.print(
-            f"[dim]Used {result['input_tokens']:,} input + "
-            f"{result['output_tokens']:,} output tokens[/dim]"
-        )
-        console.print("\n[dim]Original documents tagged with 'superseded'[/dim]")
-        console.print(f"[dim]View: emdx view {new_id}[/dim]")
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "synthesized": {
+                            "new_doc_id": new_id,
+                            "title": result["title"],
+                            "input_tokens": result["input_tokens"],
+                            "output_tokens": result["output_tokens"],
+                            "source_ids": result["source_ids"],
+                        }
+                    }
+                )
+            )
+        else:
+            console.print(f"\n[green]Created #{new_id}:[/green] {result['title']}")
+            console.print(
+                f"[dim]Used {result['input_tokens']:,} input + "
+                f"{result['output_tokens']:,} output tokens[/dim]"
+            )
+            console.print("\n[dim]Original documents tagged with 'superseded'[/dim]")
+            console.print(f"[dim]View: emdx view {new_id}[/dim]")
         return
 
     # Discovery mode: find clusters
-    console.print("[dim]Computing document similarity...[/dim]")
+    if not json_output:
+        console.print("[dim]Computing document similarity...[/dim]")
     similarity_matrix, matrix_doc_ids = _compute_similarity_matrix(documents)
 
     if similarity_matrix is None:
-        console.print("[yellow]Not enough documents for clustering[/yellow]")
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "clusters": [],
+                        "message": "Not enough documents for clustering",
+                    }
+                )
+            )
+        else:
+            console.print("[yellow]Not enough documents for clustering[/yellow]")
         raise typer.Exit(0)
 
     # Find clusters
     clusters = _find_clusters(similarity_matrix, matrix_doc_ids, threshold=threshold)
 
     if not clusters:
-        console.print(
-            f"[yellow]No clusters found at threshold {threshold}[/yellow]\n"
-            "[dim]Try lowering the threshold: emdx compact --dry-run --threshold 0.3[/dim]"
-        )
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "clusters": [],
+                        "threshold": threshold,
+                        "message": f"No clusters found at threshold {threshold}",
+                    }
+                )
+            )
+        else:
+            console.print(
+                f"[yellow]No clusters found at threshold {threshold}[/yellow]\n"
+                "[dim]Try lowering the threshold: "
+                "emdx compact --dry-run --threshold 0.3[/dim]"
+            )
         raise typer.Exit(0)
+
+    # JSON output for cluster discovery
+    if json_output:
+        clusters_json: list[ClusterJson] = []
+        for i, cluster in enumerate(clusters, 1):
+            cluster_docs_json: list[ClusterDocJson] = []
+            for did in cluster:
+                doc_data = doc_map.get(did)
+                cluster_docs_json.append(
+                    ClusterDocJson(
+                        id=did,
+                        title=doc_data["title"] if doc_data else "",
+                        project=doc_data.get("project") if doc_data else None,
+                    )
+                )
+            clusters_json.append(
+                ClusterJson(
+                    cluster_index=i,
+                    document_count=len(cluster),
+                    documents=cluster_docs_json,
+                )
+            )
+        output_data: dict[str, object] = {
+            "dry_run": dry_run,
+            "threshold": threshold,
+            "cluster_count": len(clusters),
+            "clusters": clusters_json,
+        }
+        print(json.dumps(output_data, indent=2))
+        return
 
     # Display clusters
     _display_clusters(clusters, documents)
@@ -352,7 +482,8 @@ def compact(
 
         console.print(
             f"\n[bold]Auto-synthesis of {len(clusters)} clusters:[/bold]\n"
-            f"  Estimated tokens: ~{total_input:,} input + ~{total_output:,} output\n"
+            f"  Estimated tokens: ~{total_input:,} input + "
+            f"~{total_output:,} output\n"
             f"  Estimated cost: ~${total_cost:.4f}"
         )
 
@@ -368,12 +499,12 @@ def compact(
                 result = _synthesize_cluster(cluster, model=model)
                 original_docs = [doc_map[doc_id] for doc_id in cluster]
                 new_id = _save_synthesis(result, original_docs)
-                console.print(f"  [green]✅ Created #{new_id}:[/green] {result['title']}")
+                console.print(f"  [green]Created #{new_id}:[/green] {result['title']}")
             except Exception as e:
-                console.print(f"  [red]❌ Failed: {e}[/red]")
+                console.print(f"  [red]Failed: {e}[/red]")
                 continue
 
-        console.print("\n[green]✅ Compaction complete[/green]")
+        console.print("\n[green]Compaction complete[/green]")
         console.print("[dim]Original documents tagged with 'superseded'[/dim]")
         return
 
