@@ -8,6 +8,7 @@ Usage:
     python scripts/release.py release <version>  # Do both and create git tag
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -157,7 +158,7 @@ def get_current_version() -> str:
 
 
 def bump_version(new_version: str) -> None:
-    """Bump the version in pyproject.toml and emdx/__init__.py.
+    """Bump the version in pyproject.toml, emdx/__init__.py, and plugin.json.
 
     Only updates the [tool.poetry] version in pyproject.toml, not other
     version strings like typer version or python_version.
@@ -184,6 +185,14 @@ def bump_version(new_version: str) -> None:
         new_init = re.sub(r'__version__ = "[^"]+"', f'__version__ = "{new_version}"', init_content)
         init_file.write_text(new_init)
         print(f"Updated emdx/__init__.py to version {new_version}")
+
+    # Update .claude-plugin/plugin.json
+    plugin_file = Path(".claude-plugin/plugin.json")
+    if plugin_file.exists():
+        plugin_data = json.loads(plugin_file.read_text())
+        plugin_data["version"] = new_version
+        plugin_file.write_text(json.dumps(plugin_data, indent=2) + "\n")
+        print(f"Updated .claude-plugin/plugin.json to version {new_version}")
 
 
 def update_changelog(entry: str) -> None:
