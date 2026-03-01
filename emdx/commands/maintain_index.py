@@ -284,133 +284,6 @@ def wikify_command(
         console.print(msg)
 
 
-def _entities_llm(
-    *,
-    doc_id: int | None,
-    all_docs: bool,
-    model: str,
-    json_output: bool,
-) -> None:
-    """Handle LLM-powered entity extraction (--llm flag)."""
-    from ..services.entity_service import extract_and_save_entities_llm
-
-    if doc_id is None and not all_docs:
-        if json_output:
-            print(json.dumps({"error": "Provide a document ID or use --all"}))
-        else:
-            console.print("[red]Error: provide a document ID or use --all[/red]")
-        raise typer.Exit(1)
-
-    if all_docs:
-        from ..database import db
-
-        with db.get_connection() as conn:
-            cursor = conn.execute("SELECT id FROM documents WHERE is_deleted = 0")
-            doc_ids_list = [row[0] for row in cursor.fetchall()]
-
-        total_entities = 0
-        total_relationships = 0
-        total_input_tokens = 0
-        total_output_tokens = 0
-        total_cost = 0.0
-        docs_processed = 0
-        used_model = ""
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            disable=json_output,
-        ) as progress:
-            task = progress.add_task("Extracting entities with LLM...", total=None)
-            for did in doc_ids_list:
-                report = extract_and_save_entities_llm(did, model=model)
-                if report is not None:
-                    total_entities += report.entities_extracted
-                    total_relationships += report.relationships_extracted
-                    total_input_tokens += report.input_tokens
-                    total_output_tokens += report.output_tokens
-                    total_cost += report.cost_usd
-                    used_model = report.model
-                    docs_processed += 1
-            progress.update(task, completed=True)
-
-        if json_output:
-            print(
-                json.dumps(
-                    {
-                        "action": "llm_extract",
-                        "entities_extracted": total_entities,
-                        "relationships_extracted": total_relationships,
-                        "docs_processed": docs_processed,
-                        "input_tokens": total_input_tokens,
-                        "output_tokens": total_output_tokens,
-                        "cost_usd": round(total_cost, 4),
-                        "model": used_model,
-                    }
-                )
-            )
-        else:
-            console.print(
-                f"[green]Extracted {total_entities} entities, "
-                f"{total_relationships} relationships "
-                f"from {docs_processed} documents[/green]"
-            )
-            console.print(
-                f"[dim]Tokens: {total_input_tokens:,} in / "
-                f"{total_output_tokens:,} out | "
-                f"Cost: ${total_cost:.4f} ({used_model})[/dim]"
-            )
-    else:
-        assert doc_id is not None
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            disable=json_output,
-        ) as progress:
-            task = progress.add_task(
-                f"Extracting entities from #{doc_id} with LLM...",
-                total=None,
-            )
-            report = extract_and_save_entities_llm(doc_id, model=model)
-            progress.update(task, completed=True)
-
-        if report is None:
-            if json_output:
-                print(json.dumps({"error": f"Document {doc_id} not found"}))
-            else:
-                console.print(f"[red]Document #{doc_id} not found[/red]")
-            raise typer.Exit(1)
-
-        if json_output:
-            print(
-                json.dumps(
-                    {
-                        "action": "llm_extract",
-                        "doc_id": doc_id,
-                        "entities_extracted": report.entities_extracted,
-                        "relationships_extracted": (report.relationships_extracted),
-                        "input_tokens": report.input_tokens,
-                        "output_tokens": report.output_tokens,
-                        "cost_usd": round(report.cost_usd, 4),
-                        "model": report.model,
-                    }
-                )
-            )
-        else:
-            console.print(
-                f"Extracted [cyan]{report.entities_extracted}[/cyan] entities, "
-                f"[cyan]{report.relationships_extracted}[/cyan] relationships "
-                f"from document #{doc_id}"
-            )
-            console.print(
-                f"[dim]Tokens: {report.input_tokens:,} in / "
-                f"{report.output_tokens:,} out | "
-                f"Cost: ${report.cost_usd:.4f} ({report.model})[/dim]"
-            )
-
-
 def entities_command(
     doc_id: int | None = typer.Argument(None, help="Document ID to extract entities from"),
     all_docs: bool = typer.Option(False, "--all", help="Extract entities for all documents"),
@@ -442,7 +315,7 @@ def entities_command(
     model: str = typer.Option(
         "haiku",
         "--model",
-        help="Model for LLM extraction: haiku (default), sonnet, opus",
+        help="LLM model: haiku (default), sonnet, opus, or full model ID",
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -463,6 +336,9 @@ def entities_command(
         emdx maintain entities --cleanup       # Clean + re-extract
         emdx maintain entities --all --json    # JSON output
         emdx maintain entities --all --cross-project  # Cross-project
+        emdx maintain entities 42 --llm        # LLM extraction (single doc)
+        emdx maintain entities --all --llm     # LLM extraction (all docs)
+        emdx maintain entities --llm --model sonnet  # Use Sonnet model
     """
     from ..services.entity_service import (
         cleanup_noisy_entities,
@@ -471,6 +347,7 @@ def entities_command(
         extract_and_save_entities,
     )
 
+    # LLM extraction branch -- separate path from heuristic extraction
     if llm:
         _entities_llm(
             doc_id=doc_id,
@@ -643,3 +520,111 @@ def entities_command(
             )
         else:
             console.print(f"Extracted [cyan]{count}[/cyan] entities from document #{doc_id}")
+
+
+def _entities_llm(
+    doc_id: int | None,
+    all_docs: bool,
+    model: str,
+    json_output: bool,
+) -> None:
+    """LLM entity extraction for single doc or all docs."""
+    from ..services.entity_service import (
+        extract_and_save_entities_llm,
+        resolve_model,
+    )
+
+    resolved = resolve_model(model)
+
+    if all_docs:
+        from ..database import db
+
+        with db.get_connection() as conn:
+            cursor = conn.execute("SELECT id FROM documents WHERE is_deleted = 0")
+            doc_ids_list = [row[0] for row in cursor.fetchall()]
+
+        total_entities = 0
+        total_relationships = 0
+        total_tokens = 0
+        total_cost = 0.0
+        errors = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            disable=json_output,
+        ) as progress:
+            task = progress.add_task(f"LLM extracting ({resolved})...", total=None)
+            for did in doc_ids_list:
+                try:
+                    stats = extract_and_save_entities_llm(did, model=model)
+                    total_entities += stats["entities_saved"]
+                    total_relationships += stats["relationships_saved"]
+                    total_tokens += stats["estimated_input_tokens"]
+                    total_cost += stats["estimated_cost_usd"]
+                except Exception:
+                    logger.warning("LLM extraction failed for doc %d", did)
+                    errors += 1
+            progress.update(task, completed=True)
+
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "action": "llm_extract",
+                        "model": resolved,
+                        "docs_processed": len(doc_ids_list),
+                        "entities_saved": total_entities,
+                        "relationships_saved": total_relationships,
+                        "estimated_input_tokens": total_tokens,
+                        "estimated_cost_usd": round(total_cost, 6),
+                        "errors": errors,
+                    }
+                )
+            )
+        else:
+            console.print(
+                f"[green]LLM extracted {total_entities} entities, "
+                f"{total_relationships} relationships "
+                f"from {len(doc_ids_list)} documents[/green]"
+            )
+            console.print(
+                f"[dim]Model: {resolved} | "
+                f"~{total_tokens:,} input tokens | "
+                f"~${total_cost:.4f} est. cost[/dim]"
+            )
+            if errors:
+                console.print(f"[yellow]{errors} document(s) failed[/yellow]")
+        return
+
+    if doc_id is None:
+        if json_output:
+            print(json.dumps({"error": "Provide a document ID or use --all"}))
+        else:
+            console.print("[red]Error: provide a document ID or use --all[/red]")
+        raise typer.Exit(1)
+
+    try:
+        stats = extract_and_save_entities_llm(doc_id, model=model)
+    except RuntimeError as e:
+        if json_output:
+            print(json.dumps({"error": str(e)}))
+        else:
+            console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+    if json_output:
+        print(json.dumps(dict(stats)))
+    else:
+        console.print(
+            f"LLM extracted [cyan]{stats['entities_saved']}[/cyan] "
+            f"entities, "
+            f"[cyan]{stats['relationships_saved']}[/cyan] "
+            f"relationships from document #{doc_id}"
+        )
+        console.print(
+            f"[dim]Model: {stats['model']} | "
+            f"~{stats['estimated_input_tokens']:,} input tokens | "
+            f"~${stats['estimated_cost_usd']:.4f} est. cost[/dim]"
+        )
