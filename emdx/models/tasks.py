@@ -226,7 +226,6 @@ def list_tasks(
     gameplan_id: int | None = None,
     project: str | None = None,
     limit: int = DEFAULT_BROWSE_LIMIT,
-    exclude_delegate: bool = False,
     epic_key: str | None = None,
     parent_task_id: int | None = None,
     since: str | None = None,
@@ -234,7 +233,6 @@ def list_tasks(
     """List tasks with filters.
 
     Args:
-        exclude_delegate: Kept for backward compatibility, no longer has effect.
         epic_key: Filter by category key.
         parent_task_id: Filter by parent task (epic) ID.
         since: ISO date string (YYYY-MM-DD). Filter to tasks completed on or after this date.
@@ -374,13 +372,11 @@ def get_dependents(task_id: int) -> list[TaskDict]:
 
 def get_ready_tasks(
     gameplan_id: int | None = None,
-    exclude_delegate: bool = True,
     epic_key: str | None = None,
 ) -> list[TaskDict]:
     """Get tasks ready to work (open + all deps done).
 
     Args:
-        exclude_delegate: Kept for backward compatibility, no longer has effect.
         epic_key: Filter by category key.
     """
     conditions = ["t.status = 'open'"]

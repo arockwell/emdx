@@ -531,20 +531,7 @@ def _get_current_branch() -> str | None:
 
 def _get_execution_methods_json() -> list[ExecutionMethod]:
     """Return execution methods as structured data for JSON output."""
-    return [
-        ExecutionMethod(
-            command="emdx delegate",
-            usage='emdx delegate "task" --tags analysis',
-            when="All one-shot AI execution (single, parallel, PR, worktree)",
-            key_flags=[
-                "--doc",
-                "--pr",
-                "--worktree",
-                "--synthesize",
-                "--tags",
-            ],
-        ),
-    ]
+    return []
 
 
 def _output_json(

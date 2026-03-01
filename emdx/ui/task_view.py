@@ -244,16 +244,6 @@ class TaskView(Widget):
         height: 100%;
     }
 
-    /* ── Backward-compat aliases (existing zoom classes) ─ */
-    #task-list-panel.zoom-hidden {
-        display: none;
-    }
-
-    #task-detail-panel.zoom-full {
-        height: 100%;
-        border-top: none;
-    }
-
     /* ── Table and headers ────────────────────────────── */
 
     #task-list-header {
@@ -436,7 +426,7 @@ class TaskView(Widget):
     async def _load_tasks(self, *, restore_row: int | None = None) -> None:
         """Load all manual tasks from the database."""
         try:
-            self._tasks = list_tasks(exclude_delegate=True, limit=200)
+            self._tasks = list_tasks(limit=200)
         except Exception as e:
             logger.error(f"Failed to load tasks: {e}")
             self._tasks = []

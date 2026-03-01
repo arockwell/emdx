@@ -27,20 +27,15 @@ EXAMPLE_CONFIG = """# EMDX Keybinding Configuration
 #   overrides:
 #     - key: "t"                      # The key to bind
 #       action: "add_tags"            # The action to perform
-#       context: "document:normal"    # Where this binding applies
+#       context: "global"             # Where this binding applies
 #
 # Available contexts:
 #   global              - Always active
+#   activity:normal     - Activity browser
 #   document:normal     - Document browser
-#   document:edit       - Editing a document
-#   agent:normal        - Agent browser
-#   file:normal         - File browser
 #   task:normal         - Task browser
-#   log:normal          - Log browser
-#   control:normal      - Control center
-#   vim:normal          - Vim normal mode in editor
-#   vim:insert          - Vim insert mode
-#   modal:*             - Various modal dialogs
+#   modal:theme         - Theme selector modal
+#   modal:delete        - Delete confirmation modal
 #
 # To see all available actions, run: emdx keybindings --list-actions
 #

@@ -318,7 +318,6 @@ class DocumentPreviewScreen(Screen):
     BINDINGS = [
         Binding("escape", "close", "Close"),
         Binding("q", "close", "Close"),
-        Binding("e", "edit", "Edit"),
         Binding("c", "toggle_copy_mode", "Copy Mode"),
     ]
 
@@ -347,7 +346,7 @@ class DocumentPreviewScreen(Screen):
             auto_scroll=False,
         )
         yield Static(
-            "Esc/q=Close │ e=Edit │ c=Copy Mode",
+            "Esc/q=Close │ c=Copy Mode",
             id="preview-footer",
         )
 
@@ -392,10 +391,6 @@ class DocumentPreviewScreen(Screen):
         """Close the preview and return to previous screen."""
         self.dismiss(None)
 
-    def action_edit(self) -> None:
-        """Edit the document."""
-        self.dismiss({"action": "edit", "doc_id": self.doc_id})
-
     def action_toggle_copy_mode(self) -> None:
         """Toggle between rendered preview and selectable copy mode."""
         preview_scroll = self.query_one("#preview-scroll", ScrollableContainer)
@@ -410,10 +405,9 @@ class DocumentPreviewScreen(Screen):
             preview_scroll.display = False
             copy_log.display = True
             footer.update(
-                "Esc/q=Close │ e=Edit │ c=Preview Mode │ "
-                "[bold]COPY MODE[/bold] - select text with mouse"
+                "Esc/q=Close │ c=Preview Mode │ [bold]COPY MODE[/bold] - select text with mouse"
             )
         else:
             preview_scroll.display = True
             copy_log.display = False
-            footer.update("Esc/q=Close │ e=Edit │ c=Copy Mode")
+            footer.update("Esc/q=Close │ c=Copy Mode")

@@ -157,25 +157,6 @@ class CommandRegistry:
             )
         )
 
-        self.register(
-            PaletteCommand(
-                id="nav.delegates",
-                name="Go to Delegates",
-                description="Switch to Delegate browser",
-                keywords=[
-                    "delegate",
-                    "delegates",
-                    "agent",
-                    "agents",
-                    "running",
-                    "parallel",
-                ],
-                context=CommandContext.GLOBAL,
-                shortcut="3",
-                category="Navigation",
-            )
-        )
-
         # Appearance commands
         self.register(
             PaletteCommand(
@@ -186,29 +167,6 @@ class CommandRegistry:
                 context=CommandContext.GLOBAL,
                 shortcut="\\",
                 category="Appearance",
-            )
-        )
-
-        # Search commands
-        self.register(
-            PaletteCommand(
-                id="search.semantic",
-                name="Semantic Search",
-                description="Search documents by meaning (AI-powered)",
-                keywords=["semantic", "ai", "meaning", "similar", "embeddings"],
-                context=CommandContext.GLOBAL,
-                category="Search",
-            )
-        )
-
-        self.register(
-            PaletteCommand(
-                id="search.tags",
-                name="Search by Tags",
-                description="Find documents with specific tags",
-                keywords=["tags", "tag", "filter", "label"],
-                context=CommandContext.GLOBAL,
-                category="Search",
             )
         )
 

@@ -1,7 +1,7 @@
 """Knowledge event recording for emdx.
 
 Append-only event log for tracking KB interactions: searches, views,
-creates, updates, deletes, asks, and delegates.
+creates, updates, deletes, and asks.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from emdx.database.connection import db_connection
 logger = logging.getLogger(__name__)
 
 # Valid event types
-EVENT_TYPES = frozenset({"search", "view", "create", "update", "delete", "ask", "delegate"})
+EVENT_TYPES = frozenset({"search", "view", "create", "update", "delete", "ask"})
 
 
 def record_event(
@@ -28,7 +28,7 @@ def record_event(
 
     Args:
         event_type: One of 'search', 'view', 'create', 'update',
-                    'delete', 'ask', 'delegate'.
+                    'delete', 'ask'.
         doc_id: Optional document ID associated with the event.
         query: Optional search query (for search/ask events).
         metadata: Optional dict of extra context (serialised as JSON).
