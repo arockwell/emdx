@@ -8,7 +8,6 @@
 - Use `poetry run emdx` in this project, never global `emdx`
 - Prefer small, focused PRs over monolithic ones
 - When running teams, commit work as agents finish rather than waiting for all
-- When emdx delegate fails, fall back to direct web search + manual save
 
 ## Architecture Notes
 - TUI screens: 1=Activity, 2=Tasks, 3=Search, 4=Cascade (reordered Feb 2026)
@@ -24,12 +23,6 @@
 - `populate_from_items()` is for initial full load (clears tree first)
 - Tree expansion loads children lazily via `item.load_children(wf_db, doc_db)`
 
-## Delegate System
-- Branch naming: `delegate/{slug}-{5char-hash}` via `generate_delegate_branch_name()` in `utils/git.py`
-- `slugify_for_branch()` strips common prefixes (Gameplan, Feature, Plan, Kink, etc.)
-- PR validation: `validate_pr_preconditions()` checks commits, push status, file changes before `gh pr create`
-- Streaming: `_reader_thread()` in `unified_executor.py` uses background threads + `queue.Queue` (not `select.select()`)
-
 ## Development
 - Tests: `poetry run pytest tests/ -x -q` (1230+ tests, ~12s)
 - No `--timeout` flag available for pytest in this project
@@ -40,13 +33,6 @@
 
 ## Textual Gotchas
 - `Separator` does NOT exist in `textual.widgets.option_list` in our Textual version. Use `Option("", disabled=True)` as a visual spacer instead.
-
-## emdx delegate — Known Issues & Usage Notes
-- **Don't use delegate for stateful git operations** (rebase, push, commit). Delegates start fresh sessions without checkout state. Only use for read-only research/analysis.
-- **`--synthesize` error**: One of 3 tasks reported "agent completed but no document was saved" before synthesis succeeded. Possible bug when using `--synthesize` with multiple tasks.
-- **All `--flags` must come BEFORE positional arguments** in `emdx delegate` calls.
-- **Appropriate use cases**: code review, PR evaluation, research, analysis. NOT: rebasing, committing, pushing.
-- **`select.select()` broken on macOS**: Root cause of 0-byte delegate logs and hung agents. Fixed with threaded reader approach.
 
 ## Codebase Audit (2026-02-08)
 - Completed comprehensive audit with 14 agents (PR #414)

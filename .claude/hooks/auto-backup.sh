@@ -2,14 +2,11 @@
 # SessionStart hook: create a daily backup of the emdx knowledge base.
 #
 # Fast path: if today's backup exists, exits after a single glob — no Python.
-# Skips delegate sessions and environments without emdx installed.
+# Skips environments without emdx installed.
 set -euo pipefail
 
 # Consume stdin (required by hook protocol)
 cat > /dev/null
-
-# Skip delegate sessions
-[[ "${EMDX_AUTO_SAVE:-}" == "1" ]] && exit 0
 
 # Skip if emdx not installed
 command -v emdx &>/dev/null || exit 0

@@ -36,7 +36,7 @@ poetry run pytest tests/ -x -q  # Run tests
 
 ### Dev Database Isolation
 
-When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of `~/.config/emdx/knowledge.db`. This prevents dev/delegate processes from corrupting the production database.
+When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of `~/.config/emdx/knowledge.db`. This prevents development processes from corrupting the production database.
 
 **Priority chain for database path:**
 1. `EMDX_TEST_DB` — test isolation (set by pytest fixtures)

@@ -535,8 +535,8 @@ function statusSummary(status: StatusData): string {
     parts.push(`${failedCount} failed`);
   }
   return parts.length > 0
-    ? `Delegates: ${parts.join(", ")}`
-    : "No active delegates";
+    ? `Agents: ${parts.join(", ")}`
+    : "No active agents";
 }
 
 async function updateStatusBar(client: EmdxClient): Promise<void> {

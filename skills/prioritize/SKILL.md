@@ -49,7 +49,7 @@ Priority  ID        Title                          Reasoning
 ────────  ────────  ─────────────────────────────  ──────────────────────
 1 (P1)    FEAT-8    Implement auto-linking         Unblocks 3 downstream tasks
 2 (P1)    TUI-10    Wire QA presenter              Nearly completes QA epic (7/8)
-3 (P2)    FEAT-13   Add --issue flag to delegate   Quick win, small scope
+3 (P2)    FEAT-13   Add semantic search caching     Quick win, small scope
 ...
 ```
 

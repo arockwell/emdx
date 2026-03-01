@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "hooks/save-subagent-output.sh",
+            "command": ".claude/hooks/save-subagent-output.sh",
             "timeout": 30
           }
         ]

@@ -358,7 +358,7 @@ class TestTaskList:
         )
 
     @patch("emdx.commands.tasks.tasks")
-    def test_list_includes_delegate_with_all_flag(self, mock_tasks):
+    def test_list_includes_all_statuses_with_all_flag(self, mock_tasks):
         mock_tasks.list_tasks.return_value = []
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0

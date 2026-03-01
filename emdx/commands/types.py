@@ -253,6 +253,3 @@ class MirrorData(TypedDict):
     temporal_pattern: str
     project_balance: list[ProjectBalance]
     staleness: StalenessBreakdown
-
-
-# ── Delegate command types ─────────────────────────────────────────────

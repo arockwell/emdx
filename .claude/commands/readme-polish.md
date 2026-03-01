@@ -4,7 +4,7 @@ Iterative README improvement — make the document build progressively.
 
 ## Approach
 
-$ARGUMENTS is optional focus area (e.g., "hero section", "delegate section").
+$ARGUMENTS is optional focus area (e.g., "hero section", "examples section").
 
 ### 1. Read Current State
 Read README.md and identify the document's rhythm:
