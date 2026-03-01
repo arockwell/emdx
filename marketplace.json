@@ -13,7 +13,7 @@
         "url": "https://github.com/arockwell/emdx.git"
       },
       "description": "Knowledge base skills for Claude Code. Save research, manage tasks, and maintain session memory across conversations.",
-      "version": "0.21.0",
+      "version": "0.26.0",
       "author": {
         "name": "Alex Rockwell"
       },

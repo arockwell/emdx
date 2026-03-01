@@ -35,7 +35,7 @@ class TestSaveTaskFlag:
         mock_update_task: MagicMock,
         tmp_path: Path,
     ) -> None:
-        """--task flag links saved document to task via output_doc_id."""
+        """--task flag links saved document to task via source_doc_id."""
         f = tmp_path / "doc.md"
         f.write_text("# Task output\nContent here")
 
@@ -50,8 +50,8 @@ class TestSaveTaskFlag:
         out = _out(result)
         assert "Task:" in out or "#10" in out
 
-        # Verify update_task was called with output_doc_id
-        mock_update_task.assert_called_once_with(10, output_doc_id=42)
+        # Verify update_task was called with source_doc_id
+        mock_update_task.assert_called_once_with(10, source_doc_id=42)
 
     @patch("emdx.models.tasks.update_task")
     @patch("emdx.models.tasks.get_task")
@@ -82,8 +82,8 @@ class TestSaveTaskFlag:
         )
         assert result.exit_code == 0
 
-        # Verify update_task was called with output_doc_id
-        mock_update_task.assert_called_once_with(5, output_doc_id=99)
+        # Verify update_task was called with source_doc_id
+        mock_update_task.assert_called_once_with(5, source_doc_id=99)
 
 
 class TestSaveDoneFlag:
@@ -124,8 +124,8 @@ class TestSaveDoneFlag:
         out = _out(result)
         assert "(done)" in out or "done" in out.lower()
 
-        # Verify update_task was called with both output_doc_id and status
-        mock_update_task.assert_called_once_with(15, output_doc_id=77, status="done")
+        # Verify update_task was called with both source_doc_id and status
+        mock_update_task.assert_called_once_with(15, source_doc_id=77, status="done")
 
     @patch("emdx.models.tasks.update_task")
     @patch("emdx.models.tasks.get_task")

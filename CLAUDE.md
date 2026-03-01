@@ -137,7 +137,6 @@ Claude Code hooks in `.claude/settings.json` handle session lifecycle automatica
 | `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
 | `save-output.sh` | Stop | Saves conversation output to KB after each turn |
 | `session-end.sh` | SessionEnd | Captures session summary on exit |
-| `save-subagent-output.sh` | SubagentStop | Saves subagent output (Explore, general-purpose, Plan) |
 
 ### Session Start Protocol
 
