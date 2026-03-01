@@ -1139,6 +1139,7 @@ def contradictions(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
+        disable=json_output,
     ) as progress:
         task = progress.add_task("Finding candidate pairs...", total=None)
 
