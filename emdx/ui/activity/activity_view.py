@@ -17,6 +17,7 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Log, RichLog, Static
 
+from ..knowledge_graph_panel import KnowledgeGraphPanel
 from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
 from .activity_items import ActivityItem as ActivityItemBase
@@ -107,6 +108,7 @@ class ActivityView(HelpMixin, Widget):
         ("c", "toggle_copy_mode", "Copy Mode"),
         ("w", "cycle_doc_type_filter", "Filter Docs"),
         ("z", "toggle_zoom", "Zoom"),
+        ("g", "toggle_graph_panel", "Graph"),
     ]
 
     DEFAULT_CSS = """
@@ -241,6 +243,19 @@ class ActivityView(HelpMixin, Widget):
     .notification.visible {
         display: block;
     }
+
+    /* ── Knowledge graph panel ──────────────────────── */
+
+    #graph-panel {
+        display: none;
+        height: 30%;
+        width: 100%;
+        border-top: solid $secondary;
+    }
+
+    #graph-panel.visible {
+        display: block;
+    }
     """
 
     # Doc type filter cycle order
@@ -267,6 +282,7 @@ class ActivityView(HelpMixin, Widget):
         self._data_loader = ActivityDataLoader()
         self._zoomed: bool = False
         self._sidebar_visible: bool = True
+        self._graph_panel_visible: bool = False
 
     def _get_selected_item(self) -> ActivityItem | None:
         """Get the currently selected ActivityItem from the table."""
@@ -319,6 +335,10 @@ class ActivityView(HelpMixin, Widget):
                     highlight=True,
                     auto_scroll=False,
                 )
+
+            # Knowledge graph panel (hidden by default, toggle with `g`)
+            with Vertical(id="graph-panel"):
+                yield KnowledgeGraphPanel(id="knowledge-graph")
 
     # Width threshold for showing/hiding sidebar
     SIDEBAR_WIDTH_THRESHOLD = 120
@@ -805,12 +825,41 @@ class ActivityView(HelpMixin, Widget):
         self._show_notification(f"Filter: {label}")
         await self.load_data()
 
+    def action_toggle_graph_panel(self) -> None:
+        """Toggle the knowledge graph panel visibility."""
+        try:
+            panel = self.query_one("#graph-panel")
+        except Exception:
+            return
+
+        self._graph_panel_visible = not self._graph_panel_visible
+        if self._graph_panel_visible:
+            panel.add_class("visible")
+            self._update_graph_panel()
+        else:
+            panel.remove_class("visible")
+
+    def _update_graph_panel(self) -> None:
+        """Update the knowledge graph panel with current selection."""
+        if not self._graph_panel_visible:
+            return
+
+        try:
+            kg = self.query_one("#knowledge-graph", KnowledgeGraphPanel)
+        except Exception:
+            return
+
+        item = self._get_selected_item()
+        doc_id = item.doc_id if item else None
+        kg.load_for_document(doc_id)
+
     async def on_activity_table_item_highlighted(
         self, event: ActivityTable.ItemHighlighted
     ) -> None:
         """Handle table cursor movement."""
         await self._update_preview(force=True)
         await self._update_context_panel()
+        self._update_graph_panel()
 
     def on_activity_table_enter_pressed(self, event: ActivityTable.EnterPressed) -> None:
         """Handle Enter key on table row — open fullscreen."""
