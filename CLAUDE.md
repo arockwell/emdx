@@ -51,7 +51,7 @@ When running via `poetry run emdx` (editable install), emdx automatically uses a
 
 ### Migration Convention
 
-Migrations use **set-based tracking** with string IDs. Legacy migrations (0-54) use numeric strings. New migrations use timestamp IDs: `"YYYYMMDD_HHMMSS"`.
+Migrations use **set-based tracking** with string IDs. Existing migrations (0-58) use numeric strings. Future migrations SHOULD use timestamp IDs: `"YYYYMMDD_HHMMSS"`.
 
 Example: `("20260301_120000", "Add new feature", migration_20260301_120000_add_new_feature)`
 
@@ -133,7 +133,11 @@ Claude Code hooks in `.claude/settings.json` handle session lifecycle automatica
 
 | Hook | Event | What it does |
 |------|-------|-------------|
+| `auto-backup.sh` | SessionStart | Creates a daily KB backup before work begins |
 | `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
+| `save-output.sh` | Stop | Saves conversation output to KB after each turn |
+| `session-end.sh` | SessionEnd | Captures session summary on exit |
+| `save-subagent-output.sh` | SubagentStop | Saves subagent output (Explore, general-purpose, Plan) |
 
 ### Session Start Protocol
 
@@ -200,11 +204,21 @@ emdx find --all                        # List all documents
 emdx find --recent 10                  # Show 10 most recently accessed docs
 emdx find --similar 42                 # Find docs similar to doc #42
 emdx find --ask "question"             # RAG: retrieve context + LLM answer
+emdx find --ask "question" --think     # Deliberative: position paper with arguments
+emdx find --ask "question" --think --challenge  # Devil's advocate (requires --think)
+emdx find --ask "question" --debug     # Socratic debugger: diagnostic questions
+emdx find --ask "question" --cite      # Inline [#ID] citations
 emdx find --context "question" | claude  # Output retrieved context for piping
+emdx find "query" --wander             # Serendipity: surface surprising connections
+emdx find "query" --watch              # Save as standing query (alerts on new matches)
+emdx find --watch-check                # Check standing queries for new matches
+emdx find --watch-list                 # List all standing queries
+emdx find --watch-remove 1             # Remove a standing query by ID
 
 # View
 emdx view 42                           # View document content
 emdx view 42 --links                   # Show document's link graph
+emdx view 42 --review                  # Adversarial review of the document
 
 # Tasks (use --epic and --cat, NOT --tags)
 emdx task add "Title" -D "Details" --epic 898 --cat FEAT
@@ -223,6 +237,8 @@ emdx tag list
 emdx status                            # Knowledge base overview
 emdx status --stats                    # Knowledge base statistics
 emdx status --stats --detailed         # Detailed stats with project breakdown
+emdx status --vitals                   # KB vitals dashboard
+emdx status --mirror                   # Reflective KB summary (narrative)
 
 # Maintenance
 emdx maintain compact --dry-run        # Find similar docs to merge
@@ -233,6 +249,13 @@ emdx maintain link --all               # Auto-link related documents
 emdx maintain backup                   # Create compressed daily backup
 emdx maintain backup --list            # List existing backups
 emdx maintain backup --restore <file>  # Restore from a backup
+emdx maintain freshness                # Score document freshness (staleness)
+emdx maintain freshness --stale        # Show only stale docs
+emdx maintain gaps                     # Detect knowledge gaps and sparse coverage
+emdx maintain drift                    # Detect stale work items (default 30 days)
+emdx maintain drift --days 7           # More aggressive threshold
+emdx maintain contradictions           # Find conflicting claims via NLI
+emdx maintain code-drift               # Detect code references that have drifted
 
 # Wiki (top-level; `emdx maintain wiki ...` still works)
 emdx wiki                              # Compact wiki overview
@@ -247,6 +270,22 @@ emdx wiki view <topic_id>             # View a wiki article by topic
 emdx wiki search "query"              # Search wiki articles
 emdx wiki export ./wiki-site          # Export to MkDocs
 emdx wiki export ./wiki-site --topic 42  # Single article
+
+# Distill — audience-aware content synthesis
+emdx distill "authentication"          # Synthesize docs on a topic
+emdx distill --tags "security,active"  # Synthesize docs matching tags
+emdx distill "topic" --for coworkers   # Audience: me (default), docs, coworkers
+emdx distill "topic" --save            # Save distilled output to KB
+
+# History / Diff — document versioning
+emdx history 42                        # Show version history for doc #42
+emdx diff 42                           # Diff current vs previous version
+emdx diff 42 1                         # Diff current vs version 1
+
+# Database
+emdx db status                         # Show active DB path and reason
+emdx db path                           # Print just the path (for scripts)
+emdx db copy-from-prod                 # Copy production DB to dev DB
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).
@@ -322,8 +361,8 @@ Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and 
 
 ## Claude Code Plugin
 
-emdx ships as a Claude Code plugin with skills in the `skills/` directory. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
+emdx ships as a Claude Code plugin with skills in the `.claude/skills/` directory. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
 
-**Available skills:** `/emdx:save`, `/emdx:research`, `/emdx:prime`, `/emdx:prioritize`, `/emdx:setup`, `/emdx:wrapup`, `/emdx:tasks`
+**Available skills:** `/emdx:bootstrap`, `/emdx:prime`, `/emdx:prioritize`, `/emdx:research`, `/emdx:save`, `/emdx:setup`, `/emdx:tasks`, `/emdx:wrapup`
 
 The plugin manifest lives at `.claude-plugin/plugin.json`. Skills follow the [Agent Skills](https://agentskills.io) open standard.

@@ -436,6 +436,8 @@ emdx maintain backup --json
 - `--quiet, -q` - Suppress output (for hook use)
 - `--json` - Structured JSON output
 
+> **Tip:** Backups can be triggered automatically via Claude Code hooks (e.g., on session start). Use `--quiet` for silent hook-driven backups.
+
 #### **emdx maintain drift**
 Detect abandoned or forgotten work in your knowledge base. Analyzes task and epic timestamps to surface stale epics, orphaned active tasks, and documents linked to stale work.
 
@@ -479,6 +481,24 @@ emdx maintain code-drift --json
 - `--limit, -l INTEGER` - Maximum number of documents to check
 - `--fix` - Show suggested replacements when available
 - `--json, -j` - Output as JSON
+
+#### **emdx maintain stale**
+Track knowledge decay and identify documents needing review.
+
+```bash
+# Show stale documents prioritized by urgency
+emdx maintain stale list
+
+# Touch single document (reset staleness timer without incrementing views)
+emdx maintain stale touch 42
+
+# Touch multiple documents
+emdx maintain stale touch 42 43 44
+```
+
+**Subcommands:**
+- `list` - Show stale documents prioritized by urgency
+- `touch` - Reset a document's staleness timer without incrementing the view count
 
 #### **emdx maintain contradictions**
 Detect conflicting information across documents using a 3-stage funnel: embedding similarity for candidate pairs, NLI model (or heuristic fallback) for contradiction screening, and excerpt reporting with confidence levels.
@@ -677,112 +697,8 @@ emdx maintain unlink 42 57
 ```
 
 #### **emdx maintain wiki**
-Alias for `emdx wiki` — kept for backward compatibility. See the [Wiki section](#-wiki-emdx-wiki) for full documentation.
 
-**Subcommands:**
-
-| Command | Description |
-|---------|-------------|
-| `setup` | Run the full wiki bootstrap sequence (index → entities → topics → auto-label) |
-| `topics` | Discover topic clusters using Leiden community detection |
-| `triage` | Bulk triage saved topics: skip low-coherence, auto-label via LLM |
-| `progress` | Show wiki generation progress: topics generated vs pending, costs |
-| `status` | Show wiki generation status and statistics |
-| `generate` | Generate wiki articles from topic clusters |
-| `entities` | Browse entity index pages |
-| `list` | List generated wiki articles |
-| `runs` | List recent wiki generation runs |
-| `coverage` | Show which documents are NOT covered by any topic cluster |
-| `diff` | Show unified diff between previous and current article content |
-| `rate` | Rate a wiki article's quality (1-5 scale) |
-| `export` | Export wiki articles as a MkDocs site |
-| `rename` | Rename a wiki topic (label, slug, and associated document title) |
-| `retitle` | Batch-update topic labels from article H1 headings |
-| `skip` | Skip a topic during wiki generation |
-| `unskip` | Reset a skipped topic back to active |
-| `pin` | Pin a topic so it always regenerates during wiki generation |
-| `unpin` | Reset a pinned topic back to active |
-| `model` | Set or clear a per-topic model override for wiki generation |
-| `prompt` | Set or clear an editorial prompt for a wiki topic |
-| `merge` | Merge two wiki topics into one |
-| `split` | Split a wiki topic by extracting docs that mention an entity |
-| `sources` | List source documents for a wiki topic with weights and status |
-| `weight` | Set relevance weight for a source document within a topic |
-| `exclude` | Exclude a source document from a wiki topic's synthesis |
-| `include` | Re-include a previously excluded source document in a topic |
-
-```bash
-# Full bootstrap: index → entities → topics → auto-label
-emdx maintain wiki setup
-
-# Discover topic clusters (defaults to heading + proper_noun entities)
-emdx maintain wiki topics
-emdx maintain wiki topics --save --auto-label    # Save with LLM-generated names
-emdx maintain wiki topics -e heading -e concept  # Custom entity types
-emdx maintain wiki topics --min-df 3             # Prune rare entities
-
-# Bulk triage saved topics
-emdx maintain wiki triage --skip-below 0.05              # Skip low coherence
-emdx maintain wiki triage --auto-label                    # LLM-label all topics
-emdx maintain wiki triage --skip-below 0.03 --auto-label  # Both
-emdx maintain wiki triage --skip-below 0.05 --dry-run    # Preview only
-
-# Show generation progress
-emdx maintain wiki progress          # Rich output with progress bar
-emdx maintain wiki progress --json   # Machine-readable
-
-# Generate wiki articles
-emdx maintain wiki generate                  # Sequential (default)
-emdx maintain wiki generate -c 3             # 3 concurrent generations
-emdx maintain wiki generate --all --dry-run  # Preview costs
-
-# Export to MkDocs
-emdx maintain wiki export ./wiki-site              # All articles
-emdx maintain wiki export ./wiki-site --topic 42   # Single article
-emdx maintain wiki export ./wiki-site --build      # Build static site
-emdx maintain wiki export ./wiki-site --deploy     # Deploy to GitHub Pages
-
-# Show wiki generation status
-emdx maintain wiki status
-
-# List generated wiki articles
-emdx maintain wiki list
-
-# Show which docs aren't covered by any topic
-emdx maintain wiki coverage
-
-# Show diff between previous and current article content
-emdx maintain wiki diff
-
-# Rate a wiki article (1-5 scale)
-emdx maintain wiki rate
-
-# Topic management
-emdx maintain wiki rename    # Rename a topic
-emdx maintain wiki retitle   # Batch-update labels from article H1s
-emdx maintain wiki skip      # Skip topic during generation
-emdx maintain wiki unskip    # Reset skipped topic
-emdx maintain wiki pin       # Force regeneration
-emdx maintain wiki unpin     # Reset pinned topic
-emdx maintain wiki model     # Set per-topic model override
-emdx maintain wiki prompt    # Set editorial prompt
-
-# Topic splitting and merging
-emdx maintain wiki merge     # Merge two topics into one
-emdx maintain wiki split     # Split topic by entity
-
-# Source document control
-emdx maintain wiki sources   # List sources with weights
-emdx maintain wiki weight    # Set source relevance weight
-emdx maintain wiki exclude   # Exclude a source from synthesis
-emdx maintain wiki include   # Re-include an excluded source
-
-# Browse entity index pages
-emdx maintain wiki entities
-
-# List recent wiki generation runs
-emdx maintain wiki runs
-```
+Backward-compatible alias for `emdx wiki`. Use `emdx wiki` as the primary interface — all subcommands are identical. See the [Wiki section](#-wiki-emdx-wiki) for full documentation.
 
 ## 📖 **Wiki** (`emdx wiki`)
 
@@ -987,6 +903,44 @@ emdx gui --theme emdx-dark
 
 ## 🔗 **Integration Commands**
 
+### **emdx serve**
+Start a JSON-RPC server over stdin/stdout for IDE integrations. Avoids the ~700ms Python cold-start overhead per CLI invocation by keeping a persistent process.
+
+```bash
+# Start the server (reads JSON requests from stdin, writes responses to stdout)
+emdx serve
+```
+
+**Protocol:**
+```json
+// Request (one per line on stdin)
+{"id": 1, "method": "find.recent", "params": {"limit": 20}}
+
+// Response (one per line on stdout)
+{"id": 1, "result": [...]}
+
+// Error
+{"id": 1, "error": {"code": -1, "message": "..."}}
+```
+
+**Available methods:**
+
+| Method | Description |
+|--------|-------------|
+| `find.recent` | Get recent documents (`limit`) |
+| `find.search` | Full-text search (`query`, `limit`) |
+| `find.by_tags` | Search by tags (`tags`, `mode`, `limit`) |
+| `view` | Get full document by ID (`id`) |
+| `save` | Save a document (`title`, `content`, `tags`) |
+| `tag.list` | List all tags (`sort_by`) |
+| `task.list` | List tasks (`status`, `epic_key`, `limit`) |
+| `task.log` | Get task progress log (`id`, `limit`) |
+| `task.update` | Update task status (`id`, `status`) |
+| `task.log_progress` | Log progress on a task (`id`, `message`) |
+| `status` | Get overall status |
+
+The server emits `{"ready": true}` on startup and runs until stdin is closed (EOF).
+
 ### **emdx gist**
 Create or update a GitHub Gist from a document.
 
@@ -1021,14 +975,15 @@ emdx gist 42 --update abc123def456
 ## ⚙️ **Configuration**
 
 ### **Environment Variables**
-- `EMDX_DATABASE_URL` - Custom database connection URL
+- `EMDX_DB` - Override database path (e.g., `EMDX_DB=/tmp/test.db emdx status`)
+- `EMDX_TEST_DB` - Test isolation database (set by pytest fixtures)
 - `GITHUB_TOKEN` - For Gist integration
 - `EDITOR` - Default editor for `emdx edit`
 
 ### **Default Locations**
-- **Database**: `~/.emdx/emdx.db`
-- **Logs**: `~/.emdx/logs/`
-- **Config**: `~/.emdx/config.json` (if used)
+- **Database**: `~/.config/emdx/knowledge.db` (production), `.emdx/dev.db` (dev checkout)
+- **Logs**: `~/.config/emdx/emdx.log` (CLI), `~/.config/emdx/tui_debug.log` (TUI)
+- **Backups**: `~/.config/emdx/backups/`
 
 ## 🎯 **Common Workflows**
 
@@ -1438,25 +1393,3 @@ emdx briefing --save --hours 8
 emdx briefing --save --model sonnet
 ```
 
----
-
-## ⏳ Staleness Tracking (`emdx maintain stale`)
-
-Track knowledge decay and identify documents needing review.
-
-```bash
-# Show stale documents prioritized by urgency
-emdx maintain stale list
-```
-
-### **emdx maintain stale touch**
-
-Reset a document's staleness timer without incrementing the view count.
-
-```bash
-# Touch single document
-emdx maintain stale touch 42
-
-# Touch multiple documents
-emdx maintain stale touch 42 43 44
-```

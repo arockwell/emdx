@@ -4,38 +4,34 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-**Send agents. Save everything. Track what's next.**
+**Save everything. Search by meaning. Track what's next.**
 
-Claude sessions start from zero. emdx doesn't. Save your research, fire off agents that write results back to your knowledge base, and track what's left. One CLI, local SQLite, nothing vanishes.
+AI sessions start from zero. emdx doesn't. Save your research, search it by meaning, and track what's left. One CLI, local SQLite, nothing vanishes.
 
 ![emdx TUI demo](demo.gif)
 
 ## See it in action
 
 ```bash
-# You ask Claude to research something. It saves the findings.
+# Save findings as you go
 $ emdx save "Token refresh fails when clock skew > 30s..." --title "Auth Bug Analysis"
 ✅ Saved as #42: Auth Bug Analysis
 
-# It fires off parallel agents for deeper analysis
-$ emdx delegate "audit auth for vulnerabilities" \
-                "review error handling patterns" \
-                "check input validation coverage"
-📋 Saved as #43: Delegate: audit auth...
-📋 Saved as #44: Delegate: review error handling...
-📋 Saved as #45: Delegate: check input validation...
-
-# It tracks what needs doing
+# Track what needs doing
 $ emdx task add "Fix token refresh bug" --cat FIX
 $ emdx task add "Add rate limiting" --cat FEAT
 
-# Everything accumulates. Nothing vanishes.
-$ emdx find "auth"
-🔍 Found 4 results for 'auth'
+# Search by meaning, not just keywords
+$ emdx find "how we handle token expiry" --mode semantic
+🔍 Found 4 results
 
-# Chain agent output into a PR
-$ emdx delegate --doc 43 --pr "fix the issues from this audit"
-🔀 PR #87: fix the issues from this audit
+# Ask your KB directly
+$ emdx find --ask "What causes the auth failures?"
+💡 Based on 3 documents: Token refresh fails when clock skew exceeds 30s...
+
+# Distill everything into a briefing for your team
+$ emdx distill "auth" --for coworkers --save
+✅ Saved as #46: Distilled: auth
 ```
 
 ## Install
@@ -74,41 +70,9 @@ $ emdx find "auth"
 $ emdx find --tags "security"
 ```
 
-## Delegate
-
-Control how agents work, combine their output, and chain results together.
-
-```bash
-# Throttle concurrency when you have a lot of tasks
-$ emdx delegate -j 3 "t1" "t2" "t3" "t4" "t5"
-
-# Combine outputs into one synthesized summary
-$ emdx delegate --synthesize "analyze auth" "analyze api" "analyze db"
-📋 Saved as #60: Synthesis: analyze auth, analyze api, analyze db
-
-# Feed previous results into new tasks
-$ emdx delegate --doc 60 "write an action plan based on this analysis"
-📋 Saved as #61: Delegate: write an action plan...
-
-# Or run a saved document as a prompt directly
-$ emdx delegate 61
-```
-
-Agents can also make code changes. They work in isolated git worktrees so your working tree stays clean:
-
-```bash
-# Create a branch and open a PR
-$ emdx delegate --pr "fix the auth bug"
-🔀 PR #88: fix the auth bug
-
-# Use a doc as context for the change
-$ emdx delegate --doc 42 --pr "implement this plan"
-🔀 PR #89: implement this plan
-```
-
 ## Track
 
-Organize work with tasks, epics, and categories. Delegate results feed back into the task list.
+Organize work with tasks, epics, and categories.
 
 ```bash
 # Create tasks as you discover work
@@ -128,17 +92,51 @@ $ emdx task epic list
 
 ## AI features
 
-Search by meaning instead of just keywords:
+Search by meaning, get AI-powered answers, and explore your knowledge base in new ways:
 
 ```bash
-# "rate limiting" finds docs about throttling, backoff, quotas...
+# Semantic search — "rate limiting" finds docs about throttling, backoff, quotas
 $ emdx find "how we handle rate limiting" --mode semantic
+
+# Ask your KB directly (needs API key)
+$ emdx find --ask "What did we decide about the API redesign?"
+
+# Add inline citations to any AI answer
+$ emdx find --ask --cite "how does auth work?"
+
+# Build a position paper with arguments for and against
+$ emdx find --think "rewrite the API in Rust"
+
+# Devil's advocate — find evidence against a position
+$ emdx find --think --challenge "rewrite the API in Rust"
+
+# Socratic debugging — diagnostic questions from your bug history
+$ emdx find --debug "TUI freezes on click"
+
+# Serendipity — surface surprising but related documents
+$ emdx find --wander "machine learning"
 
 # Build a context package and pipe it to Claude
 $ emdx find --context "How does auth work?" | claude
 
-# Or ask your KB directly (needs API key)
-$ emdx find --ask "What did we decide about the API redesign?"
+# Distill content for a specific audience
+$ emdx distill "deployment" --for coworkers
+$ emdx distill "auth" --for docs --save
+```
+
+## Standing queries
+
+Set up watches that alert you when new documents match:
+
+```bash
+$ emdx find --watch "deployment"
+👁️ Standing query #1 saved: deployment
+
+$ emdx find --watch-check
+🔔 Query #1 "deployment": 2 new matches since last check
+
+$ emdx find --watch-list
+$ emdx find --watch-remove 1
 ```
 
 ## Wiki
@@ -161,13 +159,31 @@ $ emdx wiki view 42
 $ emdx wiki export ./wiki-site --build
 ```
 
+## Version history
+
+Every edit is tracked with SHA-256 content hashes:
+
+```bash
+$ emdx history 42
+  v1  2026-02-15  +1,204 chars  manual edit
+  v2  2026-02-20    +87 chars   auto-update
+
+$ emdx diff 42        # diff against previous version
+$ emdx diff 42 1      # diff against version 1
+```
+
 ## More features
 
 ```bash
 emdx maintain compact --dry-run                  # Deduplicate similar docs
 emdx maintain compact --auto                     # Merge discovered clusters
-emdx status                                      # Delegate activity dashboard
-emdx delegate running                            # Monitor running agents
+emdx maintain freshness                          # Score document staleness (0-1)
+emdx maintain gaps                               # Detect knowledge gaps and orphans
+emdx maintain drift                              # Find abandoned or forgotten work
+emdx maintain contradictions                     # Detect conflicting claims across docs
+emdx maintain backup                             # Daily backup with logarithmic retention
+emdx status                                      # Knowledge base overview and health metrics
+emdx db status                                   # Show active database path and reason
 emdx gui                                         # Interactive TUI browser
 ```
 
@@ -178,17 +194,26 @@ emdx gui                                         # Interactive TUI browser
 | Save a file | `emdx save --file doc.md` |
 | Save a note | `emdx save "quick note" --title "Title"` |
 | Find by keyword | `emdx find "query"` |
+| Find by meaning | `emdx find "query" --mode semantic` |
 | Find by tag | `emdx find --tags "active"` |
 | View a document | `emdx view 42` |
 | Tag a document | `emdx tag 42 analysis active` |
-| Run an AI task | `emdx delegate "task"` |
-| Run tasks in parallel | `emdx delegate "t1" "t2" "t3"` |
-| Create a PR from a task | `emdx delegate --pr "fix the bug"` |
+| Ask your KB a question | `emdx find --ask "question"` |
+| Get cited answers | `emdx find --ask --cite "question"` |
+| Build a position paper | `emdx find --think "proposal"` |
+| Debug with your KB | `emdx find --debug "bug description"` |
+| Discover forgotten docs | `emdx find --wander` |
+| Watch for new matches | `emdx find --watch "query"` |
+| Pipe context to Claude | `emdx find --context "question" \| claude` |
+| Distill for an audience | `emdx distill "topic" --for coworkers` |
 | Add a task | `emdx task add "title" --cat FEAT` |
 | See ready tasks | `emdx task ready` |
-| Ask your KB a question | `emdx find --context "question" \| claude` |
+| View document history | `emdx history 42` |
+| Diff document versions | `emdx diff 42` |
 | Generate a wiki | `emdx wiki setup && emdx wiki generate` |
 | Search wiki articles | `emdx wiki search "query"` |
+| Check KB health | `emdx maintain freshness && emdx maintain gaps` |
+| Detect contradictions | `emdx maintain contradictions` |
 
 ## Documentation
 

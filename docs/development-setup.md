@@ -126,9 +126,27 @@ run_migrations()
 ```
 
 #### **Database Location**
-- **Default**: `~/.emdx/emdx.db`
-- **Custom**: Set `EMDX_DATABASE_URL` environment variable
-- **Testing**: Temporary databases created automatically
+- **Default (production)**: `~/.config/emdx/knowledge.db`
+- **Dev checkout**: `<project-root>/.emdx/dev.db` (auto-detected)
+- **Custom**: Set `EMDX_DB` environment variable
+- **Testing**: Set `EMDX_TEST_DB` for test isolation (pytest fixtures do this automatically)
+
+#### **Dev Database Isolation**
+
+When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of the production database. This prevents dev/delegate processes from corrupting production data.
+
+**Priority chain for database path:**
+1. `EMDX_TEST_DB` — test isolation (set by pytest fixtures)
+2. `EMDX_DB` — explicit override (e.g. `EMDX_DB=/tmp/test.db poetry run emdx status`)
+3. Dev checkout detection → `<project-root>/.emdx/dev.db`
+4. Production default → `~/.config/emdx/knowledge.db`
+
+**Useful commands:**
+```bash
+emdx db status        # Show active DB path and reason
+emdx db path          # Print just the path (for scripts)
+emdx db copy-from-prod  # Copy production DB to dev DB
+```
 
 ### **TUI Development**
 
@@ -241,10 +259,15 @@ def test_log_stream():
 
 ### **Database Schema Changes**
 1. Create new migration function in `migrations.py`
-2. Add to `MIGRATIONS` list with incremented version
+2. Add to `MIGRATIONS` list with a timestamp-based string ID (format: `"YYYYMMDD_HHMMSS"`)
 3. Test migration with existing databases
 4. Update model classes as needed
 5. Add tests for migration behavior
+
+Migrations use **set-based tracking** with string IDs. Legacy migrations (0-54) use numeric strings. New migrations use timestamp IDs:
+```python
+("20260301_120000", "Add new feature", migration_20260301_120000_add_new_feature)
+```
 
 ## 🐛 **Debugging**
 
@@ -262,10 +285,10 @@ poetry env use python3.11
 #### **Database Issues**
 ```bash
 # Reset database (careful - loses all data!)
-rm ~/.emdx/emdx.db
+rm ~/.config/emdx/knowledge.db
 
 # Check database integrity
-sqlite3 ~/.emdx/emdx.db "PRAGMA integrity_check;"
+sqlite3 ~/.config/emdx/knowledge.db "PRAGMA integrity_check;"
 ```
 
 #### **TUI Display Issues**
