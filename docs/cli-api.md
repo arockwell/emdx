@@ -104,6 +104,21 @@ emdx find --ask "What's our caching strategy?"
 # Context retrieval for piping to claude (replaces old `emdx ai context`)
 emdx find --context "How does auth work?" | claude
 
+# Deliberative search — build a position paper
+emdx find --think "Should we use JWT or sessions?"
+
+# Devil's advocate — challenge a position
+emdx find --think --challenge "JWT is better than sessions"
+
+# Socratic debugger — diagnostic questions from bug history
+emdx find --debug "auth token expiry"
+
+# Inline citations — chunk-level [#ID] references
+emdx find --ask --cite "What's our caching strategy?"
+
+# Serendipity — surface surprising related documents
+emdx find --wander "authentication"
+
 # Show only wiki articles
 emdx find "authentication" --wiki
 
@@ -131,6 +146,11 @@ emdx find "auth" --all-types
 - `--recent INTEGER` - Show N most recently accessed documents
 - `--similar INTEGER` - Find documents similar to this doc ID
 - `--ask` - Answer the query using RAG (retrieves context + LLM)
+- `--think` - Deliberative search: build a position paper with arguments for/against
+- `--challenge` - Devil's advocate: find evidence AGAINST the queried position (use with `--think`)
+- `--debug` - Socratic debugger: diagnostic questions from your bug history
+- `--cite` - Add inline `[#ID]` citations using chunk-level retrieval
+- `--wander` - Serendipity mode: surface surprising but related documents
 - `--context` - Output retrieved context as plain text (for piping to claude)
 - `--wiki` - Show only wiki articles (`doc_type='wiki'`)
 - `--all-types` - Show all document types (user, wiki, etc.)
@@ -159,6 +179,9 @@ emdx view 42 --no-header
 
 # Show document's link graph (replaces old `emdx ai links`)
 emdx view 42 --links
+
+# Adversarial review — check for staleness, contradictions, missing context
+emdx view 42 --review
 ```
 
 ### **emdx edit**
@@ -182,6 +205,65 @@ emdx delete 42
 # Delete multiple documents
 emdx delete 42 43 44
 ```
+
+### **emdx history**
+Show version history for a document. Every edit creates a version snapshot with SHA-256 hashes and character deltas.
+
+```bash
+# Show version history
+emdx history 42
+
+# JSON output
+emdx history 42 --json
+```
+
+**Options:**
+- `--json, -j` - Output as JSON
+
+### **emdx diff**
+Show diff between current content and a previous version.
+
+```bash
+# Diff against the most recent version
+emdx diff 42
+
+# Diff against a specific version
+emdx diff 42 3
+
+# Plain output (no color)
+emdx diff 42 --no-color
+```
+
+**Arguments:**
+- `DOC_ID` - Document ID (required)
+- `VERSION` - Version to compare against (optional, defaults to most recent)
+
+**Options:**
+- `--no-color` - Disable colored output
+
+## 🗄️ **Database Management**
+
+### **emdx db**
+Database path management and dev/prod isolation.
+
+```bash
+# Show which database is active and why
+emdx db status
+
+# Print just the active database path (for scripts)
+emdx db path
+
+# Copy production database to dev database
+emdx db copy-from-prod
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| `status` | Show active DB path and reason (env var, dev checkout, or production) |
+| `path` | Print just the path (machine-friendly, for scripts) |
+| `copy-from-prod` | Copy production DB to dev DB for local development |
 
 ## 🏷️ **Tag Management**
 
@@ -343,6 +425,76 @@ emdx maintain backup --json
 - `--no-retention` - Disable automatic pruning (keep all backups)
 - `--quiet, -q` - Suppress output (for hook use)
 - `--json` - Structured JSON output
+
+#### **emdx maintain drift**
+Detect abandoned or forgotten work in your knowledge base. Analyzes task and epic timestamps to surface stale epics, orphaned active tasks, and documents linked to stale work.
+
+```bash
+# Show stale work items (default: 30 day threshold)
+emdx maintain drift
+
+# Custom staleness threshold
+emdx maintain drift --days 14
+
+# JSON output
+emdx maintain drift --json
+```
+
+**Options:**
+- `--days, -d INTEGER` - Staleness threshold in days (default: 30)
+- `--json` - Output as JSON
+
+#### **emdx maintain code-drift**
+Detect stale code references in knowledge base documents. Scans for backtick-wrapped identifiers (function names, class names, file paths) and cross-references them against the codebase to find references that no longer exist.
+
+```bash
+# Check all documents for stale code references
+emdx maintain code-drift
+
+# Scope to a specific project
+emdx maintain code-drift --project emdx
+
+# Show suggested replacements
+emdx maintain code-drift --fix
+
+# Limit documents checked
+emdx maintain code-drift --limit 50
+
+# JSON output
+emdx maintain code-drift --json
+```
+
+**Options:**
+- `--project, -p TEXT` - Scope to a specific project's documents
+- `--limit, -l INTEGER` - Maximum number of documents to check
+- `--fix` - Show suggested replacements when available
+- `--json, -j` - Output as JSON
+
+#### **emdx maintain contradictions**
+Detect conflicting information across documents using a 3-stage funnel: embedding similarity for candidate pairs, NLI model (or heuristic fallback) for contradiction screening, and excerpt reporting with confidence levels.
+
+```bash
+# Find contradictions across the KB
+emdx maintain contradictions
+
+# Scope to a project
+emdx maintain contradictions --project emdx
+
+# Adjust similarity threshold for candidate pairs
+emdx maintain contradictions --threshold 0.8
+
+# Limit number of pairs to check
+emdx maintain contradictions --limit 50
+
+# JSON output
+emdx maintain contradictions --json
+```
+
+**Options:**
+- `--limit, -n INTEGER` - Max pairs to check (default: 100)
+- `--project, -p TEXT` - Scope to project
+- `--threshold FLOAT` - Similarity threshold for candidate pairs (default: 0.7)
+- `--json` - Output as JSON
 
 #### **emdx maintain wikify**
 Create title-match links between documents (auto-wikification). Scans document content for mentions of other documents' titles and creates links. No AI or embeddings required.
@@ -682,6 +834,57 @@ emdx trash restore 42
 emdx trash purge --force
 ```
 
+### **emdx status**
+Knowledge base overview with optional health and narrative modes.
+
+```bash
+# Quick overview
+emdx status
+
+# Detailed statistics
+emdx status --stats
+emdx status --stats --detailed
+
+# KB vitals dashboard (health metrics)
+emdx status --vitals
+
+# Reflective narrative summary
+emdx status --mirror
+
+# JSON output (works with all modes)
+emdx status --json
+```
+
+**Options:**
+- `--stats` - Show KB statistics
+- `--detailed` - Include project breakdown (with `--stats`)
+- `--vitals` - Show KB vitals dashboard
+- `--mirror` - Reflective KB summary (narrative)
+- `--json` - Output as JSON
+- `--rich` - Enable colored Rich output
+
+### **emdx prime**
+Inject knowledge base context for Claude Code sessions. Shows ready tasks, in-progress work, recent documents, and git context.
+
+```bash
+# Full context injection
+emdx prime
+
+# Compact output (tasks + epics only, no git/docs)
+emdx prime --brief
+
+# JSON output (for agent consumption)
+emdx prime --json
+
+# Quiet mode (errors only)
+emdx prime --quiet
+```
+
+**Options:**
+- `--brief, -b` - Compact output: tasks + epics, no git/docs
+- `--json` - Output as JSON
+- `--quiet, -q` - Suppress output (errors only)
+
 ## 🎨 **Interactive Interface**
 
 ### **emdx gui**
@@ -727,13 +930,6 @@ emdx gui --theme emdx-dark
 - `w` - Mark won't do
 - `r` - Refresh
 - `?` - Help
-
-*Delegate Browser:*
-- `j/k` - Navigate up/down
-- `z` - Zoom detail pane
-- `r` - Refresh
-- Click PR links to open in browser
-- Click output doc links to navigate to document
 
 ## 🔗 **Integration Commands**
 
