@@ -111,12 +111,6 @@ Report what was generated:
 
 ## Scaling
 
-For large codebases, use `emdx delegate` to parallelize:
-
-```bash
-emdx delegate \
-  "Bootstrap architecture docs for the database layer" \
-  "Bootstrap architecture docs for the CLI layer" \
-  "Bootstrap architecture docs for the service layer" \
-  --synthesize
-```
+For large codebases, use the Agent tool to parallelize — launch multiple subagents
+that each handle one category or component, reading source code and saving docs
+independently.
