@@ -490,6 +490,16 @@ class TaskView(Widget):
         else:
             self._render_groups_by_status(table)
 
+        # Show placeholder when table is empty
+        if table.row_count == 0:
+            table.add_row(
+                "",
+                "",
+                Text('No tasks yet — add one with: emdx task add "Title"', style="dim"),
+                "",
+                key=f"{HEADER_PREFIX}empty",
+            )
+
         # Restore cursor
         if restore_row is not None and table.row_count > 0:
             target = min(restore_row, table.row_count - 1)

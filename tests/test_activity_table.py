@@ -90,13 +90,15 @@ class TestPopulate:
 
     @pytest.mark.asyncio
     async def test_empty_populate(self) -> None:
-        """Populating with empty list results in zero rows."""
+        """Populating with empty list shows a placeholder row."""
         app = ActivityTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
             table = app.query_one("#activity-table", ActivityTable)
             table.populate([])
-            assert table.row_count == 0
+            assert table.row_count == 1
+            # Placeholder row should not return an item
+            assert table.get_selected_item() is None
 
     @pytest.mark.asyncio
     async def test_populate_documents(self) -> None:

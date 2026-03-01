@@ -2965,6 +2965,18 @@ def migration_058_add_standing_queries(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_20260301_140000_add_schema_flags(conn: sqlite3.Connection) -> None:
+    """Add schema_flags key-value table for tracking one-time operations."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_flags (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("0", "Create documents table", migration_000_create_documents_table),
@@ -3030,6 +3042,7 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("56", "Add document versions table", migration_056_add_document_versions),
     ("57", "Fix FTS5 update trigger for external content", migration_057_fix_fts5_update_trigger),
     ("58", "Add standing queries for saved searches", migration_058_add_standing_queries),
+    ("20260301_140000", "Add schema_flags table", migration_20260301_140000_add_schema_flags),
 ]
 
 
