@@ -1,7 +1,6 @@
 """Task CLI commands — simplified agent work queue.
 
 Agent-facing commands for creating and consuming work items.
-Delegate activity tracking is separate (shown via `emdx status`).
 """
 
 from datetime import date, datetime
@@ -148,7 +147,6 @@ def ready(
     """Show tasks ready to work on.
 
     Lists open tasks that aren't blocked by dependencies.
-    Excludes delegate activity — only shows manually created tasks.
 
     Examples:
         emdx task ready
@@ -283,25 +281,13 @@ def view(
     from emdx.models.documents import get_document
 
     source_id = task.get("source_doc_id")
-    output_id = task.get("output_doc_id")
-    if source_id or output_id:
+    if source_id:
         console.print()
-        if source_id:
-            source_doc = get_document(source_id)
-            if source_doc:
-                console.print(
-                    f"  [dim]Input:[/dim]  #{source_id} [cyan]{source_doc['title']}[/cyan]"
-                )
-            else:
-                console.print(f"  [dim]Input:[/dim]  #{source_id} [dim](deleted)[/dim]")
-        if output_id:
-            output_doc = get_document(output_id)
-            if output_doc:
-                console.print(
-                    f"  [dim]Output:[/dim] #{output_id} [cyan]{output_doc['title']}[/cyan]"
-                )
-            else:
-                console.print(f"  [dim]Output:[/dim] #{output_id} [dim](deleted)[/dim]")
+        source_doc = get_document(source_id)
+        if source_doc:
+            console.print(f"  [dim]Source:[/dim] #{source_id} [cyan]{source_doc['title']}[/cyan]")
+        else:
+            console.print(f"  [dim]Source:[/dim] #{source_id} [dim](deleted)[/dim]")
 
     # Description
     desc = task.get("description") or ""
@@ -456,7 +442,7 @@ def blocked(
 @app.command("list")
 def list_cmd(
     status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
-    all: bool = typer.Option(False, "--all", "-a", help="Include delegate tasks"),
+    all: bool = typer.Option(False, "--all", "-a", help="Include all tasks"),
     done: bool = typer.Option(False, "--done", help="Show done tasks"),
     limit: int = typer.Option(20, "-n", "--limit"),
     epic: TaskRef | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
@@ -502,11 +488,9 @@ def list_cmd(
         status_list = ["open", "active", "blocked"]
 
     resolved_epic = _resolve_id(epic) if epic else None
-    exclude_delegate = not all
     task_list = tasks.list_tasks(
         status=status_list,
         limit=limit,
-        exclude_delegate=exclude_delegate,
         epic_key=cat,
         parent_task_id=resolved_epic,
         since=since_date,

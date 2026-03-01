@@ -217,9 +217,7 @@ class DocumentMerger:
             for doc in documents
         }
 
-    def _merge_content(
-        self, content1: str, content2: str, title1: str, title2: str
-    ) -> str:
+    def _merge_content(self, content1: str, content2: str, title1: str, title2: str) -> str:
         """Intelligently merge two document contents."""
         if not content1:
             return content2

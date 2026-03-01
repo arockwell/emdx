@@ -1,7 +1,10 @@
 """Shared pytest fixtures for emdx tests."""
 
+from __future__ import annotations
+
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -17,8 +20,11 @@ from test_fixtures import DatabaseForTesting
 # which redirects all database operations to a temporary file.
 # =============================================================================
 
+
 @pytest.fixture(scope="session", autouse=True)
-def isolate_test_database(tmp_path_factory):
+def isolate_test_database(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[Path, None, None]:
     """Automatically isolate ALL tests from the real database.
 
     This session-scoped fixture runs once before any tests and ensures that
@@ -43,14 +49,17 @@ def isolate_test_database(tmp_path_factory):
     # This is necessary because the module may have been imported already
     try:
         import emdx.database.connection as conn_module
+
         # Recreate the global instance with the test path
         new_db_connection = conn_module.DatabaseConnection()
         conn_module.db_connection = new_db_connection
 
         # SAFETY CHECK: Verify we're using the test database, not the real one
         real_db = Path.home() / ".config" / "emdx" / "knowledge.db"
-        assert str(conn_module.db_connection.db_path) != str(real_db), \
-            f"CRITICAL: Test is using real database! Expected temp path, got {conn_module.db_connection.db_path}"  # noqa: E501
+        db_path = conn_module.db_connection.db_path
+        assert str(db_path) != str(real_db), (
+            f"CRITICAL: Test is using real database! Expected temp path, got {db_path}"
+        )
 
         # Run migrations on the test database
         conn_module.db_connection.ensure_schema()
@@ -59,30 +68,31 @@ def isolate_test_database(tmp_path_factory):
         # Python caches import bindings, so `from X import Y` doesn't see updates to X.Y
         # We MUST import these modules now (if not already) and patch them
         modules_to_patch = [
-            'emdx.database.documents',
-            'emdx.database.search',
-            'emdx.database.groups',
-            'emdx.database.document_links',
-            'emdx.models.executions',
-            'emdx.services.execution_monitor',
-            'emdx.services.execution_service',
+            "emdx.database.documents",
+            "emdx.database.search",
+            "emdx.database.groups",
+            "emdx.database.document_links",
+            "emdx.models.events",
+            "emdx.commands.history",
         ]
         import importlib
         import sys
+
         for mod_name in modules_to_patch:
             try:
                 # Import the module if not already imported
                 if mod_name not in sys.modules:
                     importlib.import_module(mod_name)
                 # Patch its db_connection reference
-                if hasattr(sys.modules[mod_name], 'db_connection'):
+                if hasattr(sys.modules[mod_name], "db_connection"):
                     sys.modules[mod_name].db_connection = new_db_connection
             except ImportError:
                 pass  # Module doesn't exist, skip
 
         # Final safety verification
-        assert str(conn_module.db_connection.db_path) == str(test_db_path), \
-            f"Database path mismatch: expected {test_db_path}, got {conn_module.db_connection.db_path}"  # noqa: E501
+        assert str(db_path) == str(test_db_path), (
+            f"Database path mismatch: expected {test_db_path}, got {db_path}"
+        )
 
     except ImportError:
         pass  # Module not imported yet, will pick up env var on first import
@@ -97,7 +107,7 @@ def isolate_test_database(tmp_path_factory):
 
 
 @pytest.fixture(scope="function")
-def temp_db():
+def temp_db() -> Generator[DatabaseForTesting, None, None]:
     """Create a temporary in-memory SQLite database for testing."""
     db = DatabaseForTesting(":memory:")
     yield db
@@ -105,7 +115,7 @@ def temp_db():
 
 
 @pytest.fixture(scope="function")
-def temp_db_file():
+def temp_db_file() -> Generator[DatabaseForTesting, None, None]:
     """Create a temporary SQLite database file for testing."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
@@ -118,7 +128,7 @@ def temp_db_file():
 
 
 @pytest.fixture(scope="function")
-def sample_documents(temp_db):
+def sample_documents(temp_db: DatabaseForTesting) -> list[int]:
     """Add some sample documents to the database with tags.
 
     Tags are added directly via SQL to avoid global state contamination
@@ -145,18 +155,22 @@ def sample_documents(temp_db):
         },
     ]
 
-    doc_ids = []
+    doc_ids: list[int] = []
     conn = temp_db.get_connection()
 
     for doc in docs:
-        doc_id = temp_db.save_document(
-            title=doc["title"], content=doc["content"], project=doc["project"]
-        )
+        title = str(doc["title"])
+        content = str(doc["content"])
+        project = str(doc["project"])
+        doc_id = temp_db.save_document(title=title, content=content, project=project)
+        assert doc_id is not None
         doc_ids.append(doc_id)
 
         # Add tags directly via SQL to avoid global state contamination
-        for tag_name in doc["tags"]:
-            tag_name = tag_name.lower().strip()
+        tags = doc["tags"]
+        assert isinstance(tags, list)
+        for tag_name in tags:
+            tag_name = str(tag_name).lower().strip()
             # Get or create tag
             cursor = conn.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
             result = cursor.fetchone()

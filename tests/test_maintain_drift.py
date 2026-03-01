@@ -71,7 +71,6 @@ def _create_task(
     status: str = "open",
     epic_key: str | None = None,
     days_ago: int = 0,
-    output_doc_id: int | None = None,
     source_doc_id: int | None = None,
 ) -> int:
     """Helper to create a task directly via SQL."""
@@ -82,13 +81,13 @@ def _create_task(
         INSERT INTO tasks (
             title, parent_task_id, status, epic_key,
             created_at, updated_at,
-            output_doc_id, source_doc_id
+            source_doc_id
         )
         VALUES (
             ?, ?, ?, ?,
             datetime('now', ? || ' days'),
             datetime('now', ? || ' days'),
-            ?, ?
+            ?
         )
         """,
         (
@@ -98,7 +97,6 @@ def _create_task(
             epic_key,
             f"-{days_ago}",
             f"-{days_ago}",
-            output_doc_id,
             source_doc_id,
         ),
     )
@@ -250,29 +248,6 @@ class TestOrphanedActiveTasks:
         result = _find_orphaned_active_tasks(30)
         assert len(result) == 0
 
-    def test_delegate_tasks_excluded(self) -> None:
-        """Delegate tasks (with prompt) are excluded."""
-        with db.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                INSERT INTO tasks (
-                    title, status, prompt,
-                    created_at, updated_at
-                )
-                VALUES (
-                    'Delegate task', 'active',
-                    'do something',
-                    datetime('now', '-20 days'),
-                    datetime('now', '-20 days')
-                )
-                """,
-            )
-            conn.commit()
-            assert cursor.lastrowid is not None
-
-        result = _find_orphaned_active_tasks(30)
-        assert len(result) == 0
-
 
 class TestStaleLinkedDocs:
     """Tests for stale linked docs detection."""
@@ -280,23 +255,6 @@ class TestStaleLinkedDocs:
     def test_no_linked_docs_returns_empty(self) -> None:
         result = _find_stale_linked_docs(30)
         assert result == []
-
-    def test_stale_output_doc_detected(self) -> None:
-        """Doc linked as output to a stale task is detected."""
-        with db.get_connection() as conn:
-            doc_id = _create_doc(conn, "Output Doc")
-            _create_task(
-                conn,
-                "Stale task",
-                status="open",
-                days_ago=45,
-                output_doc_id=doc_id,
-            )
-
-        result = _find_stale_linked_docs(30)
-        assert len(result) == 1
-        assert result[0]["doc_title"] == "Output Doc"
-        assert result[0]["link_type"] == "output"
 
     def test_stale_source_doc_detected(self) -> None:
         """Doc linked as source to a stale task is detected."""
@@ -324,7 +282,7 @@ class TestStaleLinkedDocs:
                 "Fresh task",
                 status="open",
                 days_ago=5,
-                output_doc_id=doc_id,
+                source_doc_id=doc_id,
             )
 
         result = _find_stale_linked_docs(30)
@@ -339,7 +297,7 @@ class TestStaleLinkedDocs:
                 "Done task",
                 status="done",
                 days_ago=45,
-                output_doc_id=doc_id,
+                source_doc_id=doc_id,
             )
 
         result = _find_stale_linked_docs(30)
@@ -444,10 +402,13 @@ class TestDriftCLI:
 
     def test_drift_help(self) -> None:
         """Drift command shows help."""
+        import re
+
         result = runner.invoke(app, ["maintain", "drift", "--help"])
         assert result.exit_code == 0
-        assert "drift" in result.output.lower()
-        assert "--days" in result.output
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "drift" in plain.lower()
+        assert "--days" in plain
 
     def test_drift_no_results(self) -> None:
         """No drift shows friendly message."""

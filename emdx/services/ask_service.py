@@ -4,7 +4,7 @@ Q&A service for EMDX - RAG over your knowledge base.
 Uses semantic search when available (embeddings indexed),
 falls back to keyword search (FTS) otherwise.
 
-Uses the Claude CLI (via UnifiedExecutor) for answer generation.
+Uses the Claude CLI (--print mode) for answer generation.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import logging
 import math
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -231,7 +232,7 @@ def _execute_claude_prompt(
     title: str,
     model: str | None = None,
 ) -> str:
-    """Execute a Q&A prompt via the Claude CLI.
+    """Execute a Q&A prompt via the Claude CLI --print mode.
 
     Combines system and user messages into a single prompt
     for --print mode.
@@ -242,25 +243,26 @@ def _execute_claude_prompt(
     Raises:
         RuntimeError: If the CLI execution fails.
     """
-    from .unified_executor import ExecutionConfig, UnifiedExecutor
-
     prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_message}"
 
-    config = ExecutionConfig(
-        prompt=prompt,
-        title=title,
-        allowed_tools=[],
-        timeout_seconds=ANSWER_TIMEOUT,
-        model=model,
-    )
+    cmd = ["claude", "--print", prompt]
+    if model:
+        cmd.extend(["--model", model])
 
-    executor = UnifiedExecutor()
-    result = executor.execute(config)
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=ANSWER_TIMEOUT,
+        )
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() or f"Exit code {result.returncode}"
+            raise RuntimeError(f"Answer generation failed: {error_msg}")
 
-    if not result.success:
-        raise RuntimeError(f"Answer generation failed: {result.error_message or 'unknown error'}")
-
-    return result.output_content or ""
+        return result.stdout.strip()
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Answer generation timed out after {ANSWER_TIMEOUT}s") from e
 
 
 @dataclass

@@ -466,16 +466,20 @@ def find(
     """
     search_query = " ".join(query) if query else ""
 
-    # Determine doc_type filter: --wiki -> 'wiki', --all-types -> None, default -> 'user'
+    # Record search event (non-critical, best-effort)
+    if search_query:
+        from emdx.models.events import record_event
+
+        record_event("search", query=search_query)
+
+    # Determine doc_type filter: --wiki -> 'wiki', default -> None (all types)
     if wiki and all_types:
         console.print("[red]Error: --wiki and --all-types are mutually exclusive[/red]")
         raise typer.Exit(1)
     if wiki:
         doc_type: str | None = "wiki"
-    elif all_types:
-        doc_type = None
     else:
-        doc_type = "user"
+        doc_type = None
 
     try:
         # Handle --all: list all documents
@@ -637,14 +641,17 @@ def find(
 
         for i, result in enumerate(hybrid_results, 1):
             # Display result header with chunk heading if available
+            wiki_badge = " [magenta]\\[wiki][/magenta]" if result.doc_type == "wiki" else ""
             if result.chunk_heading:
                 console.print(
-                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold] "
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold]"
+                    f"{wiki_badge} "
                     f"[dim]{result.chunk_heading}[/dim]"
                 )
             else:
                 console.print(
-                    f"[bold cyan]#{result.doc_id}[/bold cyan] [bold]{result.title}[/bold]"
+                    f"[bold cyan]#{result.doc_id}[/bold cyan] "
+                    f"[bold]{result.title}[/bold]{wiki_badge}"
                 )
 
             # Display metadata
@@ -1406,7 +1413,10 @@ def _find_keyword_search(
 
     for i, result in enumerate(results, 1):
         # Display result header
-        console.print(f"[bold cyan]#{result['id']}[/bold cyan] [bold]{result['title']}[/bold]")
+        wiki_badge = " [magenta]\\[wiki][/magenta]" if result.get("doc_type") == "wiki" else ""
+        console.print(
+            f"[bold cyan]#{result['id']}[/bold cyan] [bold]{result['title']}[/bold]{wiki_badge}"
+        )
 
         # Display metadata
         metadata = []
@@ -1475,6 +1485,11 @@ def view(
         if review:
             _view_review(doc)
             return
+
+        # Record view event (non-critical, best-effort)
+        from emdx.models.events import record_event
+
+        record_event("view", doc_id=doc["id"])
 
         doc_tags = get_document_tags(doc["id"])
 

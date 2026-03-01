@@ -339,7 +339,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -353,7 +352,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -367,7 +365,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=20,
-            exclude_delegate=False,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -381,7 +378,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=20,
-            exclude_delegate=False,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -395,7 +391,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -409,7 +404,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -423,7 +417,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=5,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -437,7 +430,6 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=10,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -481,7 +473,6 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since="2026-01-15",
@@ -495,7 +486,6 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since="2026-01-15",
@@ -511,7 +501,6 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since="2026-02-25",
@@ -526,14 +515,11 @@ class TestTaskListDateFilters:
     @patch("emdx.commands.tasks.tasks")
     def test_list_since_with_status_override(self, mock_tasks):
         mock_tasks.list_tasks.return_value = []
-        result = runner.invoke(
-            app, ["list", "--since", "2026-01-01", "-s", "done,wontdo"]
-        )
+        result = runner.invoke(app, ["list", "--since", "2026-01-01", "-s", "done,wontdo"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done", "wontdo"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since="2026-01-01",
@@ -547,7 +533,6 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            exclude_delegate=True,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -683,7 +668,7 @@ class TestTaskView:
         assert "SEC-1" in out
         assert "Category: SEC" in out
         assert "Epic: #500" in out
-        assert "Input:" in out
+        assert "Source:" in out
         assert "#99" in out
         assert "Security audit report" in out
         assert "Priority: 1" in out

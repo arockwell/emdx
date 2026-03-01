@@ -1,6 +1,5 @@
 """Tests for tag operations."""
 
-
 from test_fixtures import DatabaseForTesting
 
 

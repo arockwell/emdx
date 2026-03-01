@@ -69,7 +69,8 @@ def search_documents(
                 SELECT
                     d.id, d.title, d.project, d.created_at, d.updated_at,
                     NULL as snippet,
-                    0 as rank
+                    0 as rank,
+                    d.doc_type
                 FROM documents d
                 WHERE d.deleted_at IS NULL
             """
@@ -79,7 +80,8 @@ def search_documents(
                 SELECT
                     d.id, d.title, d.project, d.created_at, d.updated_at,
                     snippet(documents_fts, 1, '<b>', '</b>', '...', 30) as snippet,
-                    rank as rank
+                    rank as rank,
+                    d.doc_type
                 FROM documents d
                 JOIN documents_fts ON d.id = documents_fts.rowid
                 WHERE documents_fts MATCH ? AND d.deleted_at IS NULL

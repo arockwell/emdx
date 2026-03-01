@@ -39,15 +39,12 @@ def get_logger(name: str) -> logging.Logger:
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "emdx.log"
 
-        handler = RotatingFileHandler(
-            log_file, maxBytes=_MAX_LOG_BYTES, backupCount=_BACKUP_COUNT
-        )
+        handler = RotatingFileHandler(log_file, maxBytes=_MAX_LOG_BYTES, backupCount=_BACKUP_COUNT)
         handler.setLevel(logging.INFO)
 
         # Create formatter
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
         handler.setFormatter(formatter)
 
