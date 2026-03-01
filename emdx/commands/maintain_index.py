@@ -7,6 +7,7 @@ entity extraction commands.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import typer
@@ -285,11 +286,16 @@ def entities_command(
         True, "--wikify/--no-wikify", help="Also create entity-match links"
     ),
     rebuild: bool = typer.Option(
-        False, "--rebuild", help="Clear entity-match links before regenerating"
+        False,
+        "--rebuild",
+        help="Clear entity-match links before regenerating",
     ),
     cleanup: bool = typer.Option(
-        False, "--cleanup", help="Remove noisy entities and re-extract with current filters"
+        False,
+        "--cleanup",
+        help="Remove noisy entities and re-extract with current filters",
     ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Extract entities from documents and create entity-match links.
 
@@ -303,6 +309,7 @@ def entities_command(
         emdx maintain entities --all           # Backfill all documents
         emdx maintain entities 42 --no-wikify  # Extract only, no linking
         emdx maintain entities --cleanup       # Clean noise + re-extract
+        emdx maintain entities --all --json    # JSON output
     """
     from ..services.entity_service import (
         cleanup_noisy_entities,
@@ -316,25 +323,48 @@ def entities_command(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
+            disable=json_output,
         ) as progress:
             task = progress.add_task("Cleaning noisy entities & re-extracting...", total=None)
             deleted, re_extracted = cleanup_noisy_entities()
             progress.update(task, completed=True)
-        console.print(
-            f"[green]Cleaned up entities, re-extracted for {re_extracted} documents[/green]"
-        )
+
+        total_links = 0
+        docs = 0
+        total_entities = 0
         if wikify:
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console,
+                disable=json_output,
             ) as progress:
                 task = progress.add_task("Rebuilding entity-match links...", total=None)
                 total_entities, total_links, docs = entity_wikify_all(rebuild=True)
                 progress.update(task, completed=True)
-            console.print(
-                f"[green]Created {total_links} entity-match links across {docs} documents[/green]"
+
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "action": "cleanup",
+                        "entities_deleted": deleted,
+                        "docs_re_extracted": re_extracted,
+                        "entities_extracted": total_entities,
+                        "links_created": total_links,
+                        "docs_processed": docs,
+                    }
+                )
             )
+        else:
+            console.print(
+                f"[green]Cleaned up entities, re-extracted for {re_extracted} documents[/green]"
+            )
+            if wikify:
+                console.print(
+                    f"[green]Created {total_links} entity-match links "
+                    f"across {docs} documents[/green]"
+                )
         return
 
     if all_docs:
@@ -343,16 +373,30 @@ def entities_command(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console,
+                disable=json_output,
             ) as progress:
                 task = progress.add_task("Extracting entities & linking...", total=None)
                 total_entities, total_links, docs = entity_wikify_all(
                     rebuild=rebuild,
                 )
                 progress.update(task, completed=True)
-            console.print(
-                f"[green]Extracted {total_entities} entities, "
-                f"created {total_links} links across {docs} documents[/green]"
-            )
+            if json_output:
+                print(
+                    json.dumps(
+                        {
+                            "action": "extract_and_link",
+                            "entities_extracted": total_entities,
+                            "links_created": total_links,
+                            "docs_processed": docs,
+                        }
+                    )
+                )
+            else:
+                console.print(
+                    f"[green]Extracted {total_entities} entities, "
+                    f"created {total_links} links "
+                    f"across {docs} documents[/green]"
+                )
         else:
             from ..database import db
 
@@ -365,31 +409,72 @@ def entities_command(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console,
+                disable=json_output,
             ) as progress:
                 task = progress.add_task("Extracting entities...", total=None)
                 for did in doc_ids_list:
                     total += extract_and_save_entities(did)
                 progress.update(task, completed=True)
-            console.print(
-                f"[green]Extracted {total} entities from {len(doc_ids_list)} documents[/green]"
-            )
+            if json_output:
+                print(
+                    json.dumps(
+                        {
+                            "action": "extract_only",
+                            "entities_extracted": total,
+                            "docs_processed": len(doc_ids_list),
+                        }
+                    )
+                )
+            else:
+                console.print(
+                    f"[green]Extracted {total} entities from {len(doc_ids_list)} documents[/green]"
+                )
         return
 
     if doc_id is None:
-        console.print("[red]Error: provide a document ID or use --all[/red]")
+        if json_output:
+            print(json.dumps({"error": "Provide a document ID or use --all"}))
+        else:
+            console.print("[red]Error: provide a document ID or use --all[/red]")
         raise typer.Exit(1)
 
     if wikify:
         result = entity_match_wikify(doc_id)
-        console.print(
-            f"Extracted [cyan]{result.entities_extracted}[/cyan] entities from document #{doc_id}"
-        )
-        if result.links_created > 0:
-            console.print(f"[green]Created {result.links_created} entity-match link(s)[/green]")
-            for lid in result.linked_doc_ids:
-                console.print(f"  [cyan]#{lid}[/cyan]")
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "action": "extract_and_link",
+                        "doc_id": doc_id,
+                        "entities_extracted": result.entities_extracted,
+                        "links_created": result.links_created,
+                        "linked_doc_ids": result.linked_doc_ids,
+                        "skipped_existing": result.skipped_existing,
+                    }
+                )
+            )
         else:
-            console.print("[dim]No new entity-match links created[/dim]")
+            console.print(
+                f"Extracted [cyan]{result.entities_extracted}[/cyan] "
+                f"entities from document #{doc_id}"
+            )
+            if result.links_created > 0:
+                console.print(f"[green]Created {result.links_created} entity-match link(s)[/green]")
+                for lid in result.linked_doc_ids:
+                    console.print(f"  [cyan]#{lid}[/cyan]")
+            else:
+                console.print("[dim]No new entity-match links created[/dim]")
     else:
         count = extract_and_save_entities(doc_id)
-        console.print(f"Extracted [cyan]{count}[/cyan] entities from document #{doc_id}")
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "action": "extract_only",
+                        "doc_id": doc_id,
+                        "entities_extracted": count,
+                    }
+                )
+            )
+        else:
+            console.print(f"Extracted [cyan]{count}[/cyan] entities from document #{doc_id}")
