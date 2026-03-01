@@ -295,7 +295,7 @@ def _get_active_epics() -> list[EpicInfo]:
 
 
 def _get_ready_tasks() -> list[ReadyTask]:
-    """Get tasks that are ready to work on (open + no blockers, excludes delegate)."""
+    """Get tasks that are ready to work on (open + no blockers)."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -303,7 +303,6 @@ def _get_ready_tasks() -> list[ReadyTask]:
                    t.source_doc_id, t.epic_key, t.epic_seq
             FROM tasks t
             WHERE t.status = 'open'
-            AND t.prompt IS NULL
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps td
                 JOIN tasks blocker ON td.depends_on = blocker.id
@@ -329,14 +328,13 @@ def _get_ready_tasks() -> list[ReadyTask]:
 
 
 def _get_in_progress_tasks() -> list[InProgressTask]:
-    """Get manually created tasks currently in progress (excludes delegate)."""
+    """Get tasks currently in progress."""
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, title, description, priority, epic_key, epic_seq
             FROM tasks
             WHERE status = 'active'
-            AND prompt IS NULL
             ORDER BY updated_at DESC
             LIMIT 10
         """)
