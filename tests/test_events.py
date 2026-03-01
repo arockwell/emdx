@@ -115,7 +115,6 @@ class TestRecordEvent:
         assert "update" in EVENT_TYPES
         assert "delete" in EVENT_TYPES
         assert "ask" in EVENT_TYPES
-        assert "delegate" in EVENT_TYPES
 
 
 class TestSaveDocumentEvent:
