@@ -149,3 +149,25 @@ class DatabaseStats(TypedDict, total=False):
     last_accessed: str | None
     table_size: str
     most_viewed: MostViewedDoc
+
+
+class StandingQueryRow(TypedDict):
+    """Row from the standing_queries table."""
+
+    id: int
+    query: str
+    tags: str | None
+    project: str | None
+    created_at: datetime | None
+    last_checked_at: datetime | None
+    notify_count: int
+
+
+class StandingQueryMatch(TypedDict):
+    """A new document matching a standing query."""
+
+    query_id: int
+    query: str
+    doc_id: int
+    doc_title: str
+    doc_created_at: str | None
