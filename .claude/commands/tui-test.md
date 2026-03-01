@@ -14,7 +14,7 @@ Generate a manual testing checklist for TUI changes.
 - [ ] Scroll down in activity list, wait 5s — list should NOT jump to top on auto-refresh
 - [ ] Expand a workflow execution — children load correctly
 - [ ] Select an item — RHS preview panel shows correct content
-- [ ] Run `emdx delegate "test"` in another terminal — new entry appears without disrupting scroll
+- [ ] Trigger a background task in another terminal — new entry appears without disrupting scroll
 - [ ] Check column alignment — time and ID columns are right-aligned and consistent
 
 ### cascade_browser.py
