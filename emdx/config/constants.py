@@ -40,3 +40,14 @@ DEFAULT_TAGGING_CONFIDENCE = 0.75  # Default confidence for auto-tagging
 # =============================================================================
 
 DEFAULT_TASK_PRIORITY = 3  # Default priority for new tasks (1-5 scale)
+
+# =============================================================================
+# BACKUP CONFIGURATION
+# =============================================================================
+
+EMDX_BACKUP_DIR = EMDX_CONFIG_DIR / "backups"
+# Logarithmic retention tiers (days)
+BACKUP_DAILY_DAYS = 7  # Keep all from last 7 days
+BACKUP_WEEKLY_DAYS = 28  # Keep 1/week for weeks 2-4
+BACKUP_MONTHLY_DAYS = 180  # Keep 1/month for months 2-6
+BACKUP_YEARLY_DAYS = 730  # Keep 1/year for last 2 years

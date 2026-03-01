@@ -209,6 +209,9 @@ emdx maintain index                    # Build/update embedding index
 emdx maintain link --all               # Auto-link related documents
 # Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
 # Configure via `maintain.auto_link_on_save` setting.
+emdx maintain backup                   # Create compressed daily backup
+emdx maintain backup --list            # List existing backups
+emdx maintain backup --restore <file>  # Restore from a backup
 
 # Wiki (top-level; `emdx maintain wiki ...` still works)
 emdx wiki                              # Compact wiki overview
