@@ -89,6 +89,7 @@ class HybridSearchResult:
     source: str  # "keyword", "semantic", "hybrid", "fts", "tags", "fuzzy", "recent", "id"
     snippet: str
     tags: list[str] = field(default_factory=list)
+    doc_type: str = "user"
     # Chunk-level data (populated when extract=True or from semantic search)
     chunk_heading: str | None = None
     chunk_text: str | None = None
@@ -769,6 +770,7 @@ class HybridSearchService:
                     semantic_score=0.0,
                     source="keyword",
                     snippet=(doc.get("snippet") or "")[:200],
+                    doc_type=doc.get("doc_type", "user"),
                 )
             )
 
@@ -830,6 +832,7 @@ class HybridSearchService:
             )
 
         self._populate_tags(results)
+        self._populate_doc_types(results)
         return results
 
     def _search_chunks(
@@ -902,6 +905,7 @@ class HybridSearchService:
                 break
 
         self._populate_tags(results)
+        self._populate_doc_types(results)
         return results
 
     def _search_hybrid(
@@ -953,17 +957,20 @@ class HybridSearchService:
                 title = kw_result.title
                 proj = kw_result.project
                 tags = kw_result.tags or sem_result.tags
+                dtype = kw_result.doc_type
             elif sem_result:
                 snippet = sem_result.snippet
                 title = sem_result.title
                 proj = sem_result.project
                 tags = sem_result.tags
+                dtype = sem_result.doc_type
             else:
                 assert kw_result is not None
                 snippet = kw_result.snippet
                 title = kw_result.title
                 proj = kw_result.project
                 tags = kw_result.tags
+                dtype = kw_result.doc_type
 
             merged.append(
                 HybridSearchResult(
@@ -976,6 +983,7 @@ class HybridSearchService:
                     source=source,
                     snippet=snippet,
                     tags=tags,
+                    doc_type=dtype,
                     chunk_heading=(sem_result.chunk_heading if sem_result else None),
                     chunk_text=(sem_result.chunk_text if sem_result else None),
                 )
@@ -1015,3 +1023,18 @@ class HybridSearchService:
 
         for result in results:
             result.tags = tags_map.get(result.doc_id, [])
+
+    def _populate_doc_types(self, results: list[HybridSearchResult]) -> None:
+        """Fetch and populate doc_type for all results."""
+        if not results:
+            return
+        doc_ids = [r.doc_id for r in results]
+        with db.get_connection() as conn:
+            placeholders = ",".join("?" * len(doc_ids))
+            cursor = conn.execute(
+                f"SELECT id, doc_type FROM documents WHERE id IN ({placeholders})",
+                doc_ids,
+            )
+            type_map = {row[0]: row[1] for row in cursor.fetchall()}
+        for result in results:
+            result.doc_type = type_map.get(result.doc_id, "user")

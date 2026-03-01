@@ -287,16 +287,19 @@ emdx maintain link --all               # Auto-link related documents
 # Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
 # Configure via `maintain.auto_link_on_save` setting.
 
-# Wiki
-emdx maintain wiki setup               # Full bootstrap (index → entities → topics → auto-label)
-emdx maintain wiki topics --save --auto-label  # Discover and label topics
-emdx maintain wiki triage --skip-below 0.05    # Bulk skip low-coherence topics
-emdx maintain wiki triage --auto-label         # LLM-label all topics
-emdx maintain wiki progress            # Show generation progress + costs
-emdx maintain wiki generate            # Generate articles (sequential)
-emdx maintain wiki generate -c 3       # Generate with 3 concurrent
-emdx maintain wiki export ./wiki-site  # Export to MkDocs
-emdx maintain wiki export ./wiki-site --topic 42  # Single article
+# Wiki (top-level; `emdx maintain wiki ...` still works)
+emdx wiki                              # Compact wiki overview
+emdx wiki setup                        # Full bootstrap (index → entities → topics → auto-label)
+emdx wiki topics --save --auto-label   # Discover and label topics
+emdx wiki triage --skip-below 0.05     # Bulk skip low-coherence topics
+emdx wiki triage --auto-label          # LLM-label all topics
+emdx wiki progress                     # Show generation progress + costs
+emdx wiki generate                     # Generate articles (sequential)
+emdx wiki generate -c 3               # Generate with 3 concurrent
+emdx wiki view <topic_id>             # View a wiki article by topic
+emdx wiki search "query"              # Search wiki articles
+emdx wiki export ./wiki-site          # Export to MkDocs
+emdx wiki export ./wiki-site --topic 42  # Single article
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).

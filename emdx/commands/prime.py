@@ -23,6 +23,7 @@ from .types import (
     ReadyTask,
     RecentDoc,
     StaleDoc,
+    WikiPrimeStatus,
 )
 
 console = Console()
@@ -170,6 +171,17 @@ def _output_text(
                 lines.append("  Open PRs:")
                 for pr in git_ctx["prs"]:
                     lines.append(f"    #{pr['number']} {pr['title']} ({pr['headRefName']})")
+            lines.append("")
+
+    # Wiki status
+    if not quiet:
+        wiki_status = _get_wiki_status()
+        if wiki_status:
+            gen = wiki_status["articles_generated"]
+            total = wiki_status["total_topics"]
+            stale = wiki_status["stale_articles"]
+            stale_note = f" ({stale} stale)" if stale else ""
+            lines.append(f"WIKI: {gen}/{total} articles generated{stale_note}")
             lines.append("")
 
     # Verbose additions — skipped in brief mode
@@ -472,6 +484,32 @@ def _get_key_docs(limit: int = 5) -> list[KeyDoc]:
 # ---------------------------------------------------------------------------
 
 
+def _get_wiki_status() -> WikiPrimeStatus | None:
+    """Get lightweight wiki status for priming context.
+
+    Returns None if wiki tables don't exist yet.
+    """
+    try:
+        with db.get_connection() as conn:
+            topics = conn.execute(
+                "SELECT COUNT(*) FROM wiki_topics WHERE status != 'skipped'"
+            ).fetchone()
+            articles = conn.execute("SELECT COUNT(*) FROM wiki_articles").fetchone()
+            stale = conn.execute("SELECT COUNT(*) FROM wiki_articles WHERE is_stale = 1").fetchone()
+
+        total_topics = topics[0] if topics else 0
+        if total_topics == 0:
+            return None
+
+        return WikiPrimeStatus(
+            total_topics=total_topics,
+            articles_generated=articles[0] if articles else 0,
+            stale_articles=stale[0] if stale else 0,
+        )
+    except Exception:
+        return None
+
+
 def _get_current_branch() -> str | None:
     """Get the current git branch name, or None if not in a repo."""
     try:
@@ -530,6 +568,7 @@ def _output_json(
         "active_epics": _get_active_epics(),
         "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
+        "wiki_status": _get_wiki_status(),
     }
 
     # Git context — skip in brief mode

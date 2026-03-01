@@ -101,6 +101,7 @@ from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
 from emdx.commands.trash import app as trash_app  # noqa: E402
+from emdx.commands.wiki import wiki_app  # noqa: E402
 from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
@@ -142,6 +143,9 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
+
+# Add wiki as a top-level command group (also available under maintain for backward compat)
+app.add_typer(wiki_app, name="wiki", help="Auto-wiki from your knowledge base")
 
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
