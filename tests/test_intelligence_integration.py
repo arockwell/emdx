@@ -82,7 +82,6 @@ def _create_task(
     status: str = "open",
     epic_key: str | None = None,
     days_ago: int = 0,
-    output_doc_id: int | None = None,
     source_doc_id: int | None = None,
 ) -> int:
     """Create a task directly via SQL."""
@@ -93,13 +92,13 @@ def _create_task(
         INSERT INTO tasks (
             title, parent_task_id, status, epic_key,
             created_at, updated_at,
-            output_doc_id, source_doc_id
+            source_doc_id
         )
         VALUES (
             ?, ?, ?, ?,
             datetime('now', ? || ' days'),
             datetime('now', ? || ' days'),
-            ?, ?
+            ?
         )
         """,
         (
@@ -109,7 +108,6 @@ def _create_task(
             epic_key,
             f"-{days_ago}",
             f"-{days_ago}",
-            output_doc_id,
             source_doc_id,
         ),
     )
@@ -922,25 +920,25 @@ class TestDriftComplex:
             # Create a document
             cursor = conn.execute(
                 "INSERT INTO documents (title, content, is_deleted) "
-                "VALUES ('Stale Output Doc', 'content', 0)"
+                "VALUES ('Stale Source Doc', 'content', 0)"
             )
             conn.commit()
             assert cursor.lastrowid is not None
             doc_id = int(cursor.lastrowid)
 
-            # Link it to a stale task
+            # Link it to a stale task via source_doc_id
             _create_task(
                 conn,
                 "Stale task with doc",
                 status="open",
                 days_ago=45,
-                output_doc_id=doc_id,
+                source_doc_id=doc_id,
             )
 
         result = runner.invoke(app, ["maintain", "drift"])
         assert result.exit_code == 0
         out = result.stdout
-        assert "Stale Output Doc" in out
+        assert "Stale Source Doc" in out
 
     def test_multiple_drift_types_together(self) -> None:
         """Multiple drift types detected in same analysis."""
