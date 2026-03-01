@@ -2,6 +2,8 @@
 Core CRUD operations for emdx
 """
 
+from __future__ import annotations
+
 import json
 import os
 import subprocess
@@ -10,7 +12,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from emdx.services.ask_service import AskMode
 
 import typer
 from rich.panel import Panel
@@ -392,6 +397,26 @@ def find(
     ask: bool = typer.Option(
         False, "--ask", help="Answer the query using RAG (retrieves context + LLM)"
     ),
+    think: bool = typer.Option(
+        False,
+        "--think",
+        help="Deliberative search: build a position paper with arguments for/against",
+    ),
+    challenge: bool = typer.Option(
+        False,
+        "--challenge",
+        help="Devil's advocate: find evidence AGAINST the queried position (use with --think)",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Socratic debugger: diagnostic questions from your bug history",
+    ),
+    cite: bool = typer.Option(
+        False,
+        "--cite",
+        help="Add inline [#ID] citations using chunk-level retrieval",
+    ),
     context: bool = typer.Option(
         False, "--context", help="Output retrieved context as plain text (for piping to claude)"
     ),
@@ -416,6 +441,9 @@ def find(
     Use --all to list all documents, --recent N to show recently accessed docs.
     Use --similar N to find documents similar to doc #N.
     Use --ask to get an AI-powered answer to your question.
+    Use --think to get a deliberative position paper with arguments for/against.
+    Use --debug to get Socratic diagnostic questions from your bug history.
+    Use --cite to add inline citations to any AI-powered answer.
     Use --context to retrieve docs as plain text for piping to claude.
     Use --wander for serendipity: surface surprising but related documents.
 
@@ -427,6 +455,10 @@ def find(
         emdx find --recent 10                            # recently accessed
         emdx find --similar 42                           # docs similar to #42
         emdx find --ask "What's our caching strategy?"   # RAG Q&A
+        emdx find --think "rewrite in Rust"              # position paper
+        emdx find --think --challenge "rewrite in Rust"  # devil's advocate
+        emdx find --debug "TUI freezes on click"         # Socratic debugger
+        emdx find --ask --cite "how does auth work?"     # with citations
         emdx find --context "auth" | claude              # pipe context to claude
         emdx find --wander                               # random serendipity
         emdx find --wander "machine learning"            # serendipity from topic
@@ -465,12 +497,14 @@ def find(
             _find_wander(search_query, limit, project, json_output)
             return
 
-        # Handle --ask: RAG Q&A
-        if ask:
+        # Handle AI-powered modes: --ask, --think, --debug
+        ask_mode = _resolve_ask_mode(ask, think, challenge, debug, cite)
+        if ask_mode is not None:
             if not search_query:
-                console.print("[red]Error: --ask requires a question[/red]")
+                mode_name = ask_mode.value
+                console.print(f"[red]Error: --{mode_name} requires a question[/red]")
                 raise typer.Exit(1)
-            _find_ask(search_query, limit, project, tags)
+            _find_ask(search_query, limit, project, tags, mode=ask_mode, cite=cite)
             return
 
         # Handle --context: retrieve context for piping
@@ -656,8 +690,6 @@ def _find_list_all(
         return
 
     if json_output:
-        from typing import Any
-
         json_docs = []
         for doc in docs:
             d: dict[str, Any] = dict(doc)
@@ -714,8 +746,6 @@ def _find_recent(
         return
 
     if json_output:
-        from typing import Any
-
         json_docs = []
         for doc in docs:
             d: dict[str, Any] = dict(doc)
@@ -975,23 +1005,76 @@ def _find_wander(
     console.print("\n[dim]Use 'emdx view <id>' to explore a document[/dim]")
 
 
+def _resolve_ask_mode(
+    ask: bool,
+    think: bool,
+    challenge: bool,
+    debug: bool,
+    cite: bool,
+) -> AskMode | None:
+    """Resolve CLI flags to an AskMode, or None if no AI mode requested.
+
+    Validates mutual exclusivity of --ask, --think, --debug.
+    --challenge is only valid with --think.
+    --cite without --ask/--think/--debug auto-enables --ask.
+    """
+    from ..services.ask_service import AskMode
+
+    active_modes = sum([ask, think, debug])
+    if active_modes > 1:
+        console.print("[red]Error: --ask, --think, and --debug are mutually exclusive[/red]")
+        raise typer.Exit(1)
+
+    if challenge and not think:
+        console.print("[red]Error: --challenge requires --think[/red]")
+        raise typer.Exit(1)
+
+    if think and challenge:
+        return AskMode.CHALLENGE
+    if think:
+        return AskMode.THINK
+    if debug:
+        return AskMode.DEBUG
+    if ask:
+        return AskMode.ANSWER
+    if cite:
+        # --cite without explicit mode auto-enables --ask
+        return AskMode.ANSWER
+    return None
+
+
 def _find_ask(
     question: str,
     limit: int,
     project: str | None,
     tags: str | None,
+    mode: AskMode | None = None,
+    cite: bool = False,
 ) -> None:
     """Answer a question using RAG (retrieves context + LLM)."""
-    from ..services.ask_service import AskService
+    from ..services.ask_service import AskMode, AskService
+
+    if mode is None:
+        mode = AskMode.ANSWER
+
+    mode_labels = {
+        AskMode.ANSWER: "Thinking",
+        AskMode.THINK: "Building position paper",
+        AskMode.CHALLENGE: "Finding counterarguments",
+        AskMode.DEBUG: "Analyzing error patterns",
+    }
+    spinner_label = mode_labels.get(mode, "Thinking")
 
     service = AskService()
     try:
-        with console.status("[bold blue]Thinking...", spinner="dots"):
+        with console.status(f"[bold blue]{spinner_label}...", spinner="dots"):
             result = service.ask(
                 question,
                 limit=limit,
                 project=project,
                 tags=tags,
+                mode=mode,
+                cite=cite,
             )
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
@@ -999,11 +1082,48 @@ def _find_ask(
 
     from rich.panel import Panel
 
-    confidence_colors = {"high": "green", "medium": "yellow", "low": "red"}
+    confidence_colors = {
+        "high": "green",
+        "medium": "yellow",
+        "low": "red",
+        "insufficient": "red",
+    }
     confidence_color = confidence_colors.get(result.confidence, "dim")
-    panel_title = f"Answer [{result.confidence.upper()} confidence]"
+
+    # Build panel title based on mode
+    mode_title = {
+        AskMode.ANSWER: "Answer",
+        AskMode.THINK: "Position Paper",
+        AskMode.CHALLENGE: "Devil's Advocate",
+        AskMode.DEBUG: "Debugging Analysis",
+    }.get(mode, "Answer")
+    panel_title = f"{mode_title} [{result.confidence.upper()} confidence]"
+
     console.print()
-    console.print(Panel(result.text, title=panel_title, border_style=confidence_color))
+    console.print(
+        Panel(
+            result.text,
+            title=panel_title,
+            border_style=confidence_color,
+        )
+    )
+
+    # Show confidence details if signals are available
+    if result.confidence_signals:
+        signals = result.confidence_signals
+        console.print()
+        console.print(
+            f"[dim]Confidence: {signals.composite_score:.0%} "
+            f"({signals.source_count} sources, "
+            f"coverage: {signals.query_term_coverage:.0%}, "
+            f"coherence: {signals.topic_coherence:.0%})[/dim]"
+        )
+
+    # Show cited IDs if cite mode
+    if cite and result.cited_ids:
+        console.print()
+        cited_strs = [f"#{cid}" for cid in result.cited_ids]
+        console.print(f"[dim]Cited: {', '.join(cited_strs)}[/dim]")
 
     if result.source_titles:
         console.print()
