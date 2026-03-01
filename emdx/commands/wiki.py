@@ -480,6 +480,77 @@ def wiki_status() -> None:
         console.print(table)
 
 
+@wiki_app.command(name="stale")
+def wiki_stale(
+    as_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+    regenerate: bool = typer.Option(False, "--regenerate", help="Regenerate stale articles"),
+    model: str | None = typer.Option(None, "--model", "-m", help="Model override for regeneration"),
+) -> None:
+    """Check wiki articles for staleness and optionally regenerate.
+
+    Compares source document content hashes and topic membership
+    against what was used during article generation.
+
+    Examples:
+        emdx wiki stale                     # Report stale articles
+        emdx wiki stale --json              # Machine-readable output
+        emdx wiki stale --regenerate        # Regenerate stale articles
+        emdx wiki stale --regenerate -m claude-sonnet-4-5-20250929
+    """
+    import json
+
+    from ..services.wiki_staleness_service import check_staleness
+
+    result = check_staleness()
+
+    if as_json:
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    if result["stale_articles"] == 0:
+        print(f"All {result['total_articles']} wiki article(s) are fresh.")
+        return
+
+    print(f"{result['stale_articles']}/{result['total_articles']} article(s) are stale:\n")
+
+    for article in result["details"]:
+        print(f"  Topic #{article['topic_id']}: {article['topic_label']}")
+        print(f"    Reason: {article['stale_reason']}")
+
+        for src in article["changed_sources"]:
+            print(f"    - Source #{src['doc_id']} ({src['doc_title']}) content changed")
+        for mc in article["membership_changes"]:
+            print(f"    - Doc #{mc['doc_id']} ({mc['doc_title']}) {mc['change_type']}")
+        print()
+
+    if not regenerate:
+        return
+
+    # Regenerate stale articles
+    from ..services.wiki_synthesis_service import generate_article
+
+    print("Regenerating stale articles...\n")
+
+    regen_count = 0
+    for article in result["details"]:
+        topic_id = article["topic_id"]
+        gen_result = generate_article(
+            topic_id=topic_id,
+            model=model,
+        )
+        if gen_result.skipped:
+            print(f"  Skipped topic #{topic_id}: {gen_result.skip_reason}")
+        else:
+            regen_count += 1
+            print(
+                f"  Regenerated topic #{topic_id}: "
+                f"{gen_result.topic_label} "
+                f"(${gen_result.cost_usd:.4f})"
+            )
+
+    print(f"\nRegenerated {regen_count} article(s).")
+
+
 @wiki_app.command(name="generate")
 def wiki_generate(
     topic_id: int | None = typer.Argument(None, help="Specific topic ID to generate"),
