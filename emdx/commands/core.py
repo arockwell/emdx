@@ -303,7 +303,7 @@ def save(
     if task is not None:
         from emdx.models.tasks import update_task
 
-        update_kwargs: dict[str, Any] = {"output_doc_id": doc_id}
+        update_kwargs: dict[str, Any] = {"source_doc_id": doc_id}
         if mark_done:
             update_kwargs["status"] = "done"
         update_task(task, **update_kwargs)

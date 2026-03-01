@@ -3,7 +3,7 @@
 This package defines the core data models and operations for:
 
 - documents: Document model with metadata and content
-- executions: Execution records for tracking agent runs
+- events: Knowledge events for tracking document activity
 - tags: Tag system with emoji aliases and categorization
-- tasks: Agent work queue
+- tasks: Agent work queue and task tracking
 """
