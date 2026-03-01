@@ -43,6 +43,7 @@ register_aliases({"show": "view"})
 # =============================================================================
 from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
+from emdx.commands.db_manage import app as db_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.history import diff as diff_command  # noqa: E402
 from emdx.commands.history import history as history_command  # noqa: E402
@@ -98,6 +99,9 @@ app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tool
 
 # Add wiki as a top-level command group (also available under maintain for backward compat)
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki from your knowledge base")
+
+# Add db as a subcommand group
+app.add_typer(db_app, name="db", help="Database management")
 
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
