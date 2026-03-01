@@ -1021,24 +1021,26 @@ class TestHelpText:
         """maintain drift --help shows usage."""
         result = runner.invoke(app, ["maintain", "drift", "--help"])
         assert result.exit_code == 0
-        assert "--days" in result.stdout
+        assert "--days" in _strip_ansi(result.stdout)
 
     def test_code_drift_help(self) -> None:
         """maintain code-drift --help shows usage."""
         result = runner.invoke(app, ["maintain", "code-drift", "--help"])
         assert result.exit_code == 0
-        assert "--json" in result.stdout
-        assert "--project" in result.stdout
+        out = _strip_ansi(result.stdout)
+        assert "--json" in out
+        assert "--project" in out
 
     def test_prime_help_mentions_brief(self) -> None:
         """prime --help mentions --brief."""
         result = runner.invoke(app, ["prime", "--help"])
         assert result.exit_code == 0
-        assert "--brief" in result.stdout
+        assert "--brief" in _strip_ansi(result.stdout)
 
     def test_status_help_mentions_vitals_and_mirror(self) -> None:
         """status --help mentions --vitals and --mirror."""
         result = runner.invoke(app, ["status", "--help"])
         assert result.exit_code == 0
-        assert "--vitals" in result.stdout
-        assert "--mirror" in result.stdout
+        out = _strip_ansi(result.stdout)
+        assert "--vitals" in out
+        assert "--mirror" in out
