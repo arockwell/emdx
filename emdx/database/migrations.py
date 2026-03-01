@@ -2868,6 +2868,84 @@ def migration_054_set_based_migration_tracking(conn: sqlite3.Connection) -> None
     conn.commit()
 
 
+def migration_055_add_knowledge_events(conn: sqlite3.Connection) -> None:
+    """Add knowledge_events table for tracking KB interactions."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            doc_id INTEGER,
+            query TEXT,
+            session_id TEXT,
+            metadata_json TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_type_created "
+        "ON knowledge_events(event_type, created_at)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_doc ON knowledge_events(doc_id)")
+    conn.commit()
+
+
+def migration_056_add_document_versions(conn: sqlite3.Connection) -> None:
+    """Add document_versions table for content history tracking."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            version_number INTEGER NOT NULL,
+            title TEXT,
+            content TEXT NOT NULL,
+            content_hash TEXT,
+            char_delta INTEGER,
+            change_source TEXT DEFAULT 'manual',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_doc_ver "
+        "ON document_versions(document_id, version_number)"
+    )
+    conn.commit()
+
+
+def migration_057_fix_fts5_update_trigger(conn: sqlite3.Connection) -> None:
+    """Fix FTS5 update trigger for external content table.
+
+    The original documents_au trigger used UPDATE on the FTS table, which is
+    incorrect for external-content FTS5 tables (content=documents).  External
+    content tables require a delete+insert pattern to keep the inverted index
+    consistent.  The old UPDATE pattern corrupts the FTS index under certain
+    connection sequences (e.g. plain sqlite3.connect for migrations followed
+    by detect_types connections for data).
+    """
+    cursor = conn.cursor()
+    cursor.execute("DROP TRIGGER IF EXISTS documents_au")
+    cursor.execute(
+        """
+        CREATE TRIGGER documents_au AFTER UPDATE ON documents BEGIN
+            INSERT INTO documents_fts(documents_fts, rowid, title, content, project)
+            VALUES ('delete', old.id, old.title, old.content, old.project);
+            INSERT INTO documents_fts(rowid, title, content, project)
+            VALUES (new.id, new.title, new.content, new.project);
+        END
+        """
+    )
+    # Rebuild FTS index to fix any existing corruption from the old trigger
+    cursor.execute("INSERT INTO documents_fts(documents_fts) VALUES('rebuild')")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("0", "Create documents table", migration_000_create_documents_table),
@@ -2929,6 +3007,9 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("52", "Add editorial prompt to wiki topics", migration_052_add_wiki_editorial_prompt),
     ("53", "Remove delegate execution system", migration_053_remove_delegate_system),
     ("54", "Set-based migration tracking", migration_054_set_based_migration_tracking),
+    ("55", "Add knowledge events table", migration_055_add_knowledge_events),
+    ("56", "Add document versions table", migration_056_add_document_versions),
+    ("57", "Fix FTS5 update trigger for external content", migration_057_fix_fts5_update_trigger),
 ]
 
 

@@ -1,7 +1,10 @@
 """Shared pytest fixtures for emdx tests."""
 
+from __future__ import annotations
+
 import os
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -19,7 +22,9 @@ from test_fixtures import DatabaseForTesting
 
 
 @pytest.fixture(scope="session", autouse=True)
-def isolate_test_database(tmp_path_factory):
+def isolate_test_database(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Generator[Path, None, None]:
     """Automatically isolate ALL tests from the real database.
 
     This session-scoped fixture runs once before any tests and ensures that
@@ -67,6 +72,8 @@ def isolate_test_database(tmp_path_factory):
             "emdx.database.search",
             "emdx.database.groups",
             "emdx.database.document_links",
+            "emdx.models.events",
+            "emdx.commands.history",
         ]
         import importlib
         import sys
@@ -100,7 +107,7 @@ def isolate_test_database(tmp_path_factory):
 
 
 @pytest.fixture(scope="function")
-def temp_db():
+def temp_db() -> Generator[DatabaseForTesting, None, None]:
     """Create a temporary in-memory SQLite database for testing."""
     db = DatabaseForTesting(":memory:")
     yield db
@@ -108,7 +115,7 @@ def temp_db():
 
 
 @pytest.fixture(scope="function")
-def temp_db_file():
+def temp_db_file() -> Generator[DatabaseForTesting, None, None]:
     """Create a temporary SQLite database file for testing."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
@@ -121,7 +128,7 @@ def temp_db_file():
 
 
 @pytest.fixture(scope="function")
-def sample_documents(temp_db):
+def sample_documents(temp_db: DatabaseForTesting) -> list[int]:
     """Add some sample documents to the database with tags.
 
     Tags are added directly via SQL to avoid global state contamination
@@ -148,18 +155,22 @@ def sample_documents(temp_db):
         },
     ]
 
-    doc_ids = []
+    doc_ids: list[int] = []
     conn = temp_db.get_connection()
 
     for doc in docs:
-        doc_id = temp_db.save_document(
-            title=doc["title"], content=doc["content"], project=doc["project"]
-        )
+        title = str(doc["title"])
+        content = str(doc["content"])
+        project = str(doc["project"])
+        doc_id = temp_db.save_document(title=title, content=content, project=project)
+        assert doc_id is not None
         doc_ids.append(doc_id)
 
         # Add tags directly via SQL to avoid global state contamination
-        for tag_name in doc["tags"]:
-            tag_name = tag_name.lower().strip()
+        tags = doc["tags"]
+        assert isinstance(tags, list)
+        for tag_name in tags:
+            tag_name = str(tag_name).lower().strip()
             # Get or create tag
             cursor = conn.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
             result = cursor.fetchone()

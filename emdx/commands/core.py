@@ -433,6 +433,12 @@ def find(
     """
     search_query = " ".join(query) if query else ""
 
+    # Record search event (non-critical, best-effort)
+    if search_query:
+        from emdx.models.events import record_event
+
+        record_event("search", query=search_query)
+
     # Determine doc_type filter: --wiki -> 'wiki', default -> None (all types)
     if wiki and all_types:
         console.print("[red]Error: --wiki and --all-types are mutually exclusive[/red]")
@@ -1315,6 +1321,11 @@ def view(
         if review:
             _view_review(doc)
             return
+
+        # Record view event (non-critical, best-effort)
+        from emdx.models.events import record_event
+
+        record_event("view", doc_id=doc["id"])
 
         doc_tags = get_document_tags(doc["id"])
 
