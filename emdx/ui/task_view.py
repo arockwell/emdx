@@ -1187,7 +1187,9 @@ class TaskView(Widget):
         if desc:
             target.write("")
             target.write("[bold]Description:[/bold]")
-            self._write_wrapped(target, desc, content_w)
+            self._write_markdown_guttered(
+                target, desc, content_w, gutter="", gutter_width=0
+            )
 
         # Error info
         err = task.get("error") or ""
@@ -1258,7 +1260,9 @@ class TaskView(Widget):
         if epic_desc:
             detail_log.write("")
             detail_log.write("[bold]Description:[/bold]")
-            self._write_wrapped(detail_log, epic_desc, content_w)
+            self._write_markdown_guttered(
+                detail_log, epic_desc, content_w, gutter="", gutter_width=0
+            )
 
         # Load and display child tasks
         try:
