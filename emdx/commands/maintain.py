@@ -680,6 +680,143 @@ from emdx.commands.code_drift import code_drift_command  # noqa: E402
 
 app.command(name="code-drift")(code_drift_command)
 
+
+def backup_command(
+    list_backups: bool = typer.Option(False, "--list", "-l", help="List existing backups"),
+    restore: str = typer.Option(None, "--restore", "-r", help="Restore from a backup file"),
+    no_compress: bool = typer.Option(False, "--no-compress", help="Skip gzip compression"),
+    no_retention: bool = typer.Option(
+        False, "--no-retention", help="Disable automatic pruning (keep all backups)"
+    ),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress output (for hook use)"),
+    json_output: bool = typer.Option(False, "--json", help="Structured JSON output"),
+) -> None:
+    """Create, list, or restore knowledge base backups.
+
+    By default, creates a compressed backup with logarithmic retention
+    (keeps ~19 backups covering 2 years of history).
+
+    Examples:
+        emdx maintain backup              # Create compressed backup
+        emdx maintain backup --list       # List existing backups
+        emdx maintain backup --restore emdx-backup-2026-02-28_143022.db.gz
+        emdx maintain backup --no-compress # Create uncompressed backup
+        emdx maintain backup --quiet      # Silent (for hooks)
+        emdx maintain backup --json       # JSON output
+    """
+    import json as json_mod
+    from pathlib import Path
+
+    from ..config.settings import get_db_path
+    from ..services.backup_service import BackupService
+
+    db_path = get_db_path()
+    svc = BackupService(db_path=db_path, retention=not no_retention)
+
+    if list_backups:
+        backups = svc.list_backups()
+        if json_output:
+            from ..services.types import BackupInfo
+
+            items: list[BackupInfo] = []
+            for bp in backups:
+                dt = svc._parse_backup_date(bp)
+                items.append(
+                    BackupInfo(
+                        filename=bp.name,
+                        path=str(bp),
+                        size_bytes=bp.stat().st_size,
+                        created_at=dt.isoformat() if dt else "",
+                    )
+                )
+            print(json_mod.dumps(items, indent=2))
+        elif backups:
+            for bp in backups:
+                size_kb = bp.stat().st_size / 1024
+                dt = svc._parse_backup_date(bp)
+                date_str = dt.strftime("%Y-%m-%d %H:%M:%S UTC") if dt else "unknown"
+                print(f"{bp.name}  {size_kb:.0f}KB  {date_str}")
+        else:
+            if not quiet:
+                print("No backups found.")
+        return
+
+    if restore:
+        restore_path = Path(restore)
+        # Allow just the filename (look in backup dir)
+        if not restore_path.exists():
+            restore_path = svc.backup_dir / restore
+        if not restore_path.exists():
+            msg = f"Backup file not found: {restore}"
+            if json_output:
+                print(json_mod.dumps({"success": False, "message": msg}))
+            else:
+                print(msg)
+            raise typer.Exit(code=1)
+
+        result = svc.restore_backup(restore_path)
+        if json_output:
+            print(
+                json_mod.dumps(
+                    {
+                        "success": result.success,
+                        "message": result.message,
+                        "duration_seconds": round(result.duration_seconds, 2),
+                    }
+                )
+            )
+        elif not quiet:
+            if result.success:
+                print(
+                    f"Restored from {result.path.name if result.path else restore}"  # type: ignore[union-attr]
+                    f" in {result.duration_seconds:.1f}s"
+                )
+            else:
+                print(result.message)
+        if not result.success:
+            raise typer.Exit(code=1)
+        return
+
+    # Default: create backup
+    if not db_path.exists():
+        msg = f"Database not found: {db_path}"
+        if json_output:
+            print(json_mod.dumps({"success": False, "message": msg}))
+        elif not quiet:
+            print(msg)
+        raise typer.Exit(code=1)
+
+    result = svc.create_backup(compress=not no_compress)
+    if json_output:
+        print(
+            json_mod.dumps(
+                {
+                    "success": result.success,
+                    "path": str(result.path) if result.path else None,
+                    "size_bytes": result.size_bytes,
+                    "duration_seconds": round(result.duration_seconds, 2),
+                    "pruned_count": result.pruned_count,
+                    "message": result.message,
+                }
+            )
+        )
+    elif not quiet:
+        if result.success:
+            size_kb = result.size_bytes / 1024
+            print(
+                f"Backup created: {result.path.name if result.path else 'unknown'}"  # type: ignore[union-attr]
+                f" ({size_kb:.0f}KB, {result.duration_seconds:.1f}s)"
+            )
+            if result.pruned_count > 0:
+                print(f"Pruned {result.pruned_count} old backup(s)")
+        else:
+            print(result.message)
+    if not result.success:
+        raise typer.Exit(code=1)
+
+
+app.command(name="backup")(backup_command)
+
 # Register compact as a subcommand of maintain
 from emdx.commands.compact import app as compact_app  # noqa: E402
 

@@ -156,3 +156,6 @@ test_output.txt
 # Misnamed log files
 *.lo
 .venv-path
+
+# Dev database (created by poetry run emdx in dev checkouts)
+.emdx/
