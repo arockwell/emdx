@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Generator
 
@@ -20,6 +21,13 @@ from emdx.database import db
 from emdx.main import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    return _ANSI_RE.sub("", text)
 
 
 @pytest.fixture(autouse=True)
@@ -446,8 +454,9 @@ class TestDriftCLI:
         """Drift command shows help."""
         result = runner.invoke(app, ["maintain", "drift", "--help"])
         assert result.exit_code == 0
-        assert "drift" in result.output.lower()
-        assert "--days" in result.output
+        output = _strip_ansi(result.output)
+        assert "drift" in output.lower()
+        assert "--days" in output
 
     def test_drift_no_results(self) -> None:
         """No drift shows friendly message."""
