@@ -6,7 +6,7 @@ It outputs priming context that should be injected at session start.
 """
 
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 
 import typer
 from rich.console import Console
@@ -22,7 +22,9 @@ from .types import (
     PrimeOutput,
     ReadyTask,
     RecentDoc,
+    SmartRecentDoc,
     StaleDoc,
+    TagCount,
     WikiPrimeStatus,
 )
 
@@ -39,6 +41,12 @@ def prime(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Minimal output - just ready tasks"),
     brief: bool = typer.Option(
         False, "--brief", "-b", help="Compact output: tasks + epics, no git/docs"
+    ),
+    smart: bool = typer.Option(
+        False,
+        "--smart",
+        "-s",
+        help="Context-aware priming: recent activity, key docs, knowledge map, stale detection",
     ),
 ) -> None:
     """
@@ -58,6 +66,9 @@ def prime(
         # With full context (execution guidance, recent docs)
         emdx prime --verbose
 
+        # Smart priming (recent activity, key docs, knowledge map, stale)
+        emdx prime --smart
+
         # Minimal (just ready tasks)
         emdx prime --quiet
 
@@ -67,9 +78,9 @@ def prime(
     project = get_git_project()
 
     if format == "json":
-        _output_json(project, verbose, quiet, brief)
+        _output_json(project, verbose, quiet, brief, smart)
     else:
-        _output_text(project, verbose, quiet, brief=brief)
+        _output_text(project, verbose, quiet, brief=brief, smart=smart)
 
 
 # ---------------------------------------------------------------------------
@@ -84,18 +95,21 @@ def _output_text(
     markdown: bool = False,
     execution: bool = False,
     brief: bool = False,
+    smart: bool = False,
 ) -> None:
     """Output priming context as text.
 
     Modes (in priority order):
     - quiet: tasks only, no header/epics/git/docs
-    - brief: tasks + epics, no git/docs (ignores verbose)
+    - brief: tasks + epics, no git/docs (ignores verbose/smart)
     - default: tasks + epics + git context
     - verbose: default + recent docs, key docs, stale docs
+    - smart: default + recent activity, key docs, knowledge map, stale detection
     """
     # quiet takes priority over brief
     if quiet:
         brief = False
+        smart = False
 
     lines = []
 
@@ -211,6 +225,52 @@ def _output_text(
             for kdoc in key_docs:
                 lines.append(f'  #{kdoc["id"]} "{kdoc["title"]}" — {kdoc["access_count"]} views')
             lines.append("")
+
+    # Smart additions — skipped in brief/quiet mode
+    if smart and not quiet and not brief:
+        # Recent activity (last 7 days with relative timestamps)
+        smart_recent = _get_smart_recent_docs()
+        if smart_recent:
+            lines.append("RECENT ACTIVITY (7d):")
+            lines.append("")
+            for sdoc in smart_recent[:5]:
+                lines.append(
+                    f"  #{sdoc['id']}  {sdoc['title']}"
+                    f"  ({sdoc['relative_time']}, {sdoc['access_count']}x)"
+                )
+            lines.append("")
+
+        # Key docs (most accessed, unless verbose already showed them)
+        if not verbose:
+            key_docs = _get_key_docs()
+            if key_docs:
+                lines.append("KEY DOCS (most accessed):")
+                lines.append("")
+                for kdoc in key_docs:
+                    lines.append(
+                        f'  #{kdoc["id"]} "{kdoc["title"]}" — {kdoc["access_count"]} views'
+                    )
+                lines.append("")
+
+        # Knowledge map (tag aggregation)
+        tag_map = _get_tag_map()
+        if tag_map:
+            lines.append("KNOWLEDGE MAP:")
+            lines.append("")
+            tag_parts = [f"{t['name']}({t['count']})" for t in tag_map[:10]]
+            lines.append("  " + "  ".join(tag_parts))
+            lines.append("")
+
+        # Stale detection (unless verbose already showed stale docs)
+        if not verbose:
+            stale_docs = _get_stale_docs()
+            if stale_docs:
+                lines.append("STALE DOCS (needs review):")
+                lines.append("")
+                for doc in stale_docs[:3]:
+                    level = doc["level"].upper()
+                    lines.append(f"  [{level}] #{doc['id']}  {doc['title']} ({doc['days_stale']}d)")
+                lines.append("")
 
     print("\n".join(lines))
 
@@ -360,7 +420,7 @@ def _get_recent_docs() -> list[RecentDoc]:
             SELECT id, title, project
             FROM documents
             WHERE is_deleted = 0
-            ORDER BY last_accessed_at DESC
+            ORDER BY accessed_at DESC
             LIMIT 10
         """)
         rows = cursor.fetchall()
@@ -478,6 +538,95 @@ def _get_key_docs(limit: int = 5) -> list[KeyDoc]:
 
 
 # ---------------------------------------------------------------------------
+# Smart priming queries
+# ---------------------------------------------------------------------------
+
+
+def _relative_time(dt_str: str) -> str:
+    """Convert an ISO timestamp string to a human-readable relative time.
+
+    Returns compact strings like '2h ago', '3d ago', 'just now'.
+    """
+    try:
+        # Parse the timestamp (SQLite stores as naive UTC)
+        dt = datetime.fromisoformat(dt_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        delta = now - dt
+        seconds = int(delta.total_seconds())
+
+        if seconds < 60:
+            return "just now"
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"{minutes}m ago"
+        hours = minutes // 60
+        if hours < 24:
+            return f"{hours}h ago"
+        days = hours // 24
+        return f"{days}d ago"
+    except (ValueError, TypeError):
+        return "unknown"
+
+
+def _get_smart_recent_docs(limit: int = 5) -> list[SmartRecentDoc]:
+    """Get recently accessed docs (last 7 days) with timestamps and counts.
+
+    Args:
+        limit: Maximum number of documents to return
+
+    Returns:
+        List of SmartRecentDoc dicts with relative timestamps
+    """
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, title, accessed_at, access_count
+            FROM documents
+            WHERE is_deleted = FALSE
+              AND accessed_at >= datetime('now', '-7 days')
+            ORDER BY accessed_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        rows = cursor.fetchall()
+        return [
+            SmartRecentDoc(
+                id=r[0],
+                title=r[1],
+                accessed_at=str(r[2]) if r[2] else "",
+                access_count=r[3] or 0,
+                relative_time=_relative_time(str(r[2])) if r[2] else "never",
+            )
+            for r in rows
+        ]
+
+
+def _get_tag_map() -> list[TagCount]:
+    """Aggregate tags with document counts for knowledge map.
+
+    Returns:
+        List of TagCount dicts sorted by count descending
+    """
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT t.name, COUNT(*) as cnt
+            FROM tags t
+            JOIN document_tags dt ON t.id = dt.tag_id
+            JOIN documents d ON dt.document_id = d.id
+            WHERE d.is_deleted = FALSE
+            GROUP BY t.name
+            ORDER BY cnt DESC
+        """)
+        rows = cursor.fetchall()
+        return [TagCount(name=r[0], count=r[1]) for r in rows]
+
+
+# ---------------------------------------------------------------------------
 # Execution guidance (verbose only)
 # ---------------------------------------------------------------------------
 
@@ -552,6 +701,7 @@ def _output_json(
     verbose: bool,
     quiet: bool,
     brief: bool = False,
+    smart: bool = False,
 ) -> None:
     """Output priming context as JSON."""
     import json
@@ -559,6 +709,7 @@ def _output_json(
     # quiet takes priority over brief
     if quiet:
         brief = False
+        smart = False
 
     data: PrimeOutput = {
         "project": project,
@@ -590,6 +741,25 @@ def _output_json(
                 )
                 for d in stale_docs
             ]
+
+    # Smart additions — skip in brief mode
+    if smart and not brief:
+        data["smart_recent"] = _get_smart_recent_docs()
+        if not verbose:
+            data["key_docs"] = _get_key_docs()
+        data["tag_map"] = _get_tag_map()
+        if not verbose:
+            stale_docs = _get_stale_docs()
+            if stale_docs:
+                data["stale_docs"] = [
+                    StaleDoc(
+                        id=d["id"],
+                        title=d["title"],
+                        level=(d["level"].value if hasattr(d["level"], "value") else d["level"]),
+                        days_stale=d["days_stale"],
+                    )
+                    for d in stale_docs[:3]
+                ]
 
     print(json.dumps(data, indent=2, default=str))
 
