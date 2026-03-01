@@ -389,33 +389,6 @@ emdx tag batch --limit 50 --execute
 ### **emdx maintain**
 System maintenance, cleanup, embedding index, and document linking.
 
-#### **emdx maintain cleanup**
-Clean up old worktree branches and system resources.
-
-```bash
-# Show what cleanup would do (dry run)
-emdx maintain cleanup --all
-
-# Actually perform cleanup
-emdx maintain cleanup --all --execute
-
-# Clean old worktree branches only
-emdx maintain cleanup --branches --execute
-
-# Force delete unmerged branches too
-emdx maintain cleanup --branches --force --execute
-
-# Custom age threshold for branches (default: 7 days)
-emdx maintain cleanup --branches --age 14 --execute
-```
-
-**Options:**
-- `--branches, -b` - Clean up old worktree branches
-- `--all, -a` - Clean up everything
-- `--force, -f` - Force delete unmerged branches
-- `--execute / --dry-run` - Execute actions (default: dry run)
-- `--age INTEGER` - Only clean branches older than N days (default: 7)
-
 #### **emdx maintain backup**
 Create, list, or restore knowledge base backups. Uses SQLite's backup API for atomic, WAL-safe copies with optional gzip compression and logarithmic retention (~19 backups covering 2 years).
 
