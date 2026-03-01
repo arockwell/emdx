@@ -53,12 +53,29 @@ class RecentDoc(TypedDict):
     project: str | None
 
 
+class SmartRecentDoc(TypedDict):
+    """Recent doc with timestamps/counts for --smart mode."""
+
+    id: int
+    title: str
+    accessed_at: str
+    access_count: int
+    relative_time: str
+
+
 class KeyDoc(TypedDict):
     """Key document returned by _get_key_docs() in prime.py."""
 
     id: int
     title: str
     access_count: int
+
+
+class TagCount(TypedDict):
+    """Tag with document count for knowledge map."""
+
+    name: str
+    count: int
 
 
 class GitContextPR(TypedDict):
@@ -119,6 +136,9 @@ class PrimeOutput(TypedDict, total=False):
     recent_docs: list[RecentDoc]
     key_docs: list[KeyDoc]
     stale_docs: list[StaleDoc]
+    # smart fields (optional)
+    smart_recent: list[SmartRecentDoc]
+    tag_map: list[TagCount]
 
 
 # ── Status command types (health) ─────────────────────────────────────
