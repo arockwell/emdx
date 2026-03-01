@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-03-01
+
+**Knowledge intelligence and infrastructure overhaul.** This release adds a suite of "thinking" modes to search — deliberative reasoning, devil's advocate challenges, Socratic debugging, and inline citations — plus five new `maintain` subcommands for detecting stale work, code drift, contradictions, freshness decay, and knowledge gaps. Standing queries let you save searches and get alerted on new matches. The delegate system (~13,000 lines) has been removed in favor of native Claude Code agents, document versioning and event history are now tracked automatically, and the migration engine was rewritten to use set-based tracking that survives branch divergence. Daily backups now happen automatically with logarithmic retention.
+
+### 🚀 Major Features
+
+#### Knowledge Intelligence: Ask Modes and Confidence (#926)
+New flags on `emdx find` transform search into structured reasoning. `--think` builds a position paper with arguments for and against, citing doc IDs. `--challenge` (requires `--think`) plays devil's advocate, surfacing evidence against a position. `--debug` generates Socratic diagnostic questions drawing on past bug fixes. `--cite` adds inline `[#ID]` citations using chunk-level retrieval. Confidence scoring was replaced with a 6-signal multi-factor assessment (retrieval score distribution, source count, query coverage, topic coherence, recency).
+
+#### Knowledge Health: Drift, Code-Drift, and Contradictions (#921, #922, #923)
+Three new `maintain` subcommands for KB hygiene. `maintain drift` detects stale work items — tasks and documents that haven't been touched in configurable time windows. `maintain code-drift` cross-references code paths mentioned in KB documents against the actual codebase, flagging references to files, functions, or classes that no longer exist. `maintain contradictions` uses NLI (natural language inference) to find documents that make conflicting claims.
+
+#### Document Versioning and Event History (#927)
+Every document edit now creates a version snapshot with SHA-256 hashes and character deltas. `emdx history <id>` shows the version timeline; `emdx diff <id>` renders unified diffs between versions. A new `knowledge_events` table provides an append-only audit log of all KB interactions — saves, edits, searches, views — with session correlation and metadata.
+
+#### Delegate System Removed (#931)
+The custom `emdx delegate` subprocess launcher — worktree isolation, PR creation, execution tracking, output persistence — has been replaced by native Claude Code Agent tool and SubagentStop hooks. Removed ~13,000 lines (~15% of the codebase) across 37 deleted files. Services that previously used `UnifiedExecutor` now call `subprocess.run(["claude", "--print", ...])` directly.
+
+#### Knowledge Health: Freshness Scoring and Gap Detection (#933, #934)
+Two more `maintain` subcommands for KB hygiene. `maintain freshness` scores every document on a 0–1 scale by combining age decay, view recency, link health, content length, and tag signals — use `--stale` to surface only documents below a threshold. `maintain gaps` analyzes the KB for sparse coverage: tags with few documents, dead-end documents with no outgoing links, orphaned knowledge with zero links, stale topic areas, and projects with high task counts but low documentation.
+
+#### Standing Queries: `find --watch` (#935)
+Save any search as a standing query that alerts you when new documents match. `emdx find --watch "deployment"` registers the query; `emdx find --watch-check` scans all standing queries and reports new matches since the last check. Manage with `--watch-list` and `--watch-remove`.
+
+#### Set-Based Migration Tracking and Dev DB Isolation (#940)
+Migration tracking switched from sequential integers to string-based sets, preventing branch-divergence collisions where a feature branch's migration ID could shadow a different migration on main. New `emdx db` subcommand (`status`, `path`, `copy-from-prod`) for database path management. Running via `poetry run emdx` now auto-isolates to a local `.emdx/dev.db` so dev work never touches production.
+
+### 🔧 Improvements
+
+- **Wiki promoted to top-level command** — `emdx wiki` now works directly instead of requiring `emdx maintain wiki`, with all subcommands (`setup`, `topics`, `triage`, `generate`, `view`, `search`, `export`, `progress`) available at the top level (#928)
+- **Automatic daily backups** — a SessionStart hook creates a compressed daily backup via SQLite's `Connection.backup()` API, with logarithmic retention keeping ~19 backups spanning 2 years (#938)
+- **Serendipity search** — `emdx find --wander` retrieves results then randomly selects a subset, surfacing forgotten documents for re-discovery (#924)
+- **Adversarial document review** — `emdx view --review` runs an LLM adversarial review of a document, checking for staleness, contradictions, and missing context (#920)
+- **Compact prime output** — `emdx prime --brief` outputs a condensed context injection suitable for constrained token budgets (#919)
+- **Status vitals and mirror** — `emdx status --vitals` shows KB health metrics; `emdx status --mirror` reflects the current session's activity back as a summary (#925)
+- **Standing queries** — `emdx find --watch` saves a search as a standing query; `--watch-check` reports new matches since the last check (#935)
+- **Skills moved to project level** — emdx-specific skills relocated from `skills/` to `.claude/skills/` for proper project scoping (#941, #944)
+- **Clean JSON output** — Rich spinners and Progress bars are now suppressed in `--json` mode across all commands, producing reliably parseable output
+
+### 🐛 Bug Fixes
+
+- Fixed SubagentStop hook falsely marking agents as errored when they completed successfully (#942)
+- Fixed CLI commands in gameplan-review skill pointing to removed delegate subcommands (#929)
+- Fixed `--json` output for ask modes (`--think`, `--challenge`, `--debug`, `--cite`) producing Rich markup instead of JSON (#926)
+- Fixed OSError crash when loading NLI model in contradiction service on systems without the model cached
+- Fixed missing `migration_053_remove_delegate_system` function that broke fresh database creation after delegate removal
+- Removed stale delegate references from skills and purged dead delegate columns from queries (#944)
+- Stripped ANSI escape codes in test assertions for reliable CI (#932)
+
+### 🗑️ Removed
+
+- **`emdx delegate` command** and all supporting infrastructure — `UnifiedExecutor`, `cli_executor/`, execution monitoring, worktree management, output parsing, delegate browser TUI, delegate skills (#931)
+
+[0.26.0]: https://github.com/arockwell/emdx/compare/v0.25.1...v0.26.0
+
 ## [0.25.1] - 2026-02-28
 
 **TUI interaction polish + SubagentStop hook.** Fixed several rough edges in mouse and keyboard behavior: clicking a document row no longer accidentally opens the fullscreen preview (only Enter and double-click do), pressing `q` inside a document preview now closes the modal instead of quitting the entire app, and the task screen gained a `u` key to reopen tasks with all action keys clearly labeled in the help bar. Task descriptions now render as markdown. The SubagentStop hook was rewritten to reliably capture native Claude Code agent output into the knowledge base.
