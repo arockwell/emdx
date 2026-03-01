@@ -1242,6 +1242,143 @@ def wiki_rate(
     print(f"Rated {row[1]} {stars} ({resolved_rating}/5)")
 
 
+@wiki_app.command(name="quality")
+def wiki_quality(
+    topic: int | None = typer.Option(None, "--topic", "-t", help="Score a single topic by ID"),
+    threshold: float | None = typer.Option(
+        None,
+        "--threshold",
+        help="Only show articles scoring below this value (0.0-1.0)",
+    ),
+    llm: bool = typer.Option(False, "--llm", help="Run LLM-based deep quality assessment"),
+    model: str | None = typer.Option(None, "--model", help="LLM model for --llm assessment"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Score wiki article quality across multiple dimensions.
+
+    Scores each article on coverage, freshness, coherence, and source
+    density (all 0.0-1.0), then computes a weighted composite score.
+    Results are sorted worst-first so you can prioritize improvements.
+
+    Examples:
+        emdx wiki quality                   # Score all articles
+        emdx wiki quality --topic 5         # Score single article
+        emdx wiki quality --threshold 0.5   # Show low-quality only
+        emdx wiki quality --llm --topic 5   # Deep LLM assessment
+        emdx wiki quality --json            # Machine-readable output
+    """
+    import json as json_mod
+
+    from ..services.wiki_quality_service import (
+        llm_quality_assessment,
+        score_all_articles,
+        score_article,
+    )
+
+    if llm and topic is not None:
+        # LLM assessment for a single article
+        result = llm_quality_assessment(topic, model=model)
+        if json_output:
+            print(json_mod.dumps(result, indent=2, default=str))
+        elif "error" in result:
+            print(f"Error: {result['error']}")
+            raise typer.Exit(1)
+        else:
+            print(f"Quality Assessment: {result.get('article_title', '')}")
+            print(f"Grade: {result.get('overall_grade', '?')}")
+            print()
+            print(str(result.get("assessment", "")))
+        return
+
+    if llm and topic is None:
+        print("Error: --llm requires --topic to specify which article")
+        raise typer.Exit(1)
+
+    if topic is not None:
+        # Single article scoring
+        result = score_article(topic)
+        if json_output:
+            print(json_mod.dumps(result, indent=2, default=str))
+        elif "error" in result:
+            print(f"Error: {result['error']}")
+            raise typer.Exit(1)
+        else:
+            _print_quality_single(result)
+        return
+
+    # Score all articles
+    results = score_all_articles(threshold=threshold)
+    if json_output:
+        print(json_mod.dumps(results, indent=2, default=str))
+        return
+
+    if not results:
+        if threshold is not None:
+            print(
+                f"No articles scoring below {threshold:.2f}. "
+                "All articles meet the quality threshold."
+            )
+        else:
+            print("No wiki articles found to score.")
+        return
+
+    _print_quality_table(results, threshold)
+
+
+def _print_quality_single(result: dict[str, object]) -> None:
+    """Print a single article's quality scores in plain text."""
+    print(f"Article: {result.get('article_title', '?')}")
+    print(f"Topic:   {result.get('topic_label', '?')} (#{result['topic_id']})")
+    print()
+    print("Dimension        Score")
+    print("-" * 30)
+    print(f"Coverage         {_fmt_score(result['coverage'])}")
+    print(f"Freshness        {_fmt_score(result['freshness'])}")
+    print(f"Coherence        {_fmt_score(result['coherence'])}")
+    print(f"Source density   {_fmt_score(result['source_density'])}")
+    print("-" * 30)
+    print(f"Composite        {_fmt_score(result['composite'])}")
+
+
+def _print_quality_table(
+    results: list[dict[str, object]],
+    threshold: float | None,
+) -> None:
+    """Print a quality ranking table in plain text."""
+    count = len(results)
+    label = "articles" if count != 1 else "article"
+    if threshold is not None:
+        print(f"{count} {label} below {threshold:.2f} threshold (sorted worst-first):")
+    else:
+        print(f"{count} {label} scored (sorted worst-first):")
+    print()
+
+    # Header
+    header = f"{'ID':>4}  {'Composite':>9}  {'Cov':>5}  {'Fresh':>5}  {'Coh':>5}  {'Src':>5}  Title"
+    print(header)
+    print("-" * len(header))
+
+    for r in results:
+        tid = r["topic_id"]
+        comp = _fmt_score(r["composite"])
+        cov = _fmt_score(r["coverage"])
+        fre = _fmt_score(r["freshness"])
+        coh = _fmt_score(r["coherence"])
+        src = _fmt_score(r["source_density"])
+        title = str(r.get("article_title", ""))
+        if len(title) > 40:
+            title = title[:37] + "..."
+        print(f"{tid:>4}  {comp:>9}  {cov:>5}  {fre:>5}  {coh:>5}  {src:>5}  {title}")
+
+
+def _fmt_score(value: object) -> str:
+    """Format a score value for display."""
+    try:
+        return f"{float(str(value)):.2f}"
+    except (ValueError, TypeError):
+        return "  -  "
+
+
 @wiki_app.command(name="rename")
 def wiki_rename(
     topic_id: int = typer.Argument(..., help="Topic ID to rename"),
