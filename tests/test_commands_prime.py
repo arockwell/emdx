@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from emdx.commands.prime import (
+    _format_epic_brief,
     _format_epic_line,
     _get_git_context,
     _get_key_docs,
@@ -648,3 +649,218 @@ class TestPrimeWithKeyDocs:
         assert "key_docs" in data
         assert len(data["key_docs"]) == 1
         assert data["key_docs"][0]["access_count"] == 10
+
+
+# ---------------------------------------------------------------------------
+# Tests for _format_epic_brief
+# ---------------------------------------------------------------------------
+
+
+class TestFormatEpicBrief:
+    def test_shows_key_and_progress(self):
+        line = _format_epic_brief(
+            _make_epic(epic_key="FEAT", title="Next Intelligence", child_count=18, children_done=3)
+        )
+        assert "FEAT: Next Intelligence" in line
+        assert "3/18 done" in line
+
+    def test_no_epic_key(self):
+        epic = _make_epic(epic_key=None, title="Cleanup", child_count=5, children_done=2)
+        line = _format_epic_brief(epic)
+        assert "Cleanup" in line
+        assert "2/5 done" in line
+        # Should not have a dangling colon
+        assert ": Cleanup" not in line
+
+
+# ---------------------------------------------------------------------------
+# Tests for --brief flag
+# ---------------------------------------------------------------------------
+
+
+class TestPrimeBrief:
+    """Test --brief flag behavior."""
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_brief_shows_header_without_branch(self, mock_project, mock_ip, mock_ready, mock_epics):
+        mock_project.return_value = "myproject"
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--brief"])
+        assert result.exit_code == 0
+        assert "● emdx — myproject" in result.stdout
+        # Brief mode should NOT include branch in header
+        assert "(" not in result.stdout.split("\n")[0]
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_brief_shows_epics_compact(self, mock_project, mock_ip, mock_ready, mock_epics):
+        mock_project.return_value = None
+        mock_epics.return_value = [
+            _make_epic(
+                epic_key="FEAT",
+                title="Next Intelligence",
+                child_count=18,
+                children_done=3,
+            )
+        ]
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--brief"])
+        assert "ACTIVE EPICS" in result.stdout
+        assert "FEAT: Next Intelligence" in result.stdout
+        assert "3/18 done" in result.stdout
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_brief_shows_ready_tasks_without_doc_ref(
+        self, mock_project, mock_ip, mock_ready, mock_epics
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = [
+            _make_task(id=10, title="Fix auth", source_doc_id=42),
+        ]
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--brief"])
+        assert "READY TASKS (1)" in result.stdout
+        assert "Fix auth" in result.stdout
+        # Brief should NOT show doc references
+        assert "doc #42" not in result.stdout
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_brief_shows_in_progress(self, mock_project, mock_ip, mock_ready, mock_epics):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = [
+            _make_task(id=3, title="Working on it", status="active"),
+        ]
+
+        result = runner.invoke(app, ["--brief"])
+        assert "IN-PROGRESS (1)" in result.stdout
+        assert "Working on it" in result.stdout
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_brief_skips_git_context(self, mock_project, mock_ip, mock_ready, mock_epics):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = [_make_task(id=1, title="Task")]
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--brief"])
+        assert "GIT CONTEXT" not in result.stdout
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_brief_plus_verbose_ignores_verbose(
+        self, mock_project, mock_ip, mock_ready, mock_epics
+    ):
+        """--brief + --verbose should behave like --brief (ignore verbose)."""
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = [
+            _make_task(id=1, title="Task", description="Long description"),
+        ]
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--brief", "--verbose"])
+        assert result.exit_code == 0
+        # Should NOT show verbose additions
+        assert "RECENT DOCS" not in result.stdout
+        assert "KEY DOCS" not in result.stdout
+        assert "GIT CONTEXT" not in result.stdout
+        # Should NOT show task descriptions (verbose feature)
+        assert "Long description" not in result.stdout
+
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_brief_plus_quiet_quiet_wins(self, mock_project, mock_ip, mock_ready):
+        """--brief + --quiet should produce quiet output (quiet wins)."""
+        mock_project.return_value = "proj"
+        mock_ready.return_value = [_make_task(id=1, title="Task")]
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--brief", "--quiet"])
+        assert result.exit_code == 0
+        # Quiet omits header
+        assert "● emdx" not in result.stdout
+        # Quiet omits epics
+        assert "ACTIVE EPICS" not in result.stdout
+        # Still shows tasks
+        assert "READY TASKS" in result.stdout
+
+
+class TestPrimeBriefJson:
+    """Test --brief with JSON output."""
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_json_brief_has_tasks_and_epics(self, mock_project, mock_ip, mock_ready, mock_epics):
+        mock_project.return_value = "myproject"
+        mock_epics.return_value = [_make_epic()]
+        mock_ready.return_value = [_make_task()]
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--format", "json", "--brief"])
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["project"] == "myproject"
+        assert "active_epics" in data
+        assert "ready_tasks" in data
+        assert "in_progress_tasks" in data
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_json_brief_excludes_git_context(self, mock_project, mock_ip, mock_ready, mock_epics):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--format", "json", "--brief"])
+        data = json.loads(result.stdout)
+        assert "git_context" not in data
+
+    @patch("emdx.commands.prime._get_active_epics")
+    @patch("emdx.commands.prime._get_ready_tasks")
+    @patch("emdx.commands.prime._get_in_progress_tasks")
+    @patch("emdx.commands.prime.get_git_project")
+    def test_json_brief_plus_verbose_ignores_verbose(
+        self, mock_project, mock_ip, mock_ready, mock_epics
+    ):
+        mock_project.return_value = None
+        mock_epics.return_value = []
+        mock_ready.return_value = []
+        mock_ip.return_value = []
+
+        result = runner.invoke(app, ["--format", "json", "--brief", "--verbose"])
+        data = json.loads(result.stdout)
+        assert "git_context" not in data
+        assert "execution_methods" not in data
+        assert "recent_docs" not in data
+        assert "key_docs" not in data
