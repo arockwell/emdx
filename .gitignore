@@ -159,3 +159,7 @@ test_output.txt
 
 # Dev database (created by poetry run emdx in dev checkouts)
 .emdx/
+
+# Claude Code worktrees (created by Claude Code agent isolation)
+.claude/worktrees/
+.worktrees/
