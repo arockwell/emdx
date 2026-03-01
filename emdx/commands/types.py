@@ -96,6 +96,14 @@ class StaleDoc(TypedDict):
     days_stale: int
 
 
+class WikiPrimeStatus(TypedDict):
+    """Wiki status summary for prime output."""
+
+    total_topics: int
+    articles_generated: int
+    stale_articles: int
+
+
 class PrimeOutput(TypedDict, total=False):
     """Full prime output structure for JSON mode."""
 
@@ -105,6 +113,7 @@ class PrimeOutput(TypedDict, total=False):
     ready_tasks: list[ReadyTask]
     in_progress_tasks: list[InProgressTask]
     git_context: GitContext
+    wiki_status: WikiPrimeStatus | None
     # verbose fields (optional)
     execution_methods: list[ExecutionMethod]
     recent_docs: list[RecentDoc]

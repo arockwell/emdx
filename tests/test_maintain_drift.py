@@ -444,10 +444,13 @@ class TestDriftCLI:
 
     def test_drift_help(self) -> None:
         """Drift command shows help."""
+        import re
+
         result = runner.invoke(app, ["maintain", "drift", "--help"])
         assert result.exit_code == 0
-        assert "drift" in result.output.lower()
-        assert "--days" in result.output
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "drift" in plain.lower()
+        assert "--days" in plain
 
     def test_drift_no_results(self) -> None:
         """No drift shows friendly message."""
