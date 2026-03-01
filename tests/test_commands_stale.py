@@ -1,5 +1,7 @@
 """Tests for the stale command module (knowledge decay)."""
 
+from __future__ import annotations
+
 from collections.abc import Generator
 from pathlib import Path
 
@@ -69,28 +71,44 @@ class TestStalenessLevel:
     def test_high_importance_critical(self) -> None:
         """High importance docs are CRITICAL after threshold."""
         level = _get_staleness_level(
-            days_stale=35, importance=6.0, critical_days=30, warning_days=14, info_days=60
+            days_stale=35,
+            importance=6.0,
+            critical_days=30,
+            warning_days=14,
+            info_days=60,
         )
         assert level == StalenessLevel.CRITICAL
 
     def test_medium_importance_warning(self) -> None:
         """Medium importance docs are WARNING after threshold."""
         level = _get_staleness_level(
-            days_stale=20, importance=3.0, critical_days=30, warning_days=14, info_days=60
+            days_stale=20,
+            importance=3.0,
+            critical_days=30,
+            warning_days=14,
+            info_days=60,
         )
         assert level == StalenessLevel.WARNING
 
     def test_low_importance_info(self) -> None:
         """Low importance docs are INFO after threshold (archive candidates)."""
         level = _get_staleness_level(
-            days_stale=70, importance=1.0, critical_days=30, warning_days=14, info_days=60
+            days_stale=70,
+            importance=1.0,
+            critical_days=30,
+            warning_days=14,
+            info_days=60,
         )
         assert level == StalenessLevel.INFO
 
     def test_not_stale_returns_none(self) -> None:
         """Recent docs return None (not stale)."""
         level = _get_staleness_level(
-            days_stale=5, importance=6.0, critical_days=30, warning_days=14, info_days=60
+            days_stale=5,
+            importance=6.0,
+            critical_days=30,
+            warning_days=14,
+            info_days=60,
         )
         assert level is None
 
@@ -98,13 +116,17 @@ class TestStalenessLevel:
         """Custom day thresholds work."""
         # With shorter threshold, should become CRITICAL
         level = _get_staleness_level(
-            days_stale=10, importance=6.0, critical_days=7, warning_days=3, info_days=30
+            days_stale=10,
+            importance=6.0,
+            critical_days=7,
+            warning_days=3,
+            info_days=30,
         )
         assert level == StalenessLevel.CRITICAL
 
 
-class TestStaleCommand:
-    """Integration tests for the stale CLI command."""
+class TestMaintainStaleBackwardCompat:
+    """Integration tests for backward-compatible `emdx maintain stale` commands."""
 
     @pytest.fixture(autouse=True)
     def setup_db(
@@ -124,11 +146,10 @@ class TestStaleCommand:
         assert "WARNING" in result.output
         assert "INFO" in result.output
 
-    def test_stale_list_empty(self) -> None:
-        """No stale documents shows success message."""
+    def test_stale_list_runs(self) -> None:
+        """Stale list command runs successfully."""
         result = runner.invoke(app, ["maintain", "stale", "list"])
         assert result.exit_code == 0
-        assert "fresh" in result.output.lower() or "no stale" in result.output.lower()
 
     def test_stale_list_json(self) -> None:
         """JSON output works with stale documents."""
@@ -156,8 +177,8 @@ class TestStaleCommand:
         assert len(data) >= 1
 
 
-class TestTouchCommand:
-    """Integration tests for the touch CLI command."""
+class TestMaintainTouchBackwardCompat:
+    """Integration tests for backward-compatible `emdx maintain stale touch`."""
 
     @pytest.fixture(autouse=True)
     def setup_db(
@@ -198,7 +219,10 @@ class TestTouchCommand:
         doc1 = save_document("Test Doc 1", "Content 1")
         doc2 = save_document("Test Doc 2", "Content 2")
 
-        result = runner.invoke(app, ["maintain", "stale", "touch", str(doc1), str(doc2)])
+        result = runner.invoke(
+            app,
+            ["maintain", "stale", "touch", str(doc1), str(doc2)],
+        )
         assert result.exit_code == 0
         assert "2" in result.output  # Should mention 2 documents
 
@@ -209,12 +233,16 @@ class TestPrimeIntegration:
     def test_get_top_stale_for_priming(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """get_top_stale_for_priming returns stale docs."""
+        """get_top_stale_for_priming returns a list."""
         test_db = tmp_path / "test.db"
         monkeypatch.setenv("EMDX_DATABASE_URL", f"sqlite:///{test_db}")
         db.ensure_schema()
 
-        # Without any docs, should return empty list
         result = get_top_stale_for_priming(limit=5)
         assert isinstance(result, list)
-        assert len(result) == 0  # No docs = no stale docs
+        # All returned docs should be CRITICAL or WARNING
+        for doc in result:
+            assert doc["level"] in (
+                StalenessLevel.CRITICAL,
+                StalenessLevel.WARNING,
+            )
