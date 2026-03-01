@@ -50,6 +50,7 @@ from emdx.commands.history import history as history_command  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.serve import serve as serve_command  # noqa: E402
+from emdx.commands.stale import stale_command, touch_command  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
@@ -121,6 +122,10 @@ app.command(name="serve")(serve_command)
 # Add history/diff commands for document versioning
 app.command(name="history")(history_command)
 app.command(name="diff")(diff_command)
+
+# Add knowledge decay commands (top-level shortcuts for maintain stale)
+app.command(name="stale")(stale_command)
+app.command(name="touch")(touch_command)
 
 
 # Callback for global options

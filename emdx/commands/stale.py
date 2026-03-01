@@ -2,10 +2,15 @@
 Knowledge decay commands for emdx.
 
 Provides staleness tracking to surface documents that need review:
-- `emdx maintain stale list` - Show documents needing review, prioritized by urgency
-- `emdx maintain stale touch` - Reset staleness timer without incrementing view count
+- `emdx stale` - Show documents needing review, prioritized by urgency tier
+- `emdx touch <id>` - Reset staleness timer without incrementing view count
+
+Also available under `emdx maintain stale` for backward compatibility.
 """
 
+from __future__ import annotations
+
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -19,6 +24,7 @@ from emdx.ui.formatting import format_tags
 from emdx.utils.output import console
 from emdx.utils.text_formatting import truncate_title
 
+# Typer sub-app for `emdx maintain stale` backward compatibility
 app = typer.Typer(help="Knowledge decay and staleness tracking")
 
 
@@ -132,7 +138,7 @@ def _get_stale_documents(
             FROM documents
             WHERE is_deleted = FALSE AND archived_at IS NULL
         """
-        params: list[Any] = []
+        params: list[str | int] = []
 
         if project:
             query += " AND project = ?"
@@ -149,7 +155,7 @@ def _get_stale_documents(
     doc_ids = [row[0] for row in rows]
     all_tags = get_tags_for_documents(doc_ids)
 
-    stale_docs = []
+    stale_docs: list[dict[str, Any]] = []
     for row in rows:
         doc_id, title, doc_project, accessed_at, access_count, created_at = row
 
@@ -194,33 +200,48 @@ def _get_stale_documents(
 
     # Sort by urgency: CRITICAL first, then WARNING, then INFO
     # Within level, sort by days_stale descending (oldest first)
-    level_order = {StalenessLevel.CRITICAL: 0, StalenessLevel.WARNING: 1, StalenessLevel.INFO: 2}
+    level_order = {
+        StalenessLevel.CRITICAL: 0,
+        StalenessLevel.WARNING: 1,
+        StalenessLevel.INFO: 2,
+    }
     stale_docs.sort(key=lambda d: (level_order[d["level"]], -d["days_stale"]))
 
     return stale_docs[:limit]
 
 
-@app.command("list")
-def stale_list(
+# ── Top-level command functions ──────────────────────────────────────────
+
+
+def stale_command(
     critical_days: int = typer.Option(
-        30, "--critical-days", help="Days threshold for high-importance docs"
+        30,
+        "--critical-days",
+        help="Days threshold for high-importance docs",
     ),
     warning_days: int = typer.Option(
-        14, "--warning-days", help="Days threshold for medium-importance docs"
+        14,
+        "--warning-days",
+        help="Days threshold for medium-importance docs",
     ),
     info_days: int = typer.Option(
-        60, "--info-days", help="Days threshold for low-importance docs (archive candidates)"
+        60,
+        "--info-days",
+        help="Days threshold for low-importance docs (archive candidates)",
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="Maximum documents to show"),
     project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
-    level: str | None = typer.Option(
-        None, "--level", "-l", help="Filter by level: critical, warning, info"
+    tier: str | None = typer.Option(
+        None,
+        "--tier",
+        "-t",
+        help="Filter by tier: critical, warning, info",
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Show documents needing review, prioritized by urgency.
+    """Show documents needing review, grouped by urgency tier.
 
-    Staleness levels are determined by importance and time since last access:
+    Staleness tiers are determined by importance and time since last access:
 
     - CRITICAL: High importance (security, gameplans, active) stale > 30 days
     - WARNING: Medium importance stale > 14 days
@@ -230,10 +251,53 @@ def stale_list(
     Tag weights: security=3, gameplan=2, active=2, reference=2, default=1.
 
     Examples:
-        emdx maintain stale list              # Show all stale documents
-        emdx maintain stale list -l critical  # Show only critical ones
-        emdx maintain stale list --critical-days 15  # Custom threshold
+        emdx stale                       # Show all stale documents
+        emdx stale --tier critical       # Show only critical ones
+        emdx stale --critical-days 15    # Custom threshold
+        emdx stale --json                # Machine-readable output
     """
+    _run_stale_list(
+        critical_days=critical_days,
+        warning_days=warning_days,
+        info_days=info_days,
+        limit=limit,
+        project=project,
+        level=tier,
+        json_output=json_output,
+    )
+
+
+def touch_command(
+    identifiers: list[str] = typer.Argument(help="Document ID(s) to mark as reviewed"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Mark documents as reviewed without incrementing view count.
+
+    Updates the accessed_at timestamp without changing access_count.
+    Use this when you've verified a document is still current.
+
+    Examples:
+        emdx touch 42               # Touch single document
+        emdx touch 42 43 44         # Touch multiple documents
+        emdx touch 42 --json        # Machine-readable output
+    """
+    _run_touch(identifiers=identifiers, json_output=json_output)
+
+
+# ── Shared implementation ────────────────────────────────────────────────
+
+
+def _run_stale_list(
+    *,
+    critical_days: int,
+    warning_days: int,
+    info_days: int,
+    limit: int,
+    project: str | None,
+    level: str | None,
+    json_output: bool,
+) -> None:
+    """Core implementation for listing stale documents."""
     try:
         stale_docs = _get_stale_documents(
             critical_days=critical_days,
@@ -243,7 +307,7 @@ def stale_list(
             project=project,
         )
 
-        # Filter by level if specified
+        # Filter by level/tier if specified
         if level:
             try:
                 filter_level = StalenessLevel(level.lower())
@@ -253,12 +317,13 @@ def stale_list(
                 raise typer.Exit(1) from None
 
         if not stale_docs:
-            console.print("[green]No stale documents found! Knowledge base is fresh.[/green]")
+            if json_output:
+                print("[]")
+            else:
+                print("No stale documents found. Knowledge base is fresh.")
             return
 
         if json_output:
-            import json
-
             output = []
             for doc in stale_docs:
                 output.append(
@@ -279,7 +344,7 @@ def stale_list(
             return
 
         # Group by level for display
-        by_level: dict[StalenessLevel, list[dict]] = {
+        by_level: dict[StalenessLevel, list[dict[str, Any]]] = {
             StalenessLevel.CRITICAL: [],
             StalenessLevel.WARNING: [],
             StalenessLevel.INFO: [],
@@ -290,7 +355,7 @@ def stale_list(
         # Display counts summary
         counts = {k.value: len(v) for k, v in by_level.items() if v}
         console.print(
-            "\n[bold]📅 Stale Documents[/bold] - "
+            "\n[bold]Stale Documents[/bold] - "
             + " | ".join(f"{k.upper()}: {v}" for k, v in counts.items())
         )
         console.print()
@@ -322,30 +387,25 @@ def stale_list(
 
         console.print(table)
         console.print()
-        console.print("[dim]💡 Use 'emdx maintain stale touch <id>' to mark as reviewed[/dim]")
-        console.print("[dim]💡 Use 'emdx view <id>' to review (also resets staleness)[/dim]")
+        console.print("[dim]Use 'emdx touch <id>' to mark as reviewed[/dim]")
+        console.print("[dim]Use 'emdx view <id>' to review (also resets staleness)[/dim]")
 
+    except typer.Exit:
+        raise
     except Exception as e:
         console.print(f"[red]Error listing stale documents: {e}[/red]")
         raise typer.Exit(1) from e
 
 
-@app.command()
-def touch(
-    identifiers: list[str] = typer.Argument(help="Document ID(s) to touch"),
+def _run_touch(
+    *,
+    identifiers: list[str],
+    json_output: bool = False,
 ) -> None:
-    """Reset staleness timer without incrementing view count.
-
-    This marks documents as reviewed without counting as a "view".
-    Use this when you've verified a document is still current.
-
-    Examples:
-        emdx maintain stale touch 42           # Touch single document
-        emdx maintain stale touch 42 43 44     # Touch multiple documents
-    """
+    """Core implementation for touching documents."""
     try:
-        touched = []
-        not_found = []
+        touched: list[str] = []
+        not_found: list[str] = []
 
         with db.get_connection() as conn:
             for identifier in identifiers:
@@ -365,7 +425,8 @@ def touch(
                         """
                         UPDATE documents
                         SET accessed_at = CURRENT_TIMESTAMP
-                        WHERE LOWER(title) = LOWER(?) AND is_deleted = FALSE
+                        WHERE LOWER(title) = LOWER(?)
+                            AND is_deleted = FALSE
                         """,
                         (identifier_str,),
                     )
@@ -377,19 +438,108 @@ def touch(
 
             conn.commit()
 
-        if touched:
-            ids = ", ".join(str(t) for t in touched)
-            console.print(f"[green]✅ Touched {len(touched)} document(s):[/green] {ids}")
+        if json_output:
+            print(
+                json.dumps(
+                    {
+                        "touched": touched,
+                        "not_found": not_found,
+                        "count": len(touched),
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            if touched:
+                ids = ", ".join(str(t) for t in touched)
+                print(f"Touched {len(touched)} document(s): {ids}")
 
-        if not_found:
-            console.print(f"[yellow]⚠ Not found: {', '.join(str(n) for n in not_found)}[/yellow]")
+            if not_found:
+                names = ", ".join(str(n) for n in not_found)
+                print(f"Not found: {names}")
 
         if not touched and not_found:
             raise typer.Exit(1)
 
+    except typer.Exit:
+        raise
     except Exception as e:
         console.print(f"[red]Error touching documents: {e}[/red]")
         raise typer.Exit(1) from e
+
+
+# ── maintain stale subcommands (backward compatibility) ──────────────────
+
+
+@app.command("list")
+def stale_list(
+    critical_days: int = typer.Option(
+        30,
+        "--critical-days",
+        help="Days threshold for high-importance docs",
+    ),
+    warning_days: int = typer.Option(
+        14,
+        "--warning-days",
+        help="Days threshold for medium-importance docs",
+    ),
+    info_days: int = typer.Option(
+        60,
+        "--info-days",
+        help=("Days threshold for low-importance docs (archive candidates)"),
+    ),
+    limit: int = typer.Option(20, "--limit", "-n", help="Maximum documents to show"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Filter by project"),
+    level: str | None = typer.Option(
+        None,
+        "--level",
+        "-l",
+        help="Filter by level: critical, warning, info",
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show documents needing review, prioritized by urgency.
+
+    Staleness levels are determined by importance and time since last access:
+
+    - CRITICAL: High importance (security, gameplans, active) stale > 30 days
+    - WARNING: Medium importance stale > 14 days
+    - INFO: Low importance stale > 60 days (archive candidates)
+
+    Also available as top-level: emdx stale
+
+    Examples:
+        emdx maintain stale list              # Show all stale documents
+        emdx maintain stale list -l critical  # Show only critical ones
+    """
+    _run_stale_list(
+        critical_days=critical_days,
+        warning_days=warning_days,
+        info_days=info_days,
+        limit=limit,
+        project=project,
+        level=level,
+        json_output=json_output,
+    )
+
+
+@app.command()
+def touch(
+    identifiers: list[str] = typer.Argument(help="Document ID(s) to touch"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Reset staleness timer without incrementing view count.
+
+    Also available as top-level: emdx touch <id>
+
+    Examples:
+        emdx maintain stale touch 42           # Touch single document
+        emdx maintain stale touch 42 43 44     # Touch multiple documents
+    """
+    _run_touch(identifiers=identifiers, json_output=json_output)
+
+
+# ── Prime integration ────────────────────────────────────────────────────
 
 
 def get_top_stale_for_priming(
