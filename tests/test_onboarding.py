@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -58,9 +58,8 @@ def _make_test_db(db_path: Path) -> sqlite3.Connection:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS categories (
             key TEXT PRIMARY KEY,
-            label TEXT,
-            description TEXT,
-            color TEXT,
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -111,7 +110,7 @@ class _MockDb:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self._conn = conn
 
-    def get_connection(self) -> "_ConnCtx":
+    def get_connection(self) -> _ConnCtx:
         return _ConnCtx(self._conn)
 
 
@@ -138,9 +137,7 @@ def onboarding_db(tmp_path: Path) -> sqlite3.Connection:
 class TestMaybeSeedOnboarding:
     """Tests for maybe_seed_onboarding()."""
 
-    def test_fresh_db_seeds_docs_and_tasks(
-        self, onboarding_db: sqlite3.Connection
-    ) -> None:
+    def test_fresh_db_seeds_docs_and_tasks(self, onboarding_db: sqlite3.Connection) -> None:
         """Fresh DB with no documents seeds welcome docs and tutorial tasks."""
         mock_db = _MockDb(onboarding_db)
 
@@ -155,9 +152,7 @@ class TestMaybeSeedOnboarding:
             maybe_seed_onboarding()
 
         # Should have created 2 tutorial documents
-        cursor = onboarding_db.execute(
-            "SELECT COUNT(*) FROM documents WHERE is_deleted = FALSE"
-        )
+        cursor = onboarding_db.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = FALSE")
         doc_count = cursor.fetchone()[0]
         assert doc_count == 2, f"Expected 2 docs, got {doc_count}"
 
@@ -182,9 +177,7 @@ class TestMaybeSeedOnboarding:
         assert row is not None
         assert row[0] == "1"
 
-    def test_idempotent_second_call_is_noop(
-        self, onboarding_db: sqlite3.Connection
-    ) -> None:
+    def test_idempotent_second_call_is_noop(self, onboarding_db: sqlite3.Connection) -> None:
         """Second call is a no-op when the seeded flag is already set."""
         mock_db = _MockDb(onboarding_db)
 
@@ -199,21 +192,15 @@ class TestMaybeSeedOnboarding:
             maybe_seed_onboarding()  # first call — seeds
             maybe_seed_onboarding()  # second call — should be no-op
 
-        cursor = onboarding_db.execute(
-            "SELECT COUNT(*) FROM documents WHERE is_deleted = FALSE"
-        )
+        cursor = onboarding_db.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = FALSE")
         doc_count = cursor.fetchone()[0]
         assert doc_count == 2, f"Expected 2 docs after two calls, got {doc_count}"
 
         cursor = onboarding_db.execute("SELECT COUNT(*) FROM tasks")
         task_count = cursor.fetchone()[0]
-        assert task_count == 6, (
-            f"Expected 6 tasks after two calls, got {task_count}"
-        )
+        assert task_count == 6, f"Expected 6 tasks after two calls, got {task_count}"
 
-    def test_existing_user_skip(
-        self, onboarding_db: sqlite3.Connection
-    ) -> None:
+    def test_existing_user_skip(self, onboarding_db: sqlite3.Connection) -> None:
         """DB with existing documents skips seeding and sets the flag."""
         # Pre-populate with a user document
         onboarding_db.execute(
@@ -235,13 +222,9 @@ class TestMaybeSeedOnboarding:
             maybe_seed_onboarding()
 
         # Should NOT have added tutorial documents
-        cursor = onboarding_db.execute(
-            "SELECT COUNT(*) FROM documents WHERE is_deleted = FALSE"
-        )
+        cursor = onboarding_db.execute("SELECT COUNT(*) FROM documents WHERE is_deleted = FALSE")
         doc_count = cursor.fetchone()[0]
-        assert doc_count == 1, (
-            f"Expected only the pre-existing doc, got {doc_count}"
-        )
+        assert doc_count == 1, f"Expected only the pre-existing doc, got {doc_count}"
 
         # Should NOT have added tasks
         cursor = onboarding_db.execute("SELECT COUNT(*) FROM tasks")
@@ -256,9 +239,7 @@ class TestMaybeSeedOnboarding:
         assert row is not None
         assert row[0] == "1"
 
-    def test_no_schema_flags_table_returns_early(
-        self, tmp_path: Path
-    ) -> None:
+    def test_no_schema_flags_table_returns_early(self, tmp_path: Path) -> None:
         """When schema_flags table doesn't exist, returns without error."""
         db_path = tmp_path / "no_flags.db"
         conn = sqlite3.connect(str(db_path))
@@ -285,9 +266,7 @@ class TestMaybeSeedOnboarding:
         assert cursor.fetchone()[0] == 0
         conn.close()
 
-    def test_logging_on_missing_schema_flags(
-        self, tmp_path: Path
-    ) -> None:
+    def test_logging_on_missing_schema_flags(self, tmp_path: Path) -> None:
         """Bare except block logs a debug message."""
         db_path = tmp_path / "no_flags_log.db"
         conn = sqlite3.connect(str(db_path))
