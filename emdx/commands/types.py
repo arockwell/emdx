@@ -96,6 +96,14 @@ class StaleDoc(TypedDict):
     days_stale: int
 
 
+class WikiPrimeStatus(TypedDict):
+    """Wiki status summary for prime output."""
+
+    total_topics: int
+    articles_generated: int
+    stale_articles: int
+
+
 class PrimeOutput(TypedDict, total=False):
     """Full prime output structure for JSON mode."""
 
@@ -105,6 +113,7 @@ class PrimeOutput(TypedDict, total=False):
     ready_tasks: list[ReadyTask]
     in_progress_tasks: list[InProgressTask]
     git_context: GitContext
+    wiki_status: WikiPrimeStatus | None
     # verbose fields (optional)
     execution_methods: list[ExecutionMethod]
     recent_docs: list[RecentDoc]
@@ -136,6 +145,94 @@ class HealthData(TypedDict, total=False):
     statistics: HealthStats
     timestamp: str
     error: str  # only on error
+
+
+# ── Status command types (vitals) ─────────────────────────────────────
+
+
+class ProjectCount(TypedDict):
+    """Document count per project."""
+
+    project: str
+    count: int
+
+
+class WeeklyGrowth(TypedDict):
+    """Weekly document growth rate."""
+
+    week: str
+    count: int
+
+
+class AccessBucket(TypedDict):
+    """Access frequency distribution bucket."""
+
+    range: str
+    count: int
+
+
+class TaskStats(TypedDict):
+    """Task status summary."""
+
+    open: int
+    done: int
+    total: int
+
+
+class VitalsData(TypedDict):
+    """Data returned by --vitals flag."""
+
+    total_docs: int
+    by_project: list[ProjectCount]
+    growth_per_week: list[WeeklyGrowth]
+    embedding_coverage_pct: float
+    access_distribution: list[AccessBucket]
+    tag_coverage_pct: float
+    tasks: TaskStats
+
+
+# ── Status command types (mirror) ─────────────────────────────────────
+
+
+class TagShare(TypedDict):
+    """Tag with its share of documents."""
+
+    tag: str
+    count: int
+    pct: float
+
+
+class WeeklyActivity(TypedDict):
+    """Weekly document creation activity."""
+
+    week: str
+    count: int
+
+
+class ProjectBalance(TypedDict):
+    """Document count per project for mirror."""
+
+    project: str
+    count: int
+
+
+class StalenessBreakdown(TypedDict):
+    """Percentage of docs not accessed in N days."""
+
+    over_30_days_pct: float
+    over_60_days_pct: float
+    over_90_days_pct: float
+
+
+class MirrorData(TypedDict):
+    """Data returned by --mirror flag."""
+
+    total_docs: int
+    top_tags: list[TagShare]
+    weekly_activity: list[WeeklyActivity]
+    temporal_pattern: str
+    project_balance: list[ProjectBalance]
+    staleness: StalenessBreakdown
 
 
 # ── Delegate command types ─────────────────────────────────────────────

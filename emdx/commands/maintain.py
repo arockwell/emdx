@@ -11,9 +11,6 @@ import subprocess
 import time
 
 # Removed CommandDefinition import - using standard typer pattern
-from datetime import datetime, timezone
-from pathlib import Path
-
 import typer
 from rich import box
 from rich.panel import Panel
@@ -413,47 +410,34 @@ def _garbage_collect(dry_run: bool) -> str | None:
 
 
 def cleanup_main(
-    branches: bool = typer.Option(
-        False, "--branches", "-b", help="Clean up old execution branches"
-    ),  # noqa: E501
-    processes: bool = typer.Option(False, "--processes", "-p", help="Clean up zombie processes"),
-    executions: bool = typer.Option(False, "--executions", "-e", help="Clean up stuck executions"),
+    branches: bool = typer.Option(False, "--branches", "-b", help="Clean up old worktree branches"),  # noqa: E501
     all: bool = typer.Option(False, "--all", "-a", help="Clean up everything"),
     dry_run: bool = typer.Option(
         True, "--execute/--dry-run", help="Execute actions (default: dry run)"
     ),  # noqa: E501
     force: bool = typer.Option(False, "--force", "-f", help="Force delete unmerged branches"),
     age_days: int = typer.Option(7, "--age", help="Only clean branches older than N days"),
-    max_runtime: int = typer.Option(
-        2, "--max-runtime", help="Max process runtime in hours before considering stuck"
-    ),  # noqa: E501
-    timeout_minutes: int = typer.Option(
-        30, "--timeout", help="Minutes after which to consider execution stale"
-    ),  # noqa: E501
 ) -> None:
     """
-    Clean up system resources used by EMDX executions.
+    Clean up system resources used by EMDX.
 
     This command helps clean up:
-    - Old git branches from executions
-    - Zombie/stuck processes
-    - Database execution records stuck in 'running' state
+    - Old git branches from worktrees
 
     Examples:
         emdx maintain cleanup --all          # Clean everything (dry run)
         emdx maintain cleanup --all --execute # Actually clean everything
         emdx maintain cleanup --branches     # Clean old branches
         emdx maintain cleanup --branches --force # Delete unmerged branches too
-        emdx maintain cleanup --processes    # Kill zombie processes
     """
-    if not any([branches, processes, executions, all]):
+    if not any([branches, all]):
         console.print("[yellow]Please specify what to clean up. Use --help for options.[/yellow]")
         return
 
     if all:
-        branches = processes = executions = True
+        branches = True
 
-    console.print(Panel("[bold cyan]🧹 EMDX Execution Cleanup[/bold cyan]", box=box.DOUBLE))
+    console.print(Panel("[bold cyan]🧹 EMDX Cleanup[/bold cyan]", box=box.DOUBLE))
 
     if dry_run:
         console.print("[yellow]🔍 DRY RUN MODE - No changes will be made[/yellow]\n")
@@ -463,24 +447,8 @@ def cleanup_main(
 
     # Clean branches
     if branches:
-        console.print("[bold]Cleaning up old execution branches...[/bold]")
+        console.print("[bold]Cleaning up old worktree branches...[/bold]")
         cleaned = _cleanup_branches(dry_run, force=force, older_than_days=age_days)
-        if cleaned:
-            actions_taken.append(cleaned)
-        console.print()
-
-    # Clean processes
-    if processes:
-        console.print("[bold]Cleaning up zombie processes...[/bold]")
-        cleaned = _cleanup_processes(dry_run, max_runtime_hours=max_runtime)
-        if cleaned:
-            actions_taken.append(cleaned)
-        console.print()
-
-    # Clean executions
-    if executions:
-        console.print("[bold]Cleaning up stuck executions...[/bold]")
-        cleaned = _cleanup_executions(dry_run, timeout_minutes=timeout_minutes)
         if cleaned:
             actions_taken.append(cleaned)
         console.print()
@@ -498,7 +466,7 @@ def cleanup_main(
 
 
 def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int = 7) -> str | None:
-    """Clean up old execution branches.
+    """Clean up old worktree branches.
 
     Args:
         dry_run: If True, only show what would be done
@@ -521,18 +489,18 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
         # List all branches
         result = subprocess.run(["git", "branch", "-a"], capture_output=True, text=True, check=True)
 
-        # Find exec-* branches
-        exec_branches = []
+        # Find worktree/* branches
+        worktree_branches = []
         for line in result.stdout.strip().split("\n"):
             branch = line.strip().lstrip("* ")
             # Skip remote branches and current branch
             if branch.startswith("remotes/") or branch == current_branch:
                 continue
-            if branch.startswith("exec-"):
-                exec_branches.append(branch)
+            if branch.startswith("worktree/") or branch.startswith("worktree-"):
+                worktree_branches.append(branch)
 
-        if not exec_branches:
-            console.print("  ✨ No execution branches found!")
+        if not worktree_branches:
+            console.print("  ✨ No worktree branches found!")
             return None
 
         # Get main/master branch name
@@ -550,7 +518,7 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
         branches_to_delete = []
         unmerged_branches = []
 
-        for branch in exec_branches:
+        for branch in worktree_branches:
             # Get branch age
             age_cmd = subprocess.run(
                 ["git", "log", "-1", "--format=%ct", branch], capture_output=True, text=True
@@ -587,7 +555,7 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
                 unmerged_branches.append((branch, int(branch_age_days)))
 
         # Report findings
-        console.print(f"  Found: {len(exec_branches)} execution branches")
+        console.print(f"  Found: {len(worktree_branches)} worktree branches")
         if branches_to_delete:
             console.print(f"  • {len(branches_to_delete)} can be deleted")
         if unmerged_branches:
@@ -644,428 +612,26 @@ def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int =
         return None
 
 
-def _cleanup_processes(dry_run: bool, max_runtime_hours: int = 2) -> str | None:
-    """Clean up zombie and stuck EMDX processes.
-
-    Args:
-        dry_run: If True, only show what would be done
-        max_runtime_hours: Maximum runtime before considering a process stuck
-    """
-    # Lazy import - psutil is slow to import (~16ms)
-    import psutil
-
-    from ..models.executions import get_running_executions
-
-    # Categorize problematic processes
-    zombie_procs = []
-    stuck_procs = []
-    orphaned_procs = []
-
-    # Get running executions from database
-    running_execs = get_running_executions()
-    known_pids = {exec.pid for exec in running_execs if exec.pid}
-
-    # Find EMDX-related processes
-    for proc in psutil.process_iter(["pid", "name", "cmdline", "status", "create_time"]):
-        try:
-            # Check if it's EMDX-related
-            cmdline = proc.info.get("cmdline", []) or []
-            cmdline_str = " ".join(cmdline)
-
-            # Look for EMDX execution processes
-            patterns = [
-                "emdx delegate",
-                "emdx exec",
-                "claude_wrapper.py",
-                "emdx-exec",
-                "claude --print",
-            ]
-            if not any(pattern in cmdline_str for pattern in patterns):
-                continue
-
-            # Get process info
-            pid = proc.info["pid"]
-            status = proc.info.get("status", "")
-
-            # Check if it's a zombie
-            if status == psutil.STATUS_ZOMBIE or status == "zombie":
-                zombie_procs.append((proc, "zombie"))
-                continue
-
-            # Check runtime
-            try:
-                create_time = proc.info["create_time"]
-                runtime_hours = (time.time() - create_time) / 3600
-
-                # Check if process is stuck (running too long)
-                if runtime_hours > max_runtime_hours:
-                    stuck_procs.append((proc, f"{runtime_hours:.1f}h runtime"))
-                    continue
-
-                # Check if process is orphaned (not in database)
-                if pid not in known_pids and "claude" in cmdline_str:
-                    orphaned_procs.append((proc, f"orphaned, {runtime_hours:.1f}h old"))
-
-            except Exception as e:
-                logger.debug("Could not get process runtime: %s", e)
-
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-
-    # Combine all problematic processes
-    all_procs = zombie_procs + stuck_procs + orphaned_procs
-
-    if not all_procs:
-        console.print("  ✨ No problematic processes found!")
-        return None
-
-    # Report findings
-    console.print(f"  Found: {len(all_procs)} problematic processes")
-    if zombie_procs:
-        console.print(f"  • {len(zombie_procs)} zombie processes")
-    if stuck_procs:
-        console.print(f"  • {len(stuck_procs)} stuck (running > {max_runtime_hours}h)")
-    if orphaned_procs:
-        console.print(f"  • {len(orphaned_procs)} orphaned (not in database)")
-
-    if dry_run:
-        console.print("\n  Processes to terminate:")
-        for proc, reason in all_procs[:10]:
-            try:
-                # Get process details
-                cmdline = proc.cmdline()
-                if len(cmdline) > 3:
-                    cmd_display = " ".join(cmdline[:3]) + "..."
-                else:
-                    cmd_display = " ".join(cmdline)
-
-                # Get memory usage
-                mem_str = ""
-                try:
-                    mem_mb = proc.memory_info().rss / 1024 / 1024
-                    mem_str = f", {mem_mb:.0f}MB"
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    # Memory info unavailable for this process
-                    logger.debug("Could not get memory info for PID %s", proc.pid)
-
-                console.print(f"    • PID {proc.pid}: {cmd_display} ({reason}{mem_str})")
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                console.print(f"    • PID {proc.pid}: [process info unavailable] ({reason})")
-
-        if len(all_procs) > 10:
-            console.print(f"    ... and {len(all_procs) - 10} more")
-
-        return f"Would terminate {len(all_procs)} processes"
-
-    # Kill processes
-    terminated = 0
-    killed = 0
-    failed = 0
-
-    with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
-    ) as progress:
-        task = progress.add_task("Terminating processes...", total=len(all_procs))
-
-        for proc, _reason in all_procs:
-            try:
-                # Try graceful termination first
-                proc.terminate()
-                try:
-                    proc.wait(timeout=3)
-                    terminated += 1
-                except psutil.TimeoutExpired:
-                    # Force kill if terminate didn't work
-                    proc.kill()
-                    proc.wait(timeout=1)
-                    killed += 1
-            except psutil.NoSuchProcess:
-                # Process already gone - count as success
-                logger.debug("Process already terminated during cleanup")
-                terminated += 1
-            except Exception as e:
-                logger.warning("Failed to terminate process: %s", e)
-                failed += 1
-
-            progress.update(task, advance=1)
-
-    # Report results
-    if terminated > 0:
-        console.print(f"  [green]✓[/green] Terminated {terminated} processes gracefully")
-    if killed > 0:
-        console.print(f"  [yellow]⚠[/yellow] Force killed {killed} processes")
-    if failed > 0:
-        console.print(f"  [red]✗[/red] Failed to terminate {failed} processes")
-
-    total_removed = terminated + killed
-    return f"Terminated {total_removed} processes" if total_removed > 0 else None
-
-
-def _cleanup_executions(
-    dry_run: bool, timeout_minutes: int = 30, check_heartbeat: bool = True
-) -> str | None:  # noqa: E501
-    """Clean up stuck executions in the database.
-
-    Args:
-        dry_run: If True, only show what would be done
-        timeout_minutes: Minutes after which to consider execution stale
-        check_heartbeat: Whether to use heartbeat checking (if available)
-    """
-    from ..models.executions import (
-        get_execution_stats,
-        get_running_executions,
-        get_stale_executions,
-        update_execution_status,
-    )
-    from ..services.execution_monitor import ExecutionMonitor
-
-    # Initialize monitor
-    monitor = ExecutionMonitor(stale_timeout_seconds=timeout_minutes * 60)
-
-    # Get various categories of stuck executions
-    stale_heartbeat = []
-    dead_process = []
-    no_pid_old = []
-    long_running = []
-
-    # Get running executions
-    running = get_running_executions()
-
-    # Get stale executions based on heartbeat (if enabled)
-    if check_heartbeat:
-        stale_heartbeat = get_stale_executions(timeout_seconds=timeout_minutes * 60)
-        # Create a set of IDs for faster lookup
-        stale_ids = {exec.id for exec in stale_heartbeat}
-    else:
-        stale_ids = set()
-
-    # Check each running execution
-    for exec in running:
-        # Skip if already categorized as stale
-        if exec.id in stale_ids:
-            continue
-
-        # Calculate runtime
-        runtime_minutes = (datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60
-
-        # Check process health
-        health = monitor.check_process_health(exec)
-
-        if health["is_zombie"] or (not health["process_exists"] and exec.pid):
-            dead_process.append((exec, health["reason"] or "unknown"))
-        elif not exec.pid and runtime_minutes > 60:
-            # No PID and > 1 hour old = likely stuck
-            no_pid_old.append((exec, f"No PID, {runtime_minutes:.0f}m old"))
-        elif runtime_minutes > 180:  # 3 hours
-            # Very long running, might be stuck
-            long_running.append((exec, f"Running for {runtime_minutes:.0f}m"))
-
-    # Get stats for context
-    stats = get_execution_stats()
-
-    # Combine all problematic executions
-    all_stuck = []
-    if stale_heartbeat:
-        all_stuck.extend([(e, "no heartbeat") for e in stale_heartbeat])
-    all_stuck.extend(dead_process)
-    all_stuck.extend(no_pid_old)
-
-    # Report current state
-    console.print(f"  Total executions in DB: {stats['total']}")
-    console.print(f"  Currently marked running: {stats['running']}")
-
-    if not all_stuck and not long_running:
-        console.print("  ✨ All running executions appear healthy!")
-        return None
-
-    # Report findings
-    if all_stuck:
-        console.print(f"\n  [red]Found {len(all_stuck)} stuck executions:[/red]")
-        if stale_heartbeat:
-            console.print(f"  • {len(stale_heartbeat)} with no heartbeat")
-        if dead_process:
-            console.print(f"  • {len(dead_process)} with dead processes")
-        if no_pid_old:
-            console.print(f"  • {len(no_pid_old)} old executions without PID")
-
-    if long_running:
-        n = len(long_running)
-        console.print(f"\n  [yellow]Found {n} long-running executions (may be normal):[/yellow]")
-
-    if dry_run:
-        # Show details
-        if all_stuck:
-            console.print("\n  Executions to mark as failed:")
-            for exec, reason in all_stuck[:10]:
-                age_minutes = int(
-                    (datetime.now(timezone.utc) - exec.started_at).total_seconds() / 60
-                )  # noqa: E501
-                console.print(
-                    f"    • #{exec.id}: {exec.doc_title[:30]}... ({reason}, {age_minutes}m old)"
-                )  # noqa: E501
-            if len(all_stuck) > 10:
-                console.print(f"    ... and {len(all_stuck) - 10} more")
-
-        if long_running:
-            console.print("\n  Long-running executions (review manually):")
-            for exec, reason in long_running[:5]:
-                console.print(f"    • #{exec.id}: {exec.doc_title[:30]}... ({reason})")
-            if len(long_running) > 5:
-                console.print(f"    ... and {len(long_running) - 5} more")
-
-        return f"Would mark {len(all_stuck)} executions as failed"
-
-    # Mark stuck executions as failed
-    updated = 0
-    failed_updates = 0
-
-    with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
-    ) as progress:
-        task = progress.add_task("Updating execution status...", total=len(all_stuck))
-
-        for exec, reason in all_stuck:
-            try:
-                # Choose appropriate exit code based on reason
-                if "heartbeat" in reason:
-                    exit_code = 124  # timeout
-                elif "zombie" in reason or "dead" in reason:
-                    exit_code = 137  # killed
-                elif "No PID" in reason:
-                    exit_code = -1  # unknown error
-                else:
-                    exit_code = 1  # general error
-
-                update_execution_status(exec.id, "failed", exit_code)
-                updated += 1
-            except Exception as e:
-                logger.warning("Failed to update execution %s status: %s", exec.id, e)
-                failed_updates += 1
-
-            progress.update(task, advance=1)
-
-    # Report results
-    if updated > 0:
-        console.print(f"  [green]✓[/green] Marked {updated} executions as failed")
-    if failed_updates > 0:
-        console.print(f"  [yellow]⚠[/yellow] Failed to update {failed_updates} executions")
-
-    # Also report on long-running for awareness
-    if long_running:
-        console.print(
-            f"  [dim]Note: {len(long_running)} long-running executions left untouched[/dim]"
-        )  # noqa: E501
-
-    return f"Marked {updated} executions as failed" if updated > 0 else None
-
-
-def cleanup_temp_dirs(
-    dry_run: bool = typer.Option(
-        True, "--execute/--dry-run", help="Execute actions (default: dry run)"
-    ),  # noqa: E501
-    age_hours: int = typer.Option(24, "--age", help="Clean directories older than N hours"),
+def drift(
+    days: int = typer.Option(30, "--days", "-d", help="Staleness threshold in days"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """
-    Clean up temporary execution directories.
+    """Detect abandoned or forgotten work in your knowledge base.
 
-    EMDX creates temporary directories for each execution in /tmp.
-    This command cleans up old directories that are no longer needed.
+    Analyzes task and epic timestamps to surface:
+    - Stale epics with no recent activity
+    - Orphaned active tasks not touched in >14 days (or --days/2)
+    - Documents linked to stale tasks
+    - Epics with burst-then-stop activity patterns
 
     Examples:
-        emdx maintain cleanup-dirs              # Show what would be cleaned
-        emdx maintain cleanup-dirs --execute    # Actually clean directories
-        emdx maintain cleanup-dirs --age 48     # Clean dirs older than 48 hours
+        emdx maintain drift              # Default 30-day threshold
+        emdx maintain drift --days 7     # More aggressive threshold
+        emdx maintain drift --json       # Machine-readable output
     """
-    import shutil
-    import tempfile
-    from datetime import timedelta
+    from emdx.commands._drift import run_drift
 
-    temp_base = Path(tempfile.gettempdir())
-    pattern = "emdx-exec-*"
-
-    console.print(
-        Panel("[bold cyan]🗑️ Cleaning Temporary Execution Directories[/bold cyan]", box=box.DOUBLE)
-    )
-
-    if dry_run:
-        console.print("[yellow]🔍 DRY RUN MODE - No changes will be made[/yellow]\n")
-
-    # Find EMDX execution directories
-    exec_dirs = list(temp_base.glob(pattern))
-
-    if not exec_dirs:
-        console.print("[green]✨ No execution directories found![/green]")
-        return
-
-    # Filter by age
-    cutoff_time = datetime.now() - timedelta(hours=age_hours)
-    old_dirs = []
-    total_size = 0
-
-    for dir_path in exec_dirs:
-        try:
-            stat = dir_path.stat()
-            mtime = datetime.fromtimestamp(stat.st_mtime)
-            if mtime < cutoff_time:
-                old_dirs.append((dir_path, mtime))
-                # Calculate size
-                size = sum(f.stat().st_size for f in dir_path.rglob("*") if f.is_file())
-                total_size += size
-        except OSError as e:
-            logger.warning(f"Could not scan directory {dir_path}: {e}")
-
-    if not old_dirs:
-        console.print(f"[green]✨ No directories older than {age_hours} hours![/green]")
-        return
-
-    # Sort by age
-    old_dirs.sort(key=lambda x: x[1])
-
-    console.print(
-        f"Found [yellow]{len(old_dirs)}[/yellow] directories older than {age_hours} hours"
-    )  # noqa: E501
-    console.print(f"Total space used: [cyan]{total_size / 1024 / 1024:.1f} MB[/cyan]\n")
-
-    # Show preview
-    console.print("[bold]Directories to remove:[/bold]")
-    for dir_path, mtime in old_dirs[:10]:
-        age = datetime.now() - mtime
-        age_str = f"{int(age.total_seconds() / 3600)}h ago"
-        console.print(f"  • {dir_path.name} ({age_str})")
-
-    if len(old_dirs) > 10:
-        console.print(f"  ... and {len(old_dirs) - 10} more")
-
-    if dry_run:
-        console.print(f"\n[dim]Run with --execute to remove {len(old_dirs)} directories[/dim]")
-        return
-
-    # Actually remove directories
-    removed = 0
-    freed_space = 0
-
-    with Progress(
-        SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
-    ) as progress:
-        task = progress.add_task("Removing directories...", total=len(old_dirs))
-
-        failed = 0
-        for dir_path, _ in old_dirs:
-            try:
-                # Calculate size before removal
-                size = sum(f.stat().st_size for f in dir_path.rglob("*") if f.is_file())
-                shutil.rmtree(dir_path)
-                removed += 1
-                freed_space += size
-            except OSError as e:
-                logger.warning(f"Failed to remove directory {dir_path}: {e}")
-                failed += 1
-            progress.update(task, advance=1)
-
-    console.print(f"\n[green]✅ Removed {removed} directories[/green]")
-    console.print(f"[green]💾 Freed {freed_space / 1024 / 1024:.1f} MB of disk space[/green]")
-    if failed > 0:
-        console.print(f"[yellow]⚠️ Failed to remove {failed} directories (check logs)[/yellow]")
+    run_drift(days=days, json_output=json_output)
 
 
 # Create typer app for this module
@@ -1093,8 +659,7 @@ def maintain_callback(
     Run with no subcommand for the maintenance wizard.
 
     Subcommands:
-        cleanup      Clean up execution resources (branches, processes)
-        cleanup-dirs Clean up temporary directories
+        cleanup      Clean up old worktree branches
         stale        Knowledge decay and staleness tracking
 
     See also:
@@ -1108,7 +673,12 @@ def maintain_callback(
 
 
 app.command(name="cleanup")(cleanup_main)
-app.command(name="cleanup-dirs")(cleanup_temp_dirs)
+app.command(name="drift")(drift)
+
+# Register code-drift as a direct subcommand of maintain
+from emdx.commands.code_drift import code_drift_command  # noqa: E402
+
+app.command(name="code-drift")(code_drift_command)
 
 
 def backup_command(
@@ -1135,6 +705,7 @@ def backup_command(
         emdx maintain backup --json       # JSON output
     """
     import json as json_mod
+    from pathlib import Path
 
     from ..config.settings import get_db_path
     from ..services.backup_service import BackupService

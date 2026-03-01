@@ -46,6 +46,18 @@
         ]
       }
     ],
-    "PreToolUse": []
+    "PreToolUse": [],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/save-subagent-output.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
   }
 }

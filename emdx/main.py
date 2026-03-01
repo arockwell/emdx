@@ -4,12 +4,9 @@ Main CLI entry point for emdx
 
 This module uses lazy loading for heavy commands to improve startup performance.
 Core KB commands (save, find, view, tag, etc.) are imported eagerly since they're
-fast. Heavy commands (delegate, compact, etc.) are only imported when
+fast. Heavy commands (distill, explore, etc.) are only imported when
 actually invoked.
 """
-
-import os
-from collections.abc import Callable
 
 import typer
 
@@ -22,67 +19,20 @@ from emdx.utils.lazy_group import LazyTyperGroup, register_aliases, register_laz
 # Format: "command_name": "module.path:object_name"
 # IMPORTANT: Register BEFORE any Typer app creation
 LAZY_SUBCOMMANDS = {
-    # Execution/orchestration (imports subprocess, async, executor)
-    "delegate": "emdx.commands.delegate:app",
     "explore": "emdx.commands.explore:app",
     "distill": "emdx.commands.distill:app",
-    "wrapup": "emdx.commands.wrapup:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
 LAZY_HELP = {
-    "delegate": "One-shot AI execution (parallel, worktree, PR)",
     "explore": "Explore what your knowledge base knows",
     "distill": "Distill KB content into audience-aware summaries",
-    "wrapup": "Generate session summary from recent activity",
 }
-
-
-def is_safe_mode() -> bool:
-    """Check if EMDX is running in safe mode.
-
-    Safe mode disables execution commands (delegate).
-    Enable with EMDX_SAFE_MODE=1 environment variable.
-    """
-    return os.environ.get("EMDX_SAFE_MODE", "0").lower() in ("1", "true", "yes")
-
-
-# Commands disabled in safe mode
-UNSAFE_COMMANDS = {"delegate"}
-
-
-def get_lazy_subcommands() -> dict[str, str]:
-    """Get lazy subcommands, with safe mode commands excluded."""
-    if is_safe_mode():
-        # In safe mode, exclude unsafe commands from lazy loading
-        # They'll be added as disabled commands eagerly instead
-        return {k: v for k, v in LAZY_SUBCOMMANDS.items() if k not in UNSAFE_COMMANDS}
-    return LAZY_SUBCOMMANDS
-
-
-def get_lazy_help() -> dict[str, str]:
-    """Get lazy help strings, filtering for safe mode."""
-    if is_safe_mode():
-        return {k: v for k, v in LAZY_HELP.items() if k not in UNSAFE_COMMANDS}
-    return LAZY_HELP
-
-
-def create_disabled_command(name: str) -> Callable[[], None]:
-    """Create a command that shows a disabled message in safe mode."""
-
-    def disabled_command() -> None:
-        typer.echo(
-            f"Command '{name}' is disabled in safe mode. Set EMDX_SAFE_MODE=0 to enable.", err=True
-        )
-        raise typer.Exit(1)
-
-    disabled_command.__doc__ = f"[DISABLED in safe mode] Execute {name} operations"
-    return disabled_command
 
 
 # Register lazy commands BEFORE importing any Typer apps
 # This ensures the registry is populated when LazyTyperGroup is instantiated
-register_lazy_commands(get_lazy_subcommands(), get_lazy_help())
+register_lazy_commands(LAZY_SUBCOMMANDS, LAZY_HELP)
 
 # Register top-level command aliases (alias -> canonical name)
 register_aliases({"show": "view"})
@@ -101,6 +51,7 @@ from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.commands.tags import app as tag_app  # noqa: E402
 from emdx.commands.tasks import app as tasks_app  # noqa: E402
 from emdx.commands.trash import app as trash_app  # noqa: E402
+from emdx.commands.wiki import wiki_app  # noqa: E402
 from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
@@ -143,6 +94,9 @@ app.add_typer(tasks_app, name="task", help="Agent work queue")
 # Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs)
 app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
 
+# Add wiki as a top-level command group (also available under maintain for backward compat)
+app.add_typer(wiki_app, name="wiki", help="Auto-wiki from your knowledge base")
+
 # Add the prime command for Claude session priming
 app.command(name="prime")(prime_command)
 
@@ -159,16 +113,6 @@ app.command(name="gui")(gui_command)
 app.command(name="serve")(serve_command)
 
 
-# =============================================================================
-# Handle safe mode for unsafe commands
-# =============================================================================
-if is_safe_mode():
-    # Add disabled versions of unsafe commands that would otherwise be lazy-loaded
-    for cmd_name in UNSAFE_COMMANDS:
-        if cmd_name in LAZY_SUBCOMMANDS:
-            app.command(name=cmd_name)(create_disabled_command(cmd_name))
-
-
 # Callback for global options
 @app.callback(invoke_without_command=True)
 def main(
@@ -179,23 +123,12 @@ def main(
     db_url: str | None = typer.Option(
         None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
     ),
-    safe_mode: bool = typer.Option(
-        False,
-        "--safe-mode",
-        envvar="EMDX_SAFE_MODE",
-        help="Disable execution commands (delegate)",
-    ),
 ) -> None:
     """
     emdx - A knowledge base for developers and AI agents
 
-    Save research, delegate tasks to Claude agents, and search everything
+    Save research, manage tasks, and search everything
     with full-text and semantic search.
-
-    [bold]Safe Mode:[/bold]
-    Set EMDX_SAFE_MODE=1 or use --safe-mode to disable execution commands
-    (delegate). Useful for read-only access
-    or when external execution should be prevented.
 
     Examples:
 
@@ -214,10 +147,6 @@ def main(
     View a document:
         [cyan]emdx view 42[/cyan]
         [cyan]emdx view "My Document Title"[/cyan]
-
-    Enable safe mode:
-        [cyan]EMDX_SAFE_MODE=1 emdx --help[/cyan]
-        [cyan]emdx --safe-mode delegate "task"[/cyan]  # Will show disabled message
     """
     # Handle --version flag
     if version:
@@ -228,12 +157,6 @@ def main(
     if verbose and quiet:
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
-
-    # Handle --safe-mode flag by setting environment variable
-    # Note: This is checked at import time, so the flag mainly serves as documentation
-    # and for future commands that might check at runtime
-    if safe_mode:
-        os.environ["EMDX_SAFE_MODE"] = "1"
 
     # Ensure database schema is up to date (idempotent, runs pending migrations)
     if ctx.invoked_subcommand is not None:

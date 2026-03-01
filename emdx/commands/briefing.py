@@ -4,7 +4,6 @@ Briefing command - Show what happened in recent emdx activity.
 Provides a summary of:
 - Documents created in the timeframe
 - Tasks that changed status (new, completed, blocked)
-- Delegate executions (success/fail counts)
 """
 
 from __future__ import annotations
@@ -148,35 +147,6 @@ def _get_tasks_blocked(since: datetime) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def _get_execution_stats(since: datetime) -> dict[str, int]:
-    """Get execution statistics since the given datetime."""
-    since_str = since.isoformat()
-    stats = {"total": 0, "completed": 0, "failed": 0, "running": 0}
-
-    with db.get_connection() as conn:
-        try:
-            cursor = conn.execute(
-                """
-                SELECT status, COUNT(*) as count
-                FROM executions
-                WHERE started_at >= ?
-                GROUP BY status
-                """,
-                (since_str,),
-            )
-            for row in cursor.fetchall():
-                status = row["status"]
-                count = row["count"]
-                stats["total"] += count
-                if status in stats:
-                    stats[status] = count
-        except Exception:
-            # executions table may not exist or have different schema
-            pass
-
-    return stats
-
-
 def _format_relative_time(dt_str: str | None) -> str:
     """Format a datetime string as relative time."""
     if not dt_str:
@@ -206,7 +176,6 @@ def _display_human_briefing(
     tasks_completed: list[dict[str, Any]],
     tasks_added: list[dict[str, Any]],
     blockers: list[dict[str, Any]],
-    exec_stats: dict[str, int],
 ) -> None:
     """Display briefing in human-readable format using Rich."""
     # Header with time range
@@ -224,10 +193,6 @@ def _display_human_briefing(
         stats_parts.append(f"[blue]{len(tasks_added)}[/blue] tasks added")
     if blockers:
         stats_parts.append(f"[red]{len(blockers)}[/red] blockers")
-    if exec_stats["total"] > 0:
-        stats_parts.append(
-            f"[yellow]{exec_stats['completed']}/{exec_stats['total']}[/yellow] executions"
-        )
 
     if stats_parts:
         console.print(" • ".join(stats_parts))
@@ -333,24 +298,9 @@ def _display_human_briefing(
             console.print(f"[dim]  ... and {len(blockers) - 5} more[/dim]")
         console.print()
 
-    # Delegate Executions section
-    if exec_stats["total"] > 0:
-        console.print("[bold yellow]⚡ Delegate Executions[/bold yellow]")
-        success_rate = (
-            (exec_stats["completed"] / exec_stats["total"] * 100) if exec_stats["total"] else 0
-        )
-        console.print(f"  Total: {exec_stats['total']}")
-        console.print(f"  Completed: [green]{exec_stats['completed']}[/green]")
-        console.print(f"  Failed: [red]{exec_stats['failed']}[/red]")
-        if exec_stats["running"] > 0:
-            console.print(f"  Running: [yellow]{exec_stats['running']}[/yellow]")
-        console.print(f"  Success rate: {success_rate:.0f}%")
-        console.print()
-
     # No activity message
     if not documents and not tasks_completed and not tasks_added and not blockers:
-        if exec_stats["total"] == 0:
-            console.print("[dim]No activity in this timeframe.[/dim]")
+        console.print("[dim]No activity in this timeframe.[/dim]")
 
 
 def _build_json_output(
@@ -359,7 +309,6 @@ def _build_json_output(
     tasks_completed: list[dict[str, Any]],
     tasks_added: list[dict[str, Any]],
     blockers: list[dict[str, Any]],
-    exec_stats: dict[str, int],
 ) -> dict[str, Any]:
     """Build JSON output for --json flag."""
     return {
@@ -370,7 +319,6 @@ def _build_json_output(
             "tasks_completed": len(tasks_completed),
             "tasks_added": len(tasks_added),
             "blockers": len(blockers),
-            "executions": exec_stats,
         },
         "documents_created": documents,
         "tasks_completed": tasks_completed,
@@ -446,18 +394,13 @@ def briefing(
     tasks_completed = _get_tasks_completed(since_dt)
     tasks_added = _get_tasks_added(since_dt)
     blockers = _get_tasks_blocked(since_dt)
-    exec_stats = _get_execution_stats(since_dt)
 
     # Output
     if json_output:
-        output = _build_json_output(
-            since_dt, documents, tasks_completed, tasks_added, blockers, exec_stats
-        )
+        output = _build_json_output(since_dt, documents, tasks_completed, tasks_added, blockers)
         console.print(json.dumps(output, indent=2, default=str))
     else:
-        _display_human_briefing(
-            since_dt, documents, tasks_completed, tasks_added, blockers, exec_stats
-        )
+        _display_human_briefing(since_dt, documents, tasks_completed, tasks_added, blockers)
 
 
 def _briefing_save(hours: int, model: str | None) -> None:
@@ -465,16 +408,13 @@ def _briefing_save(hours: int, model: str | None) -> None:
     import sys
 
     from ..database.documents import get_docs_in_window, save_document
-    from ..models.executions import get_execution_stats_in_window
-    from ..models.tasks import get_delegate_tasks_in_window, get_tasks_in_window
+    from ..models.tasks import get_tasks_in_window
     from ..services.synthesis_service import _execute_prompt
 
     tasks = get_tasks_in_window(hours)
     docs = get_docs_in_window(hours)
-    delegate_tasks = get_delegate_tasks_in_window(hours)
-    exec_stats = get_execution_stats_in_window(hours)
 
-    total_items = len(tasks) + len(docs) + len(delegate_tasks)
+    total_items = len(tasks) + len(docs)
     if total_items == 0:
         print(f"No activity in the last {hours} hours.")
         return
@@ -507,14 +447,6 @@ def _briefing_save(hours: int, model: str | None) -> None:
         doc_lines = ["## Documents Created"]
         doc_lines.extend(f"- #{d['id']}: {d['title']}" for d in docs[:15])
         sections.append("\n".join(doc_lines))
-
-    if delegate_tasks or exec_stats["total"] > 0:
-        dl = ["## Delegate Activity"]
-        dl.append(
-            f"- Total executions: {exec_stats['total']} "
-            f"(completed: {exec_stats['completed']}, failed: {exec_stats['failed']})"
-        )
-        sections.append("\n".join(dl))
 
     sections.append(
         "---\n\nBased on the above, write a concise session summary:\n"

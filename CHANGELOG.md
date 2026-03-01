@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.1] - 2026-02-28
+
+**TUI interaction polish + SubagentStop hook.** Fixed several rough edges in mouse and keyboard behavior: clicking a document row no longer accidentally opens the fullscreen preview (only Enter and double-click do), pressing `q` inside a document preview now closes the modal instead of quitting the entire app, and the task screen gained a `u` key to reopen tasks with all action keys clearly labeled in the help bar. Task descriptions now render as markdown. The SubagentStop hook was rewritten to reliably capture native Claude Code agent output into the knowledge base.
+
+### 🚀 Features
+
+- **SubagentStop hook for native agent auto-save** — rewrote the SubagentStop hook to use temp files instead of env vars (fixing silent failure on large payloads), added agent-type tagging (`agent:explore`, `agent:general-purpose`, `agent:plan`), PR URL auto-detection, and enrichment pipeline integration. Foundation for replacing `emdx delegate` with native Claude Code agents (#918)
+
+### 🔧 Improvements
+
+- **Explicit task action keys in help bar** — replaced cryptic `o/i/x/f Status` with clear labels: `d Done  a Active  b Blocked  w Won't do  u Reopen` (#911)
+- **Reopen tasks with `u`** — new keybinding to mark a done/blocked/failed task back to open/ready (#911)
+- **Task notes render as markdown** — task descriptions now display as rendered markdown in both CLI (`task view`) and TUI detail pane, matching document and work log formatting (#914)
+
+### 🐛 Bug Fixes
+
+- **Single click no longer opens fullscreen** — clicking an already-highlighted document row fired DataTable's `RowSelected`, which triggered fullscreen. Replaced with a custom `EnterPressed` message so only keyboard Enter opens fullscreen (#911)
+- **`q` in document preview closes modal, not app** — `BrowserContainer.on_key()` intercepted `q` globally even when a modal screen was active. Now skips `q` handling when `screen_stack > 1` (#911)
+
+[0.25.1]: https://github.com/arockwell/emdx/compare/v0.25.0...v0.25.1
+
 ## [0.25.0] - 2026-02-27
 
 **Delegate Browser and streamlined TUI.** A new Delegate Browser (key `3`) gives real-time visibility into delegate activity — active, recently completed, and failed tasks with a detail pane showing prompts, subtask trees, and clickable links to PRs and output documents. The save pipeline was rewritten to bypass the hook-based Rube Goldberg flow, saving output directly in Python after `subprocess.run()`. The Q&A screen was retired (replaced by `emdx find --ask` and Claude Code), and the remaining TUI chrome was simplified with cleaner help bars and a working Enter-to-fullscreen shortcut.

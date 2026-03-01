@@ -11,7 +11,6 @@ from emdx.config.constants import (
 )
 from emdx.database import db
 from emdx.models.types import (
-    ActiveDelegateTaskDict,
     EpicTaskDict,
     EpicViewDict,
     TaskDict,
@@ -30,16 +29,9 @@ def create_task(
     gameplan_id: int | None = None,
     project: str | None = None,
     depends_on: list[int] | None = None,
-    # Delegate activity tracking fields
-    prompt: str | None = None,
-    task_type: str = "single",
-    execution_id: int | None = None,
-    output_doc_id: int | None = None,
     source_doc_id: int | None = None,
     parent_task_id: int | None = None,
-    seq: int | None = None,
-    retry_of: int | None = None,
-    tags: str | None = None,
+    task_type: str = "single",
     status: str = "open",
     epic_key: str | None = None,
 ) -> int:
@@ -78,11 +70,10 @@ def create_task(
             """
             INSERT INTO tasks (
                 title, description, priority, gameplan_id, project, status,
-                prompt, type, execution_id, output_doc_id, source_doc_id,
-                parent_task_id, seq, retry_of, tags,
+                type, source_doc_id, parent_task_id,
                 epic_key, epic_seq
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 title,
@@ -91,15 +82,9 @@ def create_task(
                 gameplan_id,
                 project,
                 status,
-                prompt,
                 task_type,
-                execution_id,
-                output_doc_id,
                 source_doc_id,
                 parent_task_id,
-                seq,
-                retry_of,
-                tags,
                 epic_key,
                 epic_seq_val,
             ),
@@ -249,7 +234,7 @@ def list_tasks(
     """List tasks with filters.
 
     Args:
-        exclude_delegate: If True, exclude delegate-created tasks (prompt IS NULL).
+        exclude_delegate: Kept for backward compatibility, no longer has effect.
         epic_key: Filter by category key.
         parent_task_id: Filter by parent task (epic) ID.
         since: ISO date string (YYYY-MM-DD). Filter to tasks completed on or after this date.
@@ -266,8 +251,6 @@ def list_tasks(
     if project:
         conditions.append("project = ?")
         params.append(project)
-    if exclude_delegate:
-        conditions.append("prompt IS NULL")
     if epic_key:
         conditions.append("epic_key = ?")
         params.append(epic_key.upper())
@@ -309,18 +292,11 @@ ALLOWED_UPDATE_COLUMNS = frozenset(
         "description",
         "priority",
         "status",
-        "error",
         "gameplan_id",
         "project",
-        "prompt",
         "type",
-        "execution_id",
-        "output_doc_id",
         "source_doc_id",
         "parent_task_id",
-        "seq",
-        "retry_of",
-        "tags",
         "epic_key",
         "epic_seq",
     }
@@ -404,7 +380,7 @@ def get_ready_tasks(
     """Get tasks ready to work (open + all deps done).
 
     Args:
-        exclude_delegate: If True (default), exclude delegate-created tasks.
+        exclude_delegate: Kept for backward compatibility, no longer has effect.
         epic_key: Filter by category key.
     """
     conditions = ["t.status = 'open'"]
@@ -413,8 +389,6 @@ def get_ready_tasks(
     if gameplan_id:
         conditions.append("t.gameplan_id = ?")
         params.append(gameplan_id)
-    if exclude_delegate:
-        conditions.append("t.prompt IS NULL")
     if epic_key:
         conditions.append("t.epic_key = ?")
         params.append(epic_key.upper())
@@ -512,73 +486,16 @@ def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLo
         return [cast(TaskLogEntryDict, dict(row)) for row in cursor.fetchall()]
 
 
-def get_active_delegate_tasks() -> list[ActiveDelegateTaskDict]:
-    """Get active delegate tasks with child progress counts.
-
-    Finds tasks that are currently active and have a prompt (delegate indicator),
-    including tasks nested under epics.
-    """
-    with db.get_connection() as conn:
-        cursor = conn.execute("""
-            SELECT t.*,
-                (SELECT COUNT(*) FROM tasks c
-                 WHERE c.parent_task_id = t.id) as child_count,
-                (SELECT COUNT(*) FROM tasks c
-                 WHERE c.parent_task_id = t.id
-                 AND c.status = 'done') as children_done,
-                (SELECT COUNT(*) FROM tasks c
-                 WHERE c.parent_task_id = t.id
-                 AND c.status = 'active') as children_active
-            FROM tasks t
-            WHERE t.status = 'active'
-              AND t.prompt IS NOT NULL AND t.prompt != ''
-            ORDER BY t.updated_at DESC
-        """)
-        return [cast(ActiveDelegateTaskDict, dict(row)) for row in cursor.fetchall()]
-
-
 def get_children(parent_task_id: int) -> list[TaskDict]:
-    """Get child tasks ordered by seq."""
+    """Get child tasks ordered by id."""
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT * FROM tasks
             WHERE parent_task_id = ?
-            ORDER BY seq, id
+            ORDER BY id
         """,
             (parent_task_id,),
-        )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
-
-
-def get_recent_completed_tasks(limit: int = 10) -> list[TaskDict]:
-    """Get recent completed delegate tasks (those with prompts)."""
-    with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT * FROM tasks
-            WHERE status = 'done'
-              AND prompt IS NOT NULL AND prompt != ''
-            ORDER BY completed_at DESC
-            LIMIT ?
-        """,
-            (limit,),
-        )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
-
-
-def get_failed_tasks(limit: int = 5) -> list[TaskDict]:
-    """Get recent failed delegate tasks (those with prompts)."""
-    with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT * FROM tasks
-            WHERE status = 'failed'
-              AND prompt IS NOT NULL AND prompt != ''
-            ORDER BY updated_at DESC
-            LIMIT ?
-        """,
-            (limit,),
         )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
 
@@ -634,7 +551,7 @@ def get_epic_view(epic_id: int) -> EpicViewDict | None:
             """
             SELECT * FROM tasks
             WHERE parent_task_id = ?
-            ORDER BY epic_seq, seq, id
+            ORDER BY epic_seq, id
         """,
             (epic_id,),
         )
@@ -699,49 +616,21 @@ def attach_to_epic(task_ids: list[int], epic_id: int) -> int:
 
 
 def get_tasks_in_window(hours: int) -> list[TaskDict]:
-    """Get non-delegate tasks updated within a time window.
+    """Get tasks updated within a time window.
 
     Args:
         hours: Number of hours to look back
 
     Returns:
-        List of tasks updated within the window, excluding delegate-created tasks
+        List of tasks updated within the window
     """
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT * FROM tasks
-            WHERE prompt IS NULL
-            AND updated_at > datetime('now', ? || ' hours')
+            WHERE updated_at > datetime('now', ? || ' hours')
             ORDER BY updated_at DESC
             """,
             (f"-{hours}",),
-        )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
-
-
-def get_delegate_tasks_in_window(hours: int, limit: int = 20) -> list[TaskDict]:
-    """Get completed delegate tasks within a time window.
-
-    Args:
-        hours: Number of hours to look back
-        limit: Maximum number of tasks to return
-
-    Returns:
-        List of top-level delegate tasks (with prompt IS NOT NULL)
-    """
-    with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT t.*, d.title as doc_title
-            FROM tasks t
-            LEFT JOIN documents d ON t.output_doc_id = d.id
-            WHERE t.prompt IS NOT NULL
-            AND t.parent_task_id IS NULL
-            AND t.updated_at > datetime('now', ? || ' hours')
-            ORDER BY t.updated_at DESC
-            LIMIT ?
-            """,
-            (f"-{hours}", limit),
         )
         return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]

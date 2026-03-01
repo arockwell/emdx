@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 from typing import Union
 
 
-def parse_datetime(value: Union[str, datetime, None],
-                   default: datetime | None = None,
-                   assume_utc: bool = False) -> datetime | None:
+def parse_datetime(
+    value: Union[str, datetime, None], default: datetime | None = None, assume_utc: bool = False
+) -> datetime | None:
     """
     Parse a datetime value from various formats.
 
@@ -55,12 +55,12 @@ def parse_datetime(value: Union[str, datetime, None],
     normalized = value.strip()
 
     # Handle Z suffix for UTC
-    if normalized.endswith('Z'):
-        normalized = normalized[:-1] + '+00:00'
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
 
     # Handle SQLite space separator
-    if ' ' in normalized and 'T' not in normalized:
-        normalized = normalized.replace(' ', 'T', 1)
+    if " " in normalized and "T" not in normalized:
+        normalized = normalized.replace(" ", "T", 1)
 
     try:
         dt = datetime.fromisoformat(normalized)
@@ -72,10 +72,10 @@ def parse_datetime(value: Union[str, datetime, None],
 
     # Fallback: try common formats
     fallback_formats = [
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%d %H:%M:%S.%f',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%dT%H:%M:%S.%f',
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
     ]
 
     for fmt in fallback_formats:
@@ -112,8 +112,7 @@ def parse_timestamp(value: Union[str, datetime, None]) -> datetime:
     return result
 
 
-def format_datetime(dt: Union[str, datetime, None],
-                    format_str: str = "%Y-%m-%d %H:%M") -> str:
+def format_datetime(dt: Union[str, datetime, None], format_str: str = "%Y-%m-%d %H:%M") -> str:
     """
     Format a datetime value for display.
 

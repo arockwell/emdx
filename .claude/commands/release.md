@@ -14,7 +14,8 @@ Prepare a release for emdx version $ARGUMENTS.
 4. **Update version badge** — Update the version badge in `README.md`: `[![Version](https://img.shields.io/badge/version-X.Y.Z-blue.svg)]`
 5. **Check for new features needing docs** — If any new commands or major features were added, check if `docs/cli-api.md` and `docs/README.md` need updates
 6. **Verify** — Run `poetry run pytest tests/ -x -q` to make sure tests pass
-7. **Branch + commit + PR**:
+7. **Update plugin version** — Update `version` in `.claude-plugin/plugin.json` to match
+8. **Branch + commit + PR**:
    ```bash
    git checkout -b release/v$ARGUMENTS
    git add -A
@@ -22,9 +23,15 @@ Prepare a release for emdx version $ARGUMENTS.
    git push -u origin release/v$ARGUMENTS
    gh pr create --title "chore: Release v$ARGUMENTS" --body "Release v$ARGUMENTS"
    ```
+9. **After PR merges — tag and push** (remind user):
+   ```
+   ⚠️  IMPORTANT: After this PR merges to main, create and push the git tag:
+   git fetch origin main && git tag v$ARGUMENTS origin/main && git push origin v$ARGUMENTS
+   ```
 
 ## Important
 
-- Both `pyproject.toml` (`version = "X.Y.Z"`) and `emdx/__init__.py` (`__version__ = "X.Y.Z"`) must stay in sync — `just bump` handles this
+- All three version files must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.claude-plugin/plugin.json` — `just bump` handles the first two
 - Prefer hand-written changelog over auto-generated — match the voice and structure of existing entries
 - Always include the PR/issue number references in changelog entries
+- **Tags are NOT created by the PR** — they must be pushed manually after the release PR merges to main

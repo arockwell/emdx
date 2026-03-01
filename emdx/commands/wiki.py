@@ -80,6 +80,181 @@ def _set_topic_status(topic_id: int, new_status: str) -> tuple[str, str]:
 wiki_app = typer.Typer(help="Auto-wiki generation from knowledge base")
 
 
+@wiki_app.callback(invoke_without_command=True)
+def wiki_overview(ctx: typer.Context) -> None:
+    """Auto-wiki from your knowledge base.
+
+    Run `emdx wiki` with no subcommand to see a compact overview.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from ..database import db as _db
+
+    try:
+        with _db.get_connection() as conn:
+            topics_row = conn.execute(
+                "SELECT COUNT(*) FROM wiki_topics WHERE status != 'skipped'"
+            ).fetchone()
+            articles_row = conn.execute("SELECT COUNT(*) FROM wiki_articles").fetchone()
+            stale_row = conn.execute(
+                "SELECT COUNT(*) FROM wiki_articles WHERE is_stale = 1"
+            ).fetchone()
+            cost_row = conn.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) FROM wiki_articles"
+            ).fetchone()
+            recent_rows = conn.execute(
+                "SELECT wt.id, wt.topic_label, wa.doc_id "
+                "FROM wiki_articles wa "
+                "JOIN wiki_topics wt ON wa.topic_id = wt.id "
+                "ORDER BY wa.generated_at DESC LIMIT 5"
+            ).fetchall()
+    except Exception:
+        console.print("[yellow]Wiki not set up yet.[/yellow]")
+        console.print(
+            "\n[dim]Run 'emdx wiki setup' to bootstrap "
+            "(index → entities → topics → auto-label)[/dim]"
+        )
+        return
+
+    total_topics = topics_row[0] if topics_row else 0
+    total_articles = articles_row[0] if articles_row else 0
+    stale = stale_row[0] if stale_row else 0
+    cost = cost_row[0] if cost_row else 0.0
+
+    if total_topics == 0:
+        console.print("[yellow]Wiki not set up yet.[/yellow]")
+        console.print(
+            "\n[dim]Run 'emdx wiki setup' to bootstrap "
+            "(index → entities → topics → auto-label)[/dim]"
+        )
+        return
+
+    console.print("\n[bold]Wiki Overview[/bold]\n")
+    console.print(f"  Topics:     {total_topics}")
+    console.print(f"  Articles:   {total_articles}/{total_topics} generated")
+    if stale:
+        console.print(f"  Stale:      {stale}")
+    console.print(f"  Total cost: ${cost:.2f}")
+
+    if recent_rows:
+        console.print("\n[bold]Recent Articles[/bold]\n")
+        for row in recent_rows:
+            console.print(f"  [cyan]topic {row[0]}[/cyan]  {row[1]}")
+
+    console.print("\n[dim]Commands:[/dim]")
+    console.print("  [dim]emdx wiki generate     — generate articles[/dim]")
+    console.print("  [dim]emdx wiki search TEXT  — search wiki[/dim]")
+    console.print("  [dim]emdx wiki view ID      — view a wiki article[/dim]")
+    console.print("  [dim]emdx wiki progress     — detailed progress + costs[/dim]")
+
+
+@wiki_app.command(name="view")
+def wiki_view(
+    topic_id: int = typer.Argument(..., help="Topic ID to view"),
+    raw: bool = typer.Option(False, "--raw", "-r", help="Show raw markdown"),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+) -> None:
+    """View a wiki article by topic ID."""
+    import json
+
+    from ..database import db as _db
+    from ..models.documents import get_document
+
+    with _db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT doc_id FROM wiki_articles WHERE topic_id = ?",
+            (topic_id,),
+        ).fetchone()
+
+    if not row:
+        console.print(f"[red]No article found for topic {topic_id}[/red]")
+        raise typer.Exit(1)
+
+    doc = get_document(row[0])
+    if not doc:
+        console.print(f"[red]Document #{row[0]} not found[/red]")
+        raise typer.Exit(1)
+
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "topic_id": topic_id,
+                    "doc_id": doc["id"],
+                    "title": doc["title"],
+                    "content": doc["content"],
+                },
+                indent=2,
+            )
+        )
+        return
+
+    if raw:
+        print(doc["content"])
+        return
+
+    from rich.markdown import Markdown
+
+    console.print(
+        f"\n[bold cyan]Wiki: {doc['title']}[/bold cyan]"
+        f" [dim](topic {topic_id}, doc #{doc['id']})[/dim]\n"
+    )
+    console.print(Markdown(doc["content"]))
+
+
+@wiki_app.command(name="search")
+def wiki_search(
+    query: list[str] = typer.Argument(..., help="Search terms"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Max results"),
+    snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
+    json_output: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+) -> None:
+    """Search wiki articles."""
+    import json
+
+    from ..database.search import search_documents
+
+    search_query = " ".join(query)
+    results = search_documents(search_query, limit=limit, doc_type="wiki")
+
+    if not results:
+        console.print(f"[yellow]No wiki articles found for '{search_query}'[/yellow]")
+        return
+
+    if json_output:
+        output = [
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "snippet": (r.get("snippet") or "").replace("<b>", "").replace("</b>", ""),
+            }
+            for r in results
+        ]
+        print(json.dumps(output, indent=2))
+        return
+
+    console.print(
+        f"\n[bold]Found {len(results)} wiki articles for '[cyan]{search_query}[/cyan]'[/bold]\n"
+    )
+    for i, r in enumerate(results, 1):
+        console.print(
+            f"[bold cyan]#{r['id']}[/bold cyan] "
+            f"[bold]{r['title']}[/bold] "
+            f"[magenta]\\[wiki][/magenta]"
+        )
+        raw_snippet = r.get("snippet")
+        if snippets and raw_snippet:
+            snippet = raw_snippet.replace("<b>", "[bold yellow]").replace("</b>", "[/bold yellow]")
+            console.print(f"[dim]...{snippet}...[/dim]")
+        if i < len(results):
+            console.print()
+
+    console.print(
+        "\n[dim]Use 'emdx wiki view <topic_id>' or 'emdx view <doc_id>' to read an article[/dim]"
+    )
+
+
 @wiki_app.command(name="topics")
 def wiki_topics(
     resolution: float = typer.Option(0.005, "--resolution", "-r", help="Clustering resolution"),

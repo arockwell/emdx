@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 # Debug log file for catching crashes
 DEBUG_LOG = EMDX_CONFIG_DIR / "palette_debug.log"
 
+
 def _debug_log(msg: str) -> None:
     """Write debug message to file."""
     try:
@@ -37,6 +38,7 @@ def _debug_log(msg: str) -> None:
             f.write(f"{msg}\n")
     except Exception:
         pass
+
 
 class PaletteResultWidget(ListItem):
     """Widget for a single palette result."""
@@ -67,6 +69,7 @@ class PaletteResultWidget(ListItem):
             subtitle = subtitle[:32] + "..."
 
         yield Static(f"{icon} {title}  [dim]{subtitle}[/dim]")
+
 
 class CommandPaletteScreen(ModalScreen):
     """
@@ -199,27 +202,27 @@ class CommandPaletteScreen(ModalScreen):
     def _on_state_update(self, state: PaletteState) -> None:
         """Handle state updates from presenter."""
         # Use unique render ID to avoid race conditions
-        self._render_id = getattr(self, '_render_id', 0) + 1
+        self._render_id = getattr(self, "_render_id", 0) + 1
         current_render = self._render_id
         self.call_later(lambda: asyncio.create_task(self._render_results(state, current_render)))
 
     async def _render_results(self, state: PaletteState, render_id: int) -> None:
         """Render results to the ListView."""
         # Skip if a newer render was requested
-        if render_id != getattr(self, '_render_id', render_id):
+        if render_id != getattr(self, "_render_id", render_id):
             _debug_log(f"Skipping stale render {render_id}")
             return
 
-        _debug_log(f"_render_results called with {len(state.results)} results (render_id={render_id})")  # noqa: E501
+        _debug_log(
+            f"_render_results called with {len(state.results)} results (render_id={render_id})"
+        )  # noqa: E501
         try:
             results_view = self.query_one("#palette-results", ListView)
             await results_view.clear()
 
             if not state.results:
                 # Show empty message
-                results_view.append(
-                    ListItem(Static("[dim]No results found[/dim]"))
-                )
+                results_view.append(ListItem(Static("[dim]No results found[/dim]")))
                 return
 
             for _i, result in enumerate(state.results):

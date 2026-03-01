@@ -661,7 +661,7 @@ emdx maintain unlink 42 57
 ```
 
 #### **emdx maintain wiki**
-Auto-wiki generation system using Leiden community detection for topic clustering and AI for article generation.
+Alias for `emdx wiki` — kept for backward compatibility. See the [Wiki section](#-wiki-emdx-wiki) for full documentation.
 
 **Subcommands:**
 
@@ -766,6 +766,94 @@ emdx maintain wiki entities
 
 # List recent wiki generation runs
 emdx maintain wiki runs
+```
+
+## 📖 **Wiki** (`emdx wiki`)
+
+Auto-wiki generation from your knowledge base. Uses Leiden community detection for topic clustering and AI for article generation.
+
+> **Note:** `emdx maintain wiki` still works as an alias for backward compatibility.
+
+### **emdx wiki** (no subcommand)
+
+Show a compact wiki overview: topic count, articles generated, stale count, cost, and recent articles.
+
+```bash
+emdx wiki
+```
+
+### **emdx wiki view**
+
+View a wiki article by topic ID.
+
+```bash
+emdx wiki view 42            # View article for topic 42
+emdx wiki view 42 --raw      # Raw markdown
+emdx wiki view 42 --json     # JSON output
+```
+
+### **emdx wiki search**
+
+Search wiki articles (wiki-only full-text search).
+
+```bash
+emdx wiki search "authentication"
+emdx wiki search "API design" --snippets
+emdx wiki search "caching" --json
+```
+
+### **emdx wiki setup / topics / triage / generate / ...**
+
+All existing wiki subcommands are available at `emdx wiki <subcommand>`. See the full subcommand table below.
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| `setup` | Run the full wiki bootstrap sequence (index → entities → topics → auto-label) |
+| `topics` | Discover topic clusters using Leiden community detection |
+| `triage` | Bulk triage saved topics: skip low-coherence, auto-label via LLM |
+| `progress` | Show wiki generation progress: topics generated vs pending, costs |
+| `status` | Show wiki generation status and statistics |
+| `generate` | Generate wiki articles from topic clusters |
+| `view` | View a wiki article by topic ID |
+| `search` | Search wiki articles |
+| `entities` | Browse entity index pages |
+| `list` | List generated wiki articles |
+| `runs` | List recent wiki generation runs |
+| `coverage` | Show which documents are NOT covered by any topic cluster |
+| `diff` | Show unified diff between previous and current article content |
+| `rate` | Rate a wiki article's quality (1-5 scale) |
+| `export` | Export wiki articles as a MkDocs site |
+| `rename` | Rename a wiki topic (label, slug, and associated document title) |
+| `retitle` | Batch-update topic labels from article H1 headings |
+| `skip` | Skip a topic during wiki generation |
+| `unskip` | Reset a skipped topic back to active |
+| `pin` | Pin a topic so it always regenerates during wiki generation |
+| `unpin` | Reset a pinned topic back to active |
+| `model` | Set or clear a per-topic model override for wiki generation |
+| `prompt` | Set or clear an editorial prompt for a wiki topic |
+| `merge` | Merge two wiki topics into one |
+| `split` | Split a wiki topic by extracting docs that mention an entity |
+| `sources` | List source documents for a wiki topic with weights and status |
+| `weight` | Set relevance weight for a source document within a topic |
+| `exclude` | Exclude a source document from a wiki topic's synthesis |
+| `include` | Re-include a previously excluded source document in a topic |
+
+```bash
+# Full bootstrap: index → entities → topics → auto-label
+emdx wiki setup
+
+# Discover topic clusters
+emdx wiki topics --save --auto-label
+
+# Generate wiki articles
+emdx wiki generate                  # Sequential (default)
+emdx wiki generate -c 3             # 3 concurrent generations
+
+# Export to MkDocs
+emdx wiki export ./wiki-site
+emdx wiki export ./wiki-site --build
 ```
 
 ## 📊 **Information Commands**

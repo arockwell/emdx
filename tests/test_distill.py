@@ -65,15 +65,11 @@ class TestDistillService:
 
     @patch("emdx.services.synthesis_service._execute_prompt")
     def test_synthesize_with_mocked_executor(self, mock_execute):
-        """Synthesizing with mocked UnifiedExecutor returns result."""
-        from pathlib import Path
+        """Synthesizing with mocked prompt execution returns result."""
+        from emdx.services.synthesis_service import PromptResult
 
-        from emdx.services.synthesis_service import ExecutionResult
-
-        mock_execute.return_value = ExecutionResult(
+        mock_execute.return_value = PromptResult(
             success=True,
-            execution_id=1,
-            log_file=Path("/tmp/test.log"),
             output_content="Synthesized content here",
             input_tokens=500,
             output_tokens=200,
@@ -106,14 +102,10 @@ class TestDistillService:
     @patch("emdx.services.synthesis_service._execute_prompt")
     def test_audience_prompts_differ(self, mock_execute):
         """Different audiences produce different system prompts."""
-        from pathlib import Path
+        from emdx.services.synthesis_service import PromptResult
 
-        from emdx.services.synthesis_service import ExecutionResult
-
-        mock_execute.return_value = ExecutionResult(
+        mock_execute.return_value = PromptResult(
             success=True,
-            execution_id=1,
-            log_file=Path("/tmp/test.log"),
             output_content="Result",
             input_tokens=100,
             output_tokens=50,
