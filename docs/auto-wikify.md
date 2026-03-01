@@ -125,28 +125,26 @@ about "auth module" AND "session handling" even if titles don't match exactly.
 ## CLI Interface
 
 ```bash
-# Wikify a single document (runs all enabled layers)
-emdx wikify 87
+# Wikify a single document (title-match scan)
+emdx maintain wikify 42
 
 # Backfill the whole KB
-emdx wikify --all
-
-# Only title-matching (fast, no AI)
-emdx wikify --all --mode titles
-
-# Only semantic (requires embedding index)
-emdx wikify --all --mode semantic
+emdx maintain wikify --all
 
 # Dry run — show what would be linked without creating links
-emdx wikify --all --dry-run
+emdx maintain wikify --all --dry-run
+emdx maintain wikify 42 --dry-run
 
-# Show existing wiki links for a document
-emdx show 87              # includes "See also:" section
-emdx show 87 --json       # includes "wiki_links" array
+# View existing links for a document
+emdx view 42 --links       # includes link graph
 
 # Agent-friendly context
-emdx prime --json          # already includes links in doc metadata
+emdx prime --json           # already includes links in doc metadata
 ```
+
+> **Note:** `emdx wiki` is now the preferred top-level command for wiki operations
+> (topic discovery, article generation, export). Title-match wikification remains
+> under `emdx maintain wikify`.
 
 ### JSON output shape
 
@@ -173,7 +171,7 @@ emdx prime --json          # already includes links in doc metadata
 ### Phase 2: Enhanced Semantic (improve existing) ✅
 - ~~Make `--auto-link` default on save~~ (`--auto-link/--no-auto-link`, default on)
 - ~~Add project scoping~~ (`--cross-project` flag, default: same project only)
-- Surface links in `emdx show` output (already exists via `--links`)
+- Surface links in `emdx view` output (already exists via `--links`)
 
 ### Phase 3: Entity Extraction ✅
 - ~~Add `document_entities` table via migration~~ (migration 044)
@@ -187,8 +185,8 @@ emdx prime --json          # already includes links in doc metadata
 | Event | Action |
 |-------|--------|
 | `emdx save` | Run title-match + semantic wikify on new doc |
-| `emdx wikify --all` | Backfill all documents |
-| `emdx show <id>` | Display linked documents |
+| `emdx maintain wikify --all` | Backfill all documents |
+| `emdx view <id> --links` | Display linked documents |
 | `emdx prime --json` | Include links in context |
 | TUI browse | Show link count, navigate to linked docs |
 

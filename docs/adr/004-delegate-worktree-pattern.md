@@ -1,8 +1,12 @@
 # ADR-004: Delegate/Worktree Pattern for Parallel Execution
 
+> **Note:** This ADR is superseded. The delegate system was removed in v0.26.0
+> (PR #931) in favor of native Claude Code agents. The worktree pattern is
+> preserved only for Claude Code's built-in worktree support.
+
 ## Status
 
-Accepted
+Superseded
 
 ## Context
 

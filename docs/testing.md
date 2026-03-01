@@ -2,7 +2,7 @@
 
 ## 🧪 **Test Suite Overview**
 
-EMDX has 52 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
+EMDX has 74 test files with comprehensive coverage. The test suite is fully functional with all tests passing.
 
 ### **Current Test Status**
 
@@ -18,56 +18,80 @@ poetry run pytest tests/ -x -q
 ```
 tests/
 ├── conftest.py                       # Pytest configuration and fixtures
+├── test_activity_doc_type.py         # Activity view document type handling
+├── test_activity_table.py            # Activity table rendering
+├── test_activity_view.py             # Activity view TUI component
+├── test_ask.py                       # Ask/RAG command tests
+├── test_ask_modes.py                 # Ask mode variations
 ├── test_auto_tagger.py               # Automatic tagging system
-├── test_browse.py                    # Browse commands (list, stats, recent)
+├── test_backup.py                    # Backup and restore
 ├── test_categories.py                # Category management
 ├── test_chunk_splitter.py            # Document chunking
 ├── test_cli.py                       # CLI integration tests
+├── test_code_drift.py                # Code drift detection
 ├── test_commands_core.py             # Core command tests (save, find, view)
-├── test_commands_groups.py           # Group command tests
 ├── test_commands_prime.py            # Prime command tests
 ├── test_commands_stale.py            # Staleness tracking tests
-├── test_commands_status.py           # Status command tests
 ├── test_commands_tags.py             # Tag command tests
 ├── test_commands_trash.py            # Trash command tests
 ├── test_compact.py                   # Document compaction tests
 ├── test_config.py                    # Configuration management
+├── test_contradictions.py            # Contradiction detection
 ├── test_core.py                      # Core CLI commands (save, find, view)
 ├── test_database.py                  # Database operations and models
-├── test_delegate_commands.py         # Delegate command tests
 ├── test_distill.py                   # Distillation tests
+├── test_document_links.py            # Document linking
 ├── test_document_merger.py           # Document merging
 ├── test_documents.py                 # Document CRUD operations
 ├── test_duplicate_detector.py        # Duplicate detection
-├── test_emoji_aliases.py             # Tag utilities
+├── test_entity_service.py            # Entity extraction service
 ├── test_epics.py                     # Epic management tests
-├── test_execution_monitor.py         # Execution monitoring
-├── test_execution_system.py          # Execution tracking
-├── test_execution_system_comprehensive.py # Comprehensive execution tests
-├── test_file_size.py                 # File size utilities
+├── test_events.py                    # Event system tests
+├── test_explore.py                   # Explore command tests
 ├── test_file_watcher.py              # File watcher service tests
+├── test_find_wander.py               # Find wander mode tests
 ├── test_fixtures.py                  # Test fixture tests
-├── test_groups.py                    # Document group management
+├── test_freshness.py                 # Document freshness tracking
+├── test_gaps.py                      # Knowledge gap detection
+├── test_history.py                   # Document history tracking
 ├── test_hybrid_search.py             # Hybrid search tests
 ├── test_init.py                      # Package initialization
 ├── test_input_content.py             # Content input handling
+├── test_intelligence_integration.py  # Intelligence integration tests
 ├── test_lazy_loading.py              # Lazy loading functionality
-├── test_log_browser.py               # Log browser TUI component
+├── test_maintain_drift.py            # Maintenance drift detection
 ├── test_migrations.py                # Database schema migrations
 ├── test_modal_keys.py                # Modal key bindings
 ├── test_models_tags.py               # Tag model tests
-├── test_output_parser.py             # Output parsing tests
-├── test_project_discovery.py         # Project auto-detection
+├── test_non_interactive.py           # Non-interactive mode tests
+├── test_release_script.py            # Release script tests
+├── test_save_task_flags.py           # Save with task flags
 ├── test_search.py                    # Search functionality tests
 ├── test_similarity.py                # Document similarity service
 ├── test_sqlite_database.py           # SQLite-specific database tests
-├── test_stream_json_parser.py        # Stream JSON parsing
 ├── test_tags.py                      # Tag system and emoji aliases
+├── test_task_browser.py              # Task browser TUI component
 ├── test_task_commands.py             # Task command tests
 ├── test_text_formatting.py           # Text formatting utilities
 ├── test_title_normalization.py       # Title normalization
-├── test_unified_executor.py          # Unified CLI executor
-└── test_utils.py                     # Utility functions
+├── test_utils.py                     # Utility functions
+├── test_view_review.py               # View review functionality
+├── test_watch.py                     # File watch tests
+├── test_wiki_article_diff.py         # Wiki article diffing
+├── test_wiki_article_timing.py       # Wiki article timing
+├── test_wiki_coverage.py             # Wiki coverage tracking
+├── test_wiki_editorial_prompt.py     # Wiki editorial prompts
+├── test_wiki_export.py               # Wiki export to MkDocs
+├── test_wiki_model_override.py       # Wiki model override
+├── test_wiki_progress.py             # Wiki generation progress
+├── test_wiki_rating.py               # Wiki article rating
+├── test_wiki_rename.py               # Wiki topic renaming
+├── test_wiki_retitle.py              # Wiki article retitling
+├── test_wiki_source_weight.py        # Wiki source weighting
+├── test_wiki_topic_merge_split.py    # Wiki topic merge/split
+├── test_wiki_topic_skip_pin.py       # Wiki topic skip/pin
+├── test_wiki_triage_setup.py         # Wiki triage and setup
+└── test_wikify_service.py            # Wikify service tests
 ```
 
 ## 🎯 **Test Categories**
@@ -80,11 +104,11 @@ tests/
 - **Tasks** (`test_task_commands.py`, `test_epics.py`, `test_categories.py`) - task queue, epics, categories
 
 ### **Advanced Feature Tests**
-- **Execution System** (`test_execution_system.py`, `test_execution_system_comprehensive.py`, `test_execution_monitor.py`, `test_unified_executor.py`) - execution tracking and monitoring
-- **Delegate** (`test_delegate_commands.py`) - delegate command tests
-- **TUI Components** (`test_log_browser.py`, `test_modal_keys.py`) - UI widget tests
+- **TUI Components** (`test_activity_*.py`, `test_task_browser.py`, `test_modal_keys.py`) - UI widget tests
+- **Wiki** (`test_wiki_*.py`, `test_wikify_service.py`, `test_entity_service.py`) - wiki generation, topics, export
 - **Similarity** (`test_similarity.py`, `test_duplicate_detector.py`) - document similarity and dedup
-- **AI Features** (`test_compact.py`, `test_distill.py`, `test_hybrid_search.py`) - compaction, distillation, hybrid search
+- **AI Features** (`test_compact.py`, `test_distill.py`, `test_hybrid_search.py`, `test_ask.py`) - compaction, distillation, hybrid search, RAG
+- **Maintenance** (`test_freshness.py`, `test_gaps.py`, `test_code_drift.py`, `test_maintain_drift.py`, `test_contradictions.py`) - KB health and maintenance
 
 ### **Infrastructure Tests**
 - **Database Migrations** (`test_migrations.py`) - Schema evolution
@@ -118,6 +142,9 @@ def temp_db():
 ```
 
 ### **CLI Testing**
+
+Typer uses Click's `CliRunner` internally, so importing from `click.testing` is correct:
+
 ```python
 from click.testing import CliRunner
 from emdx.main import cli

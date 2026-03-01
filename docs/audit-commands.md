@@ -1,5 +1,8 @@
 # EMDX Command Audit
 
+> **Note:** This audit was performed prior to v0.26.0. The delegate system
+> referenced below was subsequently removed in favor of native Claude Code agents.
+
 Comprehensive audit of all top-level commands. For each: justification, verdict, and migration path.
 
 ## Current Top-Level Surface (30 commands/groups, ~90 subcommands)
