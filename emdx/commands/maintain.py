@@ -1110,6 +1110,11 @@ def maintain_callback(
 app.command(name="cleanup")(cleanup_main)
 app.command(name="cleanup-dirs")(cleanup_temp_dirs)
 
+# Register code-drift as a direct subcommand of maintain
+from emdx.commands.code_drift import code_drift_command  # noqa: E402
+
+app.command(name="code-drift")(code_drift_command)
+
 # Register compact as a subcommand of maintain
 from emdx.commands.compact import app as compact_app  # noqa: E402
 
