@@ -172,7 +172,7 @@ HEADING_STOPWORDS = frozenset(
         "solution",
         "goals",
         "scope",
-        # Delegate output boilerplate
+        # Agent output boilerplate
         "executive summary",
         "files changed",
         "pr created",
@@ -627,7 +627,7 @@ def cleanup_noisy_entities() -> tuple[int, int]:
     """Delete noisy entities from the database and re-extract with current filters.
 
     Removes entities matching stopwords, noise patterns (trailing articles,
-    delegate boilerplate like "Summary Fixed"), type annotations, and other
+    agent boilerplate like "Summary Fixed"), type annotations, and other
     noise that leaked in before filters were added.
 
     Returns:

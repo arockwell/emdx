@@ -50,7 +50,6 @@ _WELCOME_DOC = textwrap.dedent("""\
     | `emdx find "query"` | Full-text search |
     | `emdx view <id>` | View a document |
     | `emdx tag <id> notes` | Tag a document |
-    | `emdx delegate "task"` | Run a task with an AI agent |
     | `emdx task ready` | Show tasks ready to work on |
 
     ## TUI navigation

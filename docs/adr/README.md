@@ -9,7 +9,7 @@ This directory contains Architecture Decision Records (ADRs) for EMDX. ADRs docu
 | [ADR-001](001-sqlite-fts5-storage.md) | SQLite + FTS5 as Storage Layer | Accepted |
 | [ADR-002](002-typer-cli-framework.md) | Typer for CLI Framework | Accepted |
 | [ADR-003](003-textual-tui.md) | Textual for TUI | Accepted |
-| [ADR-004](004-delegate-worktree-pattern.md) | Delegate/Worktree Pattern for Parallel Execution | Accepted |
+| [ADR-004](004-delegate-worktree-pattern.md) | Delegate/Worktree Pattern for Parallel Execution | Superseded |
 
 ## ADR Template
 
