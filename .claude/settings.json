@@ -46,18 +46,6 @@
         ]
       }
     ],
-    "PreToolUse": [],
-    "SubagentStop": [
-      {
-        "matcher": "Explore|general-purpose|Plan",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "hooks/save-subagent-output.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ]
+    "PreToolUse": []
   }
 }
