@@ -118,7 +118,12 @@ def get_layout() -> LayoutConfig:
     raw = load_ui_config().get("layout", {})
     if not isinstance(raw, dict):
         return {**DEFAULT_LAYOUT}
-    return {**DEFAULT_LAYOUT, **raw}  # type: ignore[typeddict-item]
+    # Only merge valid keys
+    result = {**DEFAULT_LAYOUT}
+    for key in DEFAULT_LAYOUT:
+        if key in raw:
+            result[key] = raw[key]  # type: ignore[literal-required]
+    return result
 
 
 def set_layout(layout: LayoutConfig) -> None:
