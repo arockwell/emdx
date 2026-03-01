@@ -5,7 +5,7 @@ Prepare a release for emdx version $ARGUMENTS.
 ## Steps
 
 1. **Preview changes** — Run `just changelog` to see what's changed since last release
-2. **Bump version** — Run `just bump $ARGUMENTS` to update `pyproject.toml` and `emdx/__init__.py`
+2. **Bump version** — Run `just bump $ARGUMENTS` to update `pyproject.toml`, `emdx/__init__.py`, and `.claude-plugin/plugin.json`
 3. **Write changelog** — Write a polished, prose-style entry in `CHANGELOG.md` following the existing format:
    - Group into `### 🚀 Major Features`, `### 🔧 Improvements`, `### 🐛 Bug Fixes` sections
    - Use `####` sub-headers for major features with PR number references
@@ -14,8 +14,7 @@ Prepare a release for emdx version $ARGUMENTS.
 4. **Update version badge** — Update the version badge in `README.md`: `[![Version](https://img.shields.io/badge/version-X.Y.Z-blue.svg)]`
 5. **Check for new features needing docs** — If any new commands or major features were added, check if `docs/cli-api.md` and `docs/README.md` need updates
 6. **Verify** — Run `poetry run pytest tests/ -x -q` to make sure tests pass
-7. **Update plugin version** — Update `version` in `.claude-plugin/plugin.json` to match
-8. **Branch + commit + PR**:
+7. **Branch + commit + PR**:
    ```bash
    git checkout -b release/v$ARGUMENTS
    git add -A
@@ -31,7 +30,7 @@ Prepare a release for emdx version $ARGUMENTS.
 
 ## Important
 
-- All three version files must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.claude-plugin/plugin.json` — `just bump` handles the first two
+- All three version files must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.claude-plugin/plugin.json` — `just bump` handles all three
 - Prefer hand-written changelog over auto-generated — match the voice and structure of existing entries
 - Always include the PR/issue number references in changelog entries
 - **Tags are NOT created by the PR** — they must be pushed manually after the release PR merges to main
