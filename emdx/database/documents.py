@@ -2,6 +2,8 @@
 Document CRUD operations for emdx knowledge base
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any, Union, cast
 
@@ -79,7 +81,15 @@ def save_document(
         # Commit after both document and tags are inserted (atomic transaction)
         conn.commit()
 
-        return doc_id
+    # Record 'create' event (non-critical, best-effort)
+    # Must be outside the connection context to avoid opening a second
+    # connection while the first is still active (causes FTS5 corruption
+    # in delete journal mode).
+    from emdx.models.events import record_event
+
+    record_event("create", doc_id=doc_id)
+
+    return doc_id
 
 
 def get_document(identifier: Union[str, int]) -> DocumentRow | None:
@@ -282,7 +292,12 @@ def get_children_count(
 
 
 def update_document(doc_id: int, title: str, content: str) -> bool:
-    """Update a document"""
+    """Update a document, snapshotting the previous version first."""
+    # Snapshot on a separate connection to avoid FTS5 content-sync
+    # trigger corruption (the SELECT + INSERT on `documents` in the
+    # same transaction as the UPDATE can confuse FTS5 on some builds).
+    _snapshot_version(doc_id, new_content=content)
+
     with db_connection.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -296,6 +311,12 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
         conn.commit()
         updated = cursor.rowcount > 0
 
+    # Record 'update' event (non-critical, best-effort)
+    if updated:
+        from emdx.models.events import record_event
+
+        record_event("update", doc_id=doc_id)
+
     # Mark any wiki articles sourced from this document as stale ($0 cost)
     if updated:
         try:
@@ -306,6 +327,64 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
             pass  # Wiki tables may not exist yet; non-critical
 
     return updated
+
+
+def _snapshot_version(
+    doc_id: int,
+    new_content: str,
+    change_source: str = "manual",
+) -> None:
+    """Snapshot the current document content into document_versions.
+
+    Uses its own connection to avoid FTS5 content-sync trigger
+    corruption when the caller subsequently UPDATEs the same row.
+    Failures are logged but never propagated -- versioning is non-critical.
+    """
+    import hashlib
+
+    try:
+        with db_connection.get_connection() as conn:
+            row = conn.execute(
+                "SELECT title, content FROM documents WHERE id = ?",
+                (doc_id,),
+            ).fetchone()
+            if row is None:
+                return
+
+            old_title: str = row[0]
+            old_content: str = row[1]
+            content_hash = hashlib.sha256(old_content.encode()).hexdigest()
+            char_delta = len(new_content) - len(old_content)
+
+            # Determine next version number
+            ver_row = conn.execute(
+                "SELECT MAX(version_number) FROM document_versions WHERE document_id = ?",
+                (doc_id,),
+            ).fetchone()
+            next_version = (ver_row[0] or 0) + 1
+
+            conn.execute(
+                "INSERT INTO document_versions "
+                "(document_id, version_number, title, content, "
+                "content_hash, char_delta, change_source) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    doc_id,
+                    next_version,
+                    old_title,
+                    old_content,
+                    content_hash,
+                    char_delta,
+                    change_source,
+                ),
+            )
+            conn.commit()
+    except Exception:
+        logger.debug(
+            "Failed to snapshot version for doc %d (document_versions table may not exist yet)",
+            doc_id,
+            exc_info=True,
+        )
 
 
 def delete_document(identifier: Union[str, int], hard_delete: bool = False) -> bool:

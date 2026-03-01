@@ -44,6 +44,8 @@ register_aliases({"show": "view"})
 from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
+from emdx.commands.history import diff as diff_command  # noqa: E402
+from emdx.commands.history import history as history_command  # noqa: E402
 from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.serve import serve as serve_command  # noqa: E402
@@ -111,6 +113,10 @@ app.command(name="gui")(gui_command)
 
 # Add the serve command for IDE integrations (JSON-RPC over stdin/stdout)
 app.command(name="serve")(serve_command)
+
+# Add history/diff commands for document versioning
+app.command(name="history")(history_command)
+app.command(name="diff")(diff_command)
 
 
 # Callback for global options

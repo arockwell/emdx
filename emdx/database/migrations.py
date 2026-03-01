@@ -2689,112 +2689,81 @@ def migration_052_add_wiki_editorial_prompt(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def migration_053_remove_delegate_system(conn: sqlite3.Connection) -> None:
-    """Remove the delegate execution system.
+def migration_054_add_knowledge_events(conn: sqlite3.Connection) -> None:
+    """Add knowledge_events table for tracking KB interactions."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            doc_id INTEGER,
+            query TEXT,
+            session_id TEXT,
+            metadata_json TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_events_type_created "
+        "ON knowledge_events(event_type, created_at)"
+    )
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_doc ON knowledge_events(doc_id)")
+    conn.commit()
 
-    The delegate system (emdx delegate) has been replaced by native Claude Code
-    Agent tool + SubagentStop hooks. This migration:
 
-    1. Drops the executions table and related tables
-    2. Recreates the tasks table without delegate-specific columns:
-       prompt, execution_id, output_doc_id, seq, retry_of, error, tags
-    3. Keeps task organization columns: epic_key, epic_seq, type,
-       source_doc_id, parent_task_id
+def migration_055_add_document_versions(conn: sqlite3.Connection) -> None:
+    """Add document_versions table for content history tracking."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS document_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            document_id INTEGER NOT NULL,
+            version_number INTEGER NOT NULL,
+            title TEXT,
+            content TEXT NOT NULL,
+            content_hash TEXT,
+            char_delta INTEGER,
+            change_source TEXT DEFAULT 'manual',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (document_id)
+                REFERENCES documents(id) ON DELETE CASCADE
+        )
+        """
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_versions_doc_ver "
+        "ON document_versions(document_id, version_number)"
+    )
+    conn.commit()
+
+
+def migration_056_fix_fts5_update_trigger(conn: sqlite3.Connection) -> None:
+    """Fix FTS5 update trigger for external content table.
+
+    The original documents_au trigger used UPDATE on the FTS table, which is
+    incorrect for external-content FTS5 tables (content=documents).  External
+    content tables require a delete+insert pattern to keep the inverted index
+    consistent.  The old UPDATE pattern corrupts the FTS index under certain
+    connection sequences (e.g. plain sqlite3.connect for migrations followed
+    by detect_types connections for data).
     """
     cursor = conn.cursor()
-
-    with foreign_keys_disabled(conn):
-        # 1. Drop execution-related tables
-        cursor.execute("DROP TABLE IF EXISTS task_executions")
-        cursor.execute("DROP TABLE IF EXISTS executions")
-
-        # 2. Recreate tasks table without delegate columns
-        cursor.execute("DROP TABLE IF EXISTS tasks_new")
-        cursor.execute("""
-            CREATE TABLE tasks_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT,
-                status TEXT DEFAULT 'open',
-                priority INTEGER DEFAULT 3,
-                gameplan_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
-                project TEXT,
-                current_step TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                completed_at TIMESTAMP,
-                type TEXT DEFAULT 'single',
-                source_doc_id INTEGER REFERENCES documents(id),
-                parent_task_id INTEGER REFERENCES tasks_new(id),
-                epic_key TEXT REFERENCES categories(key),
-                epic_seq INTEGER
-            )
-        """)
-
-        # Copy data from old table (only columns that still exist)
-        cursor.execute("""
-            INSERT INTO tasks_new (
-                id, title, description, status, priority, gameplan_id,
-                project, current_step, created_at, updated_at, completed_at,
-                type, source_doc_id, parent_task_id, epic_key, epic_seq
-            )
-            SELECT
-                id, title, description, status, priority, gameplan_id,
-                project, current_step, created_at, updated_at, completed_at,
-                type, source_doc_id, parent_task_id, epic_key, epic_seq
-            FROM tasks
-        """)
-
-        cursor.execute("DROP TABLE tasks")
-        cursor.execute("ALTER TABLE tasks_new RENAME TO tasks")
-
-        # Recreate task_deps (references tasks)
-        cursor.execute("DROP TABLE IF EXISTS task_deps_new")
-        cursor.execute("""
-            CREATE TABLE task_deps_new (
-                task_id INTEGER NOT NULL,
-                depends_on INTEGER NOT NULL,
-                PRIMARY KEY (task_id, depends_on),
-                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-                FOREIGN KEY (depends_on) REFERENCES tasks(id) ON DELETE CASCADE
-            )
-        """)
-        cursor.execute("""
-            INSERT INTO task_deps_new SELECT * FROM task_deps
-        """)
-        cursor.execute("DROP TABLE task_deps")
-        cursor.execute("ALTER TABLE task_deps_new RENAME TO task_deps")
-
-        # Recreate task_log (references tasks)
-        cursor.execute("DROP TABLE IF EXISTS task_log_new")
-        cursor.execute("""
-            CREATE TABLE task_log_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-                message TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        cursor.execute("""
-            INSERT INTO task_log_new SELECT * FROM task_log
-        """)
-        cursor.execute("DROP TABLE task_log")
-        cursor.execute("ALTER TABLE task_log_new RENAME TO task_log")
-
-    # Recreate indexes
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_gameplan ON tasks(gameplan_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_id ON tasks(parent_task_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_epic_key ON tasks(epic_key)")
-    cursor.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_epic_seq
-        ON tasks(epic_key, epic_seq)
-        WHERE epic_key IS NOT NULL AND epic_seq IS NOT NULL
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_task_log_task ON task_log(task_id)")
-
+    cursor.execute("DROP TRIGGER IF EXISTS documents_au")
+    cursor.execute(
+        """
+        CREATE TRIGGER documents_au AFTER UPDATE ON documents BEGIN
+            INSERT INTO documents_fts(documents_fts, rowid, title, content, project)
+            VALUES ('delete', old.id, old.title, old.content, old.project);
+            INSERT INTO documents_fts(rowid, title, content, project)
+            VALUES (new.id, new.title, new.content, new.project);
+        END
+        """
+    )
+    # Rebuild FTS index to fix any existing corruption from the old trigger
+    cursor.execute("INSERT INTO documents_fts(documents_fts) VALUES('rebuild')")
     conn.commit()
 
 
@@ -2854,6 +2823,9 @@ MIGRATIONS: list[tuple[int, str, Callable]] = [
     (51, "Add per-topic model override for wiki", migration_051_add_wiki_topic_model_override),
     (52, "Add editorial prompt to wiki topics", migration_052_add_wiki_editorial_prompt),
     (53, "Remove delegate execution system", migration_053_remove_delegate_system),
+    (54, "Add knowledge events table", migration_054_add_knowledge_events),
+    (55, "Add document versions table", migration_055_add_document_versions),
+    (56, "Fix FTS5 update trigger for external content", migration_056_fix_fts5_update_trigger),
 ]
 
 
