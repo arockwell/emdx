@@ -2946,6 +2946,25 @@ def migration_057_fix_fts5_update_trigger(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def migration_058_add_standing_queries(conn: sqlite3.Connection) -> None:
+    """Add standing_queries table for saved/watched searches."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS standing_queries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query TEXT NOT NULL,
+            tags TEXT,
+            project TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            notify_count INTEGER DEFAULT 0
+        )
+        """
+    )
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("0", "Create documents table", migration_000_create_documents_table),
@@ -3010,6 +3029,7 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("55", "Add knowledge events table", migration_055_add_knowledge_events),
     ("56", "Add document versions table", migration_056_add_document_versions),
     ("57", "Fix FTS5 update trigger for external content", migration_057_fix_fts5_update_trigger),
+    ("58", "Add standing queries for saved searches", migration_058_add_standing_queries),
 ]
 
 

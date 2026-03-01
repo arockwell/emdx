@@ -430,6 +430,26 @@ def find(
         "--wander",
         help="Serendipity mode: surface surprising but related documents",
     ),
+    watch: bool = typer.Option(
+        False,
+        "--watch",
+        help="Save query as a standing query (alerts on new matches)",
+    ),
+    watch_list: bool = typer.Option(
+        False,
+        "--watch-list",
+        help="List all standing queries",
+    ),
+    watch_check: bool = typer.Option(
+        False,
+        "--watch-check",
+        help="Check all standing queries for new matches",
+    ),
+    watch_remove: int | None = typer.Option(
+        None,
+        "--watch-remove",
+        help="Remove a standing query by ID",
+    ),
 ) -> None:
     """Search the knowledge base with full-text search.
 
@@ -463,8 +483,70 @@ def find(
         emdx find --context "auth" | claude              # pipe context to claude
         emdx find --wander                               # random serendipity
         emdx find --wander "machine learning"            # serendipity from topic
+        emdx find --watch "deployment"                   # save as standing query
+        emdx find --watch-list                           # list standing queries
+        emdx find --watch-check                          # check for new matches
+        emdx find --watch-remove 3                       # remove standing query #3
     """
     search_query = " ".join(query) if query else ""
+
+    # ── Handle --watch sub-commands ──────────────────────────────────
+    if watch_list or watch_check or watch_remove is not None or watch:
+        from emdx.commands._watch import (
+            check_standing_queries,
+            create_standing_query,
+            display_check_results,
+            display_standing_queries_list,
+            remove_standing_query,
+        )
+
+        if watch_list:
+            display_standing_queries_list(json_output=json_output)
+            return
+
+        if watch_check:
+            matches = check_standing_queries()
+            display_check_results(matches, json_output=json_output)
+            return
+
+        if watch_remove is not None:
+            removed = remove_standing_query(watch_remove)
+            if removed:
+                if json_output:
+                    print(json.dumps({"removed": watch_remove}))
+                else:
+                    print(f"Removed standing query #{watch_remove}")
+            else:
+                if json_output:
+                    print(json.dumps({"error": f"No standing query #{watch_remove}"}))
+                else:
+                    console.print(f"[red]Error: No standing query #{watch_remove}[/red]")
+                raise typer.Exit(1)
+            return
+
+        if watch:
+            if not search_query and not tags:
+                console.print("[red]Error: --watch requires a query or --tags[/red]")
+                raise typer.Exit(1)
+            sq_id = create_standing_query(
+                query=search_query,
+                tags=tags,
+                project=project,
+            )
+            if json_output:
+                print(
+                    json.dumps(
+                        {
+                            "id": sq_id,
+                            "query": search_query,
+                            "tags": tags,
+                            "project": project,
+                        }
+                    )
+                )
+            else:
+                print(f"Saved standing query #{sq_id}: {search_query or tags}")
+            return
 
     # Record search event (non-critical, best-effort)
     if search_query:
