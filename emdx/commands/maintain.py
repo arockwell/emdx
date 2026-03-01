@@ -1068,6 +1068,28 @@ def cleanup_temp_dirs(
         console.print(f"[yellow]⚠️ Failed to remove {failed} directories (check logs)[/yellow]")
 
 
+def drift(
+    days: int = typer.Option(30, "--days", "-d", help="Staleness threshold in days"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Detect abandoned or forgotten work in your knowledge base.
+
+    Analyzes task and epic timestamps to surface:
+    - Stale epics with no recent activity
+    - Orphaned active tasks not touched in >14 days (or --days/2)
+    - Documents linked to stale tasks
+    - Epics with burst-then-stop activity patterns
+
+    Examples:
+        emdx maintain drift              # Default 30-day threshold
+        emdx maintain drift --days 7     # More aggressive threshold
+        emdx maintain drift --json       # Machine-readable output
+    """
+    from emdx.commands._drift import run_drift
+
+    run_drift(days=days, json_output=json_output)
+
+
 # Create typer app for this module
 app = typer.Typer(help="Database maintenance and cleanup operations")
 
@@ -1109,6 +1131,7 @@ def maintain_callback(
 
 app.command(name="cleanup")(cleanup_main)
 app.command(name="cleanup-dirs")(cleanup_temp_dirs)
+app.command(name="drift")(drift)
 
 # Register compact as a subcommand of maintain
 from emdx.commands.compact import app as compact_app  # noqa: E402
