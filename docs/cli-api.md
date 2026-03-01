@@ -457,6 +457,37 @@ emdx maintain cleanup-dirs --age 48 --execute
 - `--execute / --dry-run` - Execute actions (default: dry run)
 - `--age INTEGER` - Clean directories older than N hours (default: 24)
 
+#### **emdx maintain backup**
+Create, list, or restore knowledge base backups. Uses SQLite's backup API for atomic, WAL-safe copies with optional gzip compression and logarithmic retention (~19 backups covering 2 years).
+
+```bash
+# Create compressed backup (default)
+emdx maintain backup
+
+# Create uncompressed backup
+emdx maintain backup --no-compress
+
+# List existing backups
+emdx maintain backup --list
+
+# Restore from a backup
+emdx maintain backup --restore emdx-backup-2026-02-28_143022.db.gz
+
+# Silent mode (for hooks)
+emdx maintain backup --quiet
+
+# JSON output
+emdx maintain backup --json
+```
+
+**Options:**
+- `--list, -l` - List existing backups
+- `--restore, -r TEXT` - Restore from a backup file (filename or full path)
+- `--no-compress` - Skip gzip compression
+- `--no-retention` - Disable automatic pruning (keep all backups)
+- `--quiet, -q` - Suppress output (for hook use)
+- `--json` - Structured JSON output
+
 #### **emdx maintain analyze**
 Read-only analysis of your knowledge base — discover patterns, issues, and improvement opportunities.
 

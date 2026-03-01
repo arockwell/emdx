@@ -125,3 +125,15 @@ class DocumentMetadata(TypedDict):
     content: str
     project: str | None
     access_count: int
+
+
+# ── Backup types ────────────────────────────────────────────────────
+
+
+class BackupInfo(TypedDict):
+    """Info about a single backup file for --json output."""
+
+    filename: str
+    path: str
+    size_bytes: int
+    created_at: str
