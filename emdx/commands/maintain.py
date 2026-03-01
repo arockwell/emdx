@@ -9,8 +9,6 @@ operations, breaking bidirectional dependencies between commands and services.
 from __future__ import annotations
 
 import logging
-import subprocess
-import time
 
 # Removed CommandDefinition import - using standard typer pattern
 from typing import TYPE_CHECKING
@@ -416,209 +414,6 @@ def _garbage_collect(dry_run: bool) -> str | None:
     return result.message
 
 
-def cleanup_main(
-    branches: bool = typer.Option(False, "--branches", "-b", help="Clean up old worktree branches"),  # noqa: E501
-    all: bool = typer.Option(False, "--all", "-a", help="Clean up everything"),
-    dry_run: bool = typer.Option(
-        True, "--execute/--dry-run", help="Execute actions (default: dry run)"
-    ),  # noqa: E501
-    force: bool = typer.Option(False, "--force", "-f", help="Force delete unmerged branches"),
-    age_days: int = typer.Option(7, "--age", help="Only clean branches older than N days"),
-) -> None:
-    """
-    Clean up system resources used by EMDX.
-
-    This command helps clean up:
-    - Old git branches from worktrees
-
-    Examples:
-        emdx maintain cleanup --all          # Clean everything (dry run)
-        emdx maintain cleanup --all --execute # Actually clean everything
-        emdx maintain cleanup --branches     # Clean old branches
-        emdx maintain cleanup --branches --force # Delete unmerged branches too
-    """
-    if not any([branches, all]):
-        console.print("[yellow]Please specify what to clean up. Use --help for options.[/yellow]")
-        return
-
-    if all:
-        branches = True
-
-    console.print(Panel("[bold cyan]🧹 EMDX Cleanup[/bold cyan]", box=box.DOUBLE))
-
-    if dry_run:
-        console.print("[yellow]🔍 DRY RUN MODE - No changes will be made[/yellow]\n")
-
-    # Track actions
-    actions_taken = []
-
-    # Clean branches
-    if branches:
-        console.print("[bold]Cleaning up old worktree branches...[/bold]")
-        cleaned = _cleanup_branches(dry_run, force=force, older_than_days=age_days)
-        if cleaned:
-            actions_taken.append(cleaned)
-        console.print()
-
-    # Summary
-    if actions_taken:
-        console.print("[bold green]✅ Cleanup Summary:[/bold green]")
-        for action in actions_taken:
-            console.print(f"  • {action}")
-    else:
-        console.print("[green]✨ No cleanup needed![/green]")
-
-    if dry_run and actions_taken:
-        console.print("\n[dim]Run with --execute to perform these actions[/dim]")
-
-
-def _cleanup_branches(dry_run: bool, force: bool = False, older_than_days: int = 7) -> str | None:
-    """Clean up old worktree branches.
-
-    Args:
-        dry_run: If True, only show what would be done
-        force: If True, delete unmerged branches as well
-        older_than_days: Only delete branches older than this many days
-    """
-    try:
-        # First check if we're in a git repository
-        git_check = subprocess.run(["git", "rev-parse", "--git-dir"], capture_output=True)
-        if git_check.returncode != 0:
-            console.print("  [yellow]⚠[/yellow] Not in a git repository")
-            return None
-
-        # Get current branch
-        current_result = subprocess.run(
-            ["git", "branch", "--show-current"], capture_output=True, text=True, check=True
-        )
-        current_branch = current_result.stdout.strip()
-
-        # List all branches
-        result = subprocess.run(["git", "branch", "-a"], capture_output=True, text=True, check=True)
-
-        # Find worktree/* branches
-        worktree_branches = []
-        for line in result.stdout.strip().split("\n"):
-            branch = line.strip().lstrip("* ")
-            # Skip remote branches and current branch
-            if branch.startswith("remotes/") or branch == current_branch:
-                continue
-            if branch.startswith("worktree/") or branch.startswith("worktree-"):
-                worktree_branches.append(branch)
-
-        if not worktree_branches:
-            console.print("  ✨ No worktree branches found!")
-            return None
-
-        # Get main/master branch name
-        main_branch = "main"
-        main_check = subprocess.run(["git", "show-ref", "--verify", "--quiet", "refs/heads/main"])
-        if main_check.returncode != 0:
-            # Try master
-            master_check = subprocess.run(
-                ["git", "show-ref", "--verify", "--quiet", "refs/heads/master"]
-            )  # noqa: E501
-            if master_check.returncode == 0:
-                main_branch = "master"
-
-        # Check which branches are merged and their age
-        branches_to_delete = []
-        unmerged_branches = []
-
-        for branch in worktree_branches:
-            # Get branch age
-            age_cmd = subprocess.run(
-                ["git", "log", "-1", "--format=%ct", branch], capture_output=True, text=True
-            )
-
-            if age_cmd.returncode == 0:
-                branch_timestamp = int(age_cmd.stdout.strip())
-                branch_age_days = (time.time() - branch_timestamp) / (24 * 60 * 60)
-
-                # Skip branches that are too new
-                if branch_age_days < older_than_days:
-                    continue
-
-            # Check if branch is merged
-            merge_check = subprocess.run(
-                ["git", "branch", "--merged", main_branch], capture_output=True, text=True
-            )
-
-            is_merged = branch in merge_check.stdout
-
-            if is_merged:
-                branches_to_delete.append((branch, "merged", int(branch_age_days)))
-            elif force:
-                # For unmerged branches, check if they have any unique commits
-                unique_commits = subprocess.run(
-                    ["git", "rev-list", f"{main_branch}..{branch}"], capture_output=True, text=True
-                )
-                has_unique_commits = bool(unique_commits.stdout.strip())
-                if not has_unique_commits:
-                    branches_to_delete.append((branch, "no unique commits", int(branch_age_days)))
-                else:
-                    unmerged_branches.append((branch, int(branch_age_days)))
-            else:
-                unmerged_branches.append((branch, int(branch_age_days)))
-
-        # Report findings
-        console.print(f"  Found: {len(worktree_branches)} worktree branches")
-        if branches_to_delete:
-            console.print(f"  • {len(branches_to_delete)} can be deleted")
-        if unmerged_branches:
-            console.print(f"  • {len(unmerged_branches)} unmerged (use --force to delete)")
-
-        if dry_run:
-            if branches_to_delete:
-                console.print("\n  Branches to delete:")
-                for branch, reason, age in branches_to_delete[:10]:
-                    console.print(f"    • {branch} ({reason}, {age}d old)")
-                if len(branches_to_delete) > 10:
-                    console.print(f"    ... and {len(branches_to_delete) - 10} more")
-
-            if unmerged_branches and not force:
-                console.print("\n  [yellow]Unmerged branches (use --force):[/yellow]")
-                for branch, age in unmerged_branches[:5]:
-                    console.print(f"    • {branch} ({age}d old)")
-                if len(unmerged_branches) > 5:
-                    console.print(f"    ... and {len(unmerged_branches) - 5} more")
-
-            return f"Would delete {len(branches_to_delete)} branches"
-
-        # Delete branches
-        deleted = 0
-        failed = 0
-
-        with Progress(
-            SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console
-        ) as progress:
-            task = progress.add_task("Deleting branches...", total=len(branches_to_delete))
-
-            for branch, reason, _age in branches_to_delete:
-                try:
-                    # Use -D for force delete if needed
-                    delete_flag = "-D" if force and reason != "merged" else "-d"
-                    subprocess.run(
-                        ["git", "branch", delete_flag, branch], capture_output=True, check=True
-                    )
-                    deleted += 1
-                except subprocess.CalledProcessError as e:
-                    logger.debug("Failed to delete branch %s: %s", branch, e)
-                    failed += 1
-                progress.update(task, advance=1)
-
-        if deleted > 0:
-            console.print(f"  [green]✓[/green] Deleted {deleted} branches")
-        if failed > 0:
-            console.print(f"  [yellow]⚠[/yellow] Failed to delete {failed} branches")
-
-        return f"Deleted {deleted} branches"
-
-    except subprocess.CalledProcessError as e:
-        console.print(f"  [red]✗[/red] Git error: {e}")
-        return None
-
-
 def drift(
     days: int = typer.Option(30, "--days", "-d", help="Staleness threshold in days"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -848,7 +643,6 @@ def maintain_callback(
     Run with no subcommand for the maintenance wizard.
 
     Subcommands:
-        cleanup      Clean up old worktree branches
         stale        Knowledge decay and staleness tracking
 
     See also:
@@ -861,7 +655,6 @@ def maintain_callback(
     )
 
 
-app.command(name="cleanup")(cleanup_main)
 app.command(name="drift")(drift)
 app.command(name="freshness")(freshness)
 app.command(name="gaps")(gaps)

@@ -60,7 +60,7 @@ Example: `("20260301_120000", "Add new feature", migration_20260301_120000_add_n
 When working in the emdx repo, stale worktrees may accumulate. These can block `gh pr checkout` and other git operations.
 
 - Use `git worktree list` to find active worktrees
-- Use `emdx maintain cleanup --branches --execute` to remove old worktree branches
+- Use `git worktree remove <path>` to remove stale worktrees
 - If `gh pr checkout` fails due to existing worktrees, clone to `/tmp` instead
 
 ## Code Quality — MANDATORY
