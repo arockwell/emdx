@@ -4,6 +4,7 @@ Core CRUD operations for emdx
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
@@ -1076,7 +1077,13 @@ def _find_ask(
 
     service = AskService()
     try:
-        with console.status(f"[bold blue]{spinner_label}...", spinner="dots"):
+        # Suppress spinner in JSON mode to keep stdout clean for machine parsing
+        status_ctx = (
+            contextlib.nullcontext()
+            if json_output
+            else console.status(f"[bold blue]{spinner_label}...", spinner="dots")
+        )
+        with status_ctx:
             result = service.ask(
                 question,
                 limit=limit,
