@@ -79,11 +79,11 @@ class KnowledgeGraphPanel(Widget):
         min-height: 3;
     }
 
-    #graph-scroll {
+    .graph-scroll {
         height: 1fr;
     }
 
-    #graph-log {
+    .graph-log {
         padding: 0 1;
     }
     """
@@ -97,9 +97,10 @@ class KnowledgeGraphPanel(Widget):
     def compose(self) -> ComposeResult:
         with Vertical():
             yield Static("KNOWLEDGE GRAPH", classes="graph-section-header")
-            with ScrollableContainer(id=self._scroll_id):
+            with ScrollableContainer(id=self._scroll_id, classes="graph-scroll"):
                 yield RichLog(
                     id=self._log_id,
+                    classes="graph-log",
                     highlight=True,
                     markup=True,
                     wrap=True,
