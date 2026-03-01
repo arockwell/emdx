@@ -504,7 +504,15 @@ def find(
                 mode_name = ask_mode.value
                 console.print(f"[red]Error: --{mode_name} requires a question[/red]")
                 raise typer.Exit(1)
-            _find_ask(search_query, limit, project, tags, mode=ask_mode, cite=cite)
+            _find_ask(
+                search_query,
+                limit,
+                project,
+                tags,
+                mode=ask_mode,
+                cite=cite,
+                json_output=json_output,
+            )
             return
 
         # Handle --context: retrieve context for piping
@@ -1050,6 +1058,7 @@ def _find_ask(
     tags: str | None,
     mode: AskMode | None = None,
     cite: bool = False,
+    json_output: bool = False,
 ) -> None:
     """Answer a question using RAG (retrieves context + LLM)."""
     from ..services.ask_service import AskMode, AskService
@@ -1080,6 +1089,34 @@ def _find_ask(
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
 
+    # JSON output mode
+    if json_output:
+        output: dict[str, object] = {
+            "mode": mode.value,
+            "query": question,
+            "answer": result.text,
+            "confidence": result.confidence,
+            "method": result.method,
+            "context_size": result.context_size,
+            "sources": [{"id": doc_id, "title": title} for doc_id, title in result.source_titles],
+        }
+        if result.confidence_signals:
+            signals = result.confidence_signals
+            output["confidence_score"] = round(signals.composite_score, 3)
+            output["confidence_signals"] = {
+                "retrieval_score_mean": round(signals.retrieval_score_mean, 3),
+                "retrieval_score_spread": round(signals.retrieval_score_spread, 3),
+                "source_count": signals.source_count,
+                "query_term_coverage": round(signals.query_term_coverage, 3),
+                "topic_coherence": round(signals.topic_coherence, 3),
+                "recency_score": round(signals.recency_score, 3),
+            }
+        if cite and result.cited_ids:
+            output["cited_ids"] = result.cited_ids
+        print(json.dumps(output, indent=2))
+        return
+
+    # Rich output mode
     from rich.panel import Panel
 
     confidence_colors = {

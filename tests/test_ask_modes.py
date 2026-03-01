@@ -665,3 +665,268 @@ class TestResolveModeFlags:
 
         with pytest.raises(Exit):
             _resolve_ask_mode(ask=False, think=False, challenge=True, debug=False, cite=False)
+
+
+# ── JSON output for ask modes ─────────────────────────────────────────
+
+
+class TestFindAskJsonOutput:
+    """Tests for --json output in ask modes."""
+
+    def _make_answer(
+        self,
+        mode: AskMode = AskMode.ANSWER,
+        cite: bool = False,
+    ) -> Answer:
+        """Build a mock Answer with confidence signals."""
+        signals = ConfidenceSignals(
+            retrieval_score_mean=0.75,
+            retrieval_score_spread=0.1,
+            source_count=3,
+            query_term_coverage=0.8,
+            topic_coherence=0.6,
+            recency_score=0.5,
+        )
+        return Answer(
+            text="Test answer text",
+            sources=[1, 2, 3],
+            source_titles=[(1, "Doc A"), (2, "Doc B"), (3, "Doc C")],
+            method="semantic",
+            context_size=5000,
+            confidence=signals.level,
+            mode=mode,
+            confidence_signals=signals,
+            cited_ids=[1, 2] if cite else [],
+        )
+
+    def test_json_output_produces_valid_json(self) -> None:
+        """--json should produce valid JSON with expected keys."""
+        import json
+
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer()
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print") as mock_print,
+        ):
+            _find_ask(
+                "what is emdx",
+                limit=10,
+                project=None,
+                tags=None,
+                mode=AskMode.ANSWER,
+                json_output=True,
+            )
+
+        output = mock_print.call_args[0][0]
+        data = json.loads(output)
+        assert data["mode"] == "answer"
+        assert data["query"] == "what is emdx"
+        assert data["answer"] == "Test answer text"
+        assert data["confidence"] in ("high", "medium", "low", "insufficient")
+        assert data["method"] == "semantic"
+        assert data["context_size"] == 5000
+        assert len(data["sources"]) == 3
+        assert data["sources"][0]["id"] == 1
+        assert data["sources"][0]["title"] == "Doc A"
+
+    def test_json_output_includes_confidence_signals(self) -> None:
+        """--json should include confidence score and signal breakdown."""
+        import json
+
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer()
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print") as mock_print,
+        ):
+            _find_ask(
+                "test query",
+                limit=10,
+                project=None,
+                tags=None,
+                json_output=True,
+            )
+
+        data = json.loads(mock_print.call_args[0][0])
+        assert "confidence_score" in data
+        assert 0.0 <= data["confidence_score"] <= 1.0
+        signals = data["confidence_signals"]
+        assert "retrieval_score_mean" in signals
+        assert "source_count" in signals
+        assert "query_term_coverage" in signals
+        assert "topic_coherence" in signals
+        assert "recency_score" in signals
+
+    def test_json_output_think_mode(self) -> None:
+        """--think --json should output mode='think'."""
+        import json
+
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer(mode=AskMode.THINK)
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print") as mock_print,
+        ):
+            _find_ask(
+                "should we rewrite in Rust",
+                limit=10,
+                project=None,
+                tags=None,
+                mode=AskMode.THINK,
+                json_output=True,
+            )
+
+        data = json.loads(mock_print.call_args[0][0])
+        assert data["mode"] == "think"
+
+    def test_json_output_debug_mode(self) -> None:
+        """--debug --json should output mode='debug'."""
+        import json
+
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer(mode=AskMode.DEBUG)
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print") as mock_print,
+        ):
+            _find_ask(
+                "TUI freezes on click",
+                limit=10,
+                project=None,
+                tags=None,
+                mode=AskMode.DEBUG,
+                json_output=True,
+            )
+
+        data = json.loads(mock_print.call_args[0][0])
+        assert data["mode"] == "debug"
+
+    def test_json_output_challenge_mode(self) -> None:
+        """--think --challenge --json should output mode='challenge'."""
+        import json
+
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer(mode=AskMode.CHALLENGE)
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print") as mock_print,
+        ):
+            _find_ask(
+                "rewrite in Rust",
+                limit=10,
+                project=None,
+                tags=None,
+                mode=AskMode.CHALLENGE,
+                json_output=True,
+            )
+
+        data = json.loads(mock_print.call_args[0][0])
+        assert data["mode"] == "challenge"
+
+    def test_json_output_with_cite(self) -> None:
+        """--cite --json should include cited_ids."""
+        import json
+
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer(cite=True)
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print") as mock_print,
+        ):
+            _find_ask(
+                "how does auth work",
+                limit=10,
+                project=None,
+                tags=None,
+                cite=True,
+                json_output=True,
+            )
+
+        data = json.loads(mock_print.call_args[0][0])
+        assert "cited_ids" in data
+        assert data["cited_ids"] == [1, 2]
+
+    def test_json_output_no_cited_ids_without_cite(self) -> None:
+        """Without --cite, JSON should not include cited_ids."""
+        import json
+
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer(cite=False)
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print") as mock_print,
+        ):
+            _find_ask(
+                "test query",
+                limit=10,
+                project=None,
+                tags=None,
+                json_output=True,
+            )
+
+        data = json.loads(mock_print.call_args[0][0])
+        assert "cited_ids" not in data
+
+    def test_json_output_no_console_print(self) -> None:
+        """--json should not use console.print (no Rich markup)."""
+        from emdx.commands.core import _find_ask
+
+        answer = self._make_answer()
+
+        with (
+            patch(
+                "emdx.services.ask_service.AskService.ask",
+                return_value=answer,
+            ),
+            patch("builtins.print"),
+            patch("emdx.commands.core.console") as mock_console,
+        ):
+            _find_ask(
+                "test query",
+                limit=10,
+                project=None,
+                tags=None,
+                json_output=True,
+            )
+
+        # console.status is used during the service call, but
+        # console.print should NOT be called for rendering output
+        for call in mock_console.print.call_args_list:
+            # Ignore the status context manager calls
+            assert "Panel" not in str(call), "Rich Panel should not be used in JSON mode"
