@@ -1,31 +1,34 @@
 """Test database setup."""
 
+from __future__ import annotations
+
 import sqlite3
 
 
 class DatabaseForTesting:
     """Test database wrapper that handles in-memory databases correctly."""
 
-    def __init__(self, db_path=":memory:"):
+    def __init__(self, db_path: str = ":memory:") -> None:
         self.db_path = db_path
         if db_path == ":memory:":
-            self.conn = sqlite3.connect(":memory:")
+            self.conn: sqlite3.Connection | None = sqlite3.connect(":memory:")
             self.conn.row_factory = sqlite3.Row
             self._create_schema()
         else:
             self.conn = None
             self._create_schema()
 
-    def get_connection(self):
+    def get_connection(self) -> sqlite3.Connection:
         """Get a database connection."""
         if self.db_path == ":memory:":
+            assert self.conn is not None
             return self.conn
         else:
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
             return conn
 
-    def _create_schema(self):
+    def _create_schema(self) -> None:
         """Create the database schema."""
         conn = self.get_connection()
 
@@ -98,7 +101,7 @@ class DatabaseForTesting:
         if self.db_path != ":memory:":
             conn.close()
 
-    def save_document(self, title, content, project=None):
+    def save_document(self, title: str, content: str, project: str | None = None) -> int | None:
         """Save a document to the database."""
         conn = self.get_connection()
         cursor = conn.execute(
@@ -119,7 +122,7 @@ class DatabaseForTesting:
 
         return doc_id
 
-    def get_document(self, doc_id):
+    def get_document(self, doc_id: int) -> sqlite3.Row | None:
         """Get a document by ID."""
         conn = self.get_connection()
         cursor = conn.execute(
@@ -131,14 +134,14 @@ class DatabaseForTesting:
             (doc_id,),
         )
 
-        result = cursor.fetchone()
+        result: sqlite3.Row | None = cursor.fetchone()
 
         if self.db_path != ":memory:":
             conn.close()
 
         return result
 
-    def search_documents(self, query, project=None):
+    def search_documents(self, query: str, project: str | None = None) -> list[sqlite3.Row]:
         """Simple search implementation."""
         conn = self.get_connection()
 
@@ -173,7 +176,7 @@ class DatabaseForTesting:
 
         return results
 
-    def list_documents(self, project=None):
+    def list_documents(self, project: str | None = None) -> list[sqlite3.Row]:
         """List all documents."""
         conn = self.get_connection()
 
@@ -205,7 +208,7 @@ class DatabaseForTesting:
 
         return results
 
-    def update_document(self, doc_id, title, content):
+    def update_document(self, doc_id: int, title: str, content: str) -> None:
         """Update a document."""
         conn = self.get_connection()
         conn.execute(
@@ -223,7 +226,7 @@ class DatabaseForTesting:
         else:
             conn.commit()
 
-    def delete_document(self, doc_id):
+    def delete_document(self, doc_id: int) -> None:
         """Delete a document."""
         conn = self.get_connection()
         conn.execute(
@@ -241,7 +244,7 @@ class DatabaseForTesting:
         else:
             conn.commit()
 
-    def close(self):
+    def close(self) -> None:
         """Close the in-memory connection if applicable."""
         if self.conn:
             self.conn.close()

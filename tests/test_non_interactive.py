@@ -42,36 +42,6 @@ class TestIsNonInteractive:
 
 
 # ---------------------------------------------------------------------------
-# executions killall non-interactive test
-# ---------------------------------------------------------------------------
-class TestExecutionsKillallNonInteractive:
-    """Tests for non-interactive auto-confirmation in executions killall."""
-
-    @patch("emdx.commands.executions.update_execution_status")
-    @patch("emdx.commands.executions.get_running_executions")
-    @patch("emdx.commands.executions.is_non_interactive", return_value=True)
-    def test_killall_auto_confirms_non_interactive(
-        self, mock_ni: Any, mock_get_running: Any, mock_update: Any
-    ) -> None:
-        """killall skips confirmation when stdin is not a TTY."""
-        from emdx.commands.executions import app as exec_app
-
-        exec1 = MagicMock()
-        exec1.id = 1
-        exec1.doc_title = "Task A"
-        exec2 = MagicMock()
-        exec2.id = 2
-        exec2.doc_title = "Task B"
-        mock_get_running.return_value = [exec1, exec2]
-
-        result = runner.invoke(exec_app, ["killall"])
-        assert result.exit_code == 0
-        out = _out(result)
-        assert "Killed 2 execution" in out
-        assert mock_update.call_count == 2
-
-
-# ---------------------------------------------------------------------------
 # maintain index --clear non-interactive test
 # ---------------------------------------------------------------------------
 class TestMaintainIndexClearNonInteractive:

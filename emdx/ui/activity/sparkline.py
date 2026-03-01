@@ -2,6 +2,7 @@
 
 BLOCKS = "▁▂▃▄▅▆▇█"
 
+
 def sparkline(values: list[float], width: int | None = None) -> str:
     """Generate a sparkline string from values.
 
