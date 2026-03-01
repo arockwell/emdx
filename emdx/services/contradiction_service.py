@@ -210,7 +210,7 @@ class ContradictionService:
             from sentence_transformers import CrossEncoder  # noqa: F401
 
             self._nli_model_available = True
-        except ImportError:
+        except (ImportError, OSError):
             self._nli_model_available = False
         return self._nli_model_available
 
@@ -382,10 +382,12 @@ class ContradictionService:
         """
         try:
             from sentence_transformers import CrossEncoder
-        except ImportError:
-            return self._check_heuristic(doc1_content, doc2_content)
 
-        model = CrossEncoder("cross-encoder/nli-deberta-v3-small")
+            model = CrossEncoder("cross-encoder/nli-deberta-v3-small")
+        except (ImportError, OSError) as err:
+            logger.warning("NLI model unavailable, falling back to heuristic: %s", err)
+            self._nli_model_available = False
+            return self._check_heuristic(doc1_content, doc2_content)
 
         claims1 = _extract_claims(doc1_content)
         claims2 = _extract_claims(doc2_content)
