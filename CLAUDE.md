@@ -34,6 +34,27 @@ poetry run emdx --help  # Always use poetry run in project dir
 poetry run pytest tests/ -x -q  # Run tests
 ```
 
+### Dev Database Isolation
+
+When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of `~/.config/emdx/knowledge.db`. This prevents dev/delegate processes from corrupting the production database.
+
+**Priority chain for database path:**
+1. `EMDX_TEST_DB` — test isolation (set by pytest fixtures)
+2. `EMDX_DB` — explicit override (e.g. `EMDX_DB=/tmp/test.db poetry run emdx status`)
+3. Dev checkout detection → `<project-root>/.emdx/dev.db`
+4. Production default → `~/.config/emdx/knowledge.db`
+
+**Commands:**
+- `emdx db status` — show active DB path and reason
+- `emdx db path` — print just the path (for scripts)
+- `emdx db copy-from-prod` — copy production DB to dev DB
+
+### Migration Convention
+
+Migrations use **set-based tracking** with string IDs. Legacy migrations (0-54) use numeric strings. New migrations use timestamp IDs: `"YYYYMMDD_HHMMSS"`.
+
+Example: `("20260301_120000", "Add new feature", migration_20260301_120000_add_new_feature)`
+
 ## Worktree Cleanup
 
 When working in the emdx repo, stale worktrees may accumulate. These can block `gh pr checkout` and other git operations.
