@@ -1979,6 +1979,15 @@ def edit(
                 console.print(
                     f"[green]✅ Updated title of #{doc['id']} to:[/green] [cyan]{title}[/cyan]"
                 )
+                # Flag wiki articles sourced from this doc as stale
+                try:
+                    from emdx.services.wiki_staleness_service import (
+                        check_doc_staleness,
+                    )
+
+                    check_doc_staleness(doc["id"])
+                except Exception:
+                    pass  # Wiki tables may not exist; non-critical
             else:
                 console.print("[red]Error updating document title[/red]")
                 raise typer.Exit(1)
@@ -2055,6 +2064,16 @@ def edit(
                 if new_title != doc["title"]:
                     console.print(f"   [dim]Title changed from:[/dim] {doc['title']}")
                 console.print("   [dim]Content updated[/dim]")
+
+                # Flag wiki articles sourced from this doc as stale
+                try:
+                    from emdx.services.wiki_staleness_service import (
+                        check_doc_staleness,
+                    )
+
+                    check_doc_staleness(doc["id"])
+                except Exception:
+                    pass  # Wiki tables may not exist; non-critical
             else:
                 console.print("[red]Error updating document[/red]")
                 raise typer.Exit(1)
