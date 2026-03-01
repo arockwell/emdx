@@ -37,4 +37,4 @@ emdx status --stats
 Tell the user:
 - Which version was installed
 - Whether their knowledge base already has documents or is fresh
-- That they can now use `/emdx:save`, `/emdx:delegate`, `/emdx:research`, and other emdx skills
+- That they can now use `/save`, `/research`, `/tasks`, and other emdx skills

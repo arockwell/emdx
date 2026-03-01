@@ -52,4 +52,4 @@ ls -la | emdx save --title "Directory Listing"
 
 ## After Saving
 
-The command outputs the document ID (e.g., "Saved as #42"). Use this ID to reference the document later with `emdx view 42`, `emdx tag add 42 done`, or `emdx delegate --doc 42 "task"`.
+The command outputs the document ID (e.g., "Saved as #42"). Use this ID to reference the document later with `emdx view 42` or `emdx tag add 42 done`.
