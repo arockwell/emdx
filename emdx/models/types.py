@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, TypeAlias, TypedDict
 
-TaskStatus = Literal["open", "active", "blocked", "done", "failed", "wontdo"]
+TaskStatus = Literal["open", "active", "blocked", "done", "failed", "wontdo", "duplicate"]
 
 # User-facing task identifier: "42", "#42", or "FEAT-77".
 # Resolved to int by resolve_task_id().

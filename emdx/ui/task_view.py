@@ -36,7 +36,7 @@ from emdx.ui.link_helpers import linkify_text as _linkify_text
 logger = logging.getLogger(__name__)
 
 # Status display order and icons
-STATUS_ORDER = ["active", "open", "blocked", "done", "failed", "wontdo"]
+STATUS_ORDER = ["active", "open", "blocked", "done", "failed", "wontdo", "duplicate"]
 STATUS_ICONS = {
     "open": "○",
     "active": "●",
@@ -44,6 +44,7 @@ STATUS_ICONS = {
     "done": "✓",
     "failed": "✗",
     "wontdo": "⊘",
+    "duplicate": "◆",
 }
 STATUS_LABELS = {
     "open": "READY",
@@ -52,6 +53,7 @@ STATUS_LABELS = {
     "done": "DONE",
     "failed": "FAILED",
     "wontdo": "WON'T DO",
+    "duplicate": "DUPLICATE",
 }
 STATUS_COLORS = {
     "open": "",
@@ -60,6 +62,7 @@ STATUS_COLORS = {
     "done": "dim",
     "failed": "red",
     "wontdo": "dim",
+    "duplicate": "cyan",
 }
 
 # Row key prefix for section headers
@@ -162,6 +165,7 @@ class TaskView(Widget):
         ("a", "mark_active", "Mark Active"),
         ("b", "mark_blocked", "Mark Blocked"),
         ("w", "mark_wontdo", "Won't Do"),
+        ("p", "mark_duplicate", "Duplicate"),
         ("u", "mark_open", "Reopen"),
         ("slash", "show_filter", "Filter"),
         ("escape", "clear_filter", "Clear Filter"),
@@ -285,7 +289,7 @@ class TaskView(Widget):
         "o": {"open"},
         "i": {"active"},
         "x": {"blocked"},
-        "f": {"done", "failed", "wontdo"},
+        "f": {"done", "failed", "wontdo", "duplicate"},
     }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -435,7 +439,7 @@ class TaskView(Widget):
         """Load all manual tasks from the database."""
         try:
             active_tasks = list_tasks(status=["open", "active", "blocked", "failed"], limit=500)
-            done_tasks = list_tasks(status=["done", "wontdo"], limit=200)
+            done_tasks = list_tasks(status=["done", "wontdo", "duplicate"], limit=200)
             self._tasks = active_tasks + done_tasks
         except Exception as e:
             logger.error(f"Failed to load tasks: {e}")
@@ -681,7 +685,7 @@ class TaskView(Widget):
             key=lambda k: (k == "", k),
         )
 
-        finished = {"done", "failed", "wontdo"}
+        finished = {"done", "failed", "wontdo", "duplicate"}
         first_group = True
         for epic_key in epic_keys:
             all_tasks = tasks_by_epic[epic_key]
@@ -1391,6 +1395,10 @@ class TaskView(Widget):
     async def action_mark_wontdo(self) -> None:
         """Mark selected task as won't do."""
         await self._set_task_status("wontdo")
+
+    async def action_mark_duplicate(self) -> None:
+        """Mark selected task as duplicate."""
+        await self._set_task_status("duplicate")
 
     async def action_mark_open(self) -> None:
         """Reopen a task (mark as open/ready)."""

@@ -19,7 +19,7 @@ from emdx.models.types import (
 )
 
 # Valid status values
-STATUSES = ("open", "active", "blocked", "done", "failed", "wontdo")
+STATUSES = ("open", "active", "blocked", "done", "failed", "wontdo", "duplicate")
 
 
 def create_task(
@@ -275,9 +275,12 @@ def list_tasks(
                     WHEN 'failed' THEN 3
                     WHEN 'done' THEN 4
                     WHEN 'wontdo' THEN 5
+                    WHEN 'duplicate' THEN 6
                 END,
-                CASE WHEN status IN ('done', 'wontdo') THEN 0 ELSE priority END,
-                CASE WHEN status IN ('done', 'wontdo') THEN completed_at ELSE NULL END DESC,
+                CASE WHEN status IN ('done', 'wontdo', 'duplicate')
+                    THEN 0 ELSE priority END,
+                CASE WHEN status IN ('done', 'wontdo', 'duplicate')
+                    THEN completed_at ELSE NULL END DESC,
                 created_at DESC
             LIMIT ?
         """,
@@ -326,7 +329,7 @@ def update_task(task_id: int, **kwargs: Any) -> bool:
         sets.append(f"{key} = ?")
         params.append(value)
         # Set completed_at when status becomes done
-        if key == "status" and value in ("done", "wontdo"):
+        if key == "status" and value in ("done", "wontdo", "duplicate"):
             sets.append("completed_at = CURRENT_TIMESTAMP")
 
     sets.append("updated_at = CURRENT_TIMESTAMP")
@@ -415,7 +418,8 @@ def get_ready_tasks(
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps d
                 JOIN tasks dep ON d.depends_on = dep.id
-                WHERE d.task_id = t.id AND dep.status NOT IN ('done', 'wontdo')
+                WHERE d.task_id = t.id
+                AND dep.status NOT IN ('done', 'wontdo', 'duplicate')
             )
             ORDER BY t.priority, t.created_at
         """,
@@ -536,7 +540,8 @@ def list_epics(
                 COUNT(c.id) as child_count,
                 COUNT(CASE WHEN c.status IN ('open', 'active', 'blocked')
                     THEN 1 END) as children_open,
-                COUNT(CASE WHEN c.status = 'done' THEN 1 END) as children_done
+                COUNT(CASE WHEN c.status IN ('done', 'duplicate')
+                    THEN 1 END) as children_done
             FROM tasks t
             LEFT JOIN tasks c ON c.parent_task_id = t.id AND c.type != 'epic'
             WHERE {" AND ".join(conditions)}

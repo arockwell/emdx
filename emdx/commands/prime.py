@@ -335,7 +335,8 @@ def _get_active_epics() -> list[EpicInfo]:
         cursor.execute("""
             SELECT t.id, t.title, t.status, t.epic_key,
                 COUNT(c.id) as child_count,
-                COUNT(CASE WHEN c.status = 'done' THEN 1 END) as children_done
+                COUNT(CASE WHEN c.status IN ('done', 'duplicate')
+                    THEN 1 END) as children_done
             FROM tasks t
             LEFT JOIN tasks c ON c.parent_task_id = t.id AND c.type != 'epic'
             WHERE t.type = 'epic' AND t.status IN ('open', 'active')
@@ -368,7 +369,8 @@ def _get_ready_tasks() -> list[ReadyTask]:
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps td
                 JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = t.id AND blocker.status NOT IN ('done', 'wontdo')
+                WHERE td.task_id = t.id
+                AND blocker.status NOT IN ('done', 'wontdo', 'duplicate')
             )
             ORDER BY t.priority ASC, t.created_at ASC
             LIMIT 20

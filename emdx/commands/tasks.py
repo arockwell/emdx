@@ -31,6 +31,7 @@ ICONS = {
     "blocked": "⊘",
     "closed": "✓",
     "wontdo": "⊘",
+    "duplicate": "◆",
 }
 STATUS_STYLE = {
     "open": "default",
@@ -40,6 +41,7 @@ STATUS_STYLE = {
     "failed": "red",
     "closed": "green",
     "wontdo": "dim",
+    "duplicate": "dim",
 }
 
 
@@ -48,7 +50,7 @@ def _blocker_summary(task_id: int) -> str:
     deps = tasks.get_dependencies(task_id)
     if not deps:
         return ""
-    open_deps = [d for d in deps if d["status"] not in ("done", "closed", "wontdo")]
+    open_deps = [d for d in deps if d["status"] not in ("done", "closed", "wontdo", "duplicate")]
     if not open_deps:
         return ""
     names = ", ".join(f"#{d['id']}" for d in open_deps[:3])
@@ -323,6 +325,41 @@ def wontdo(
         print_json({"id": task_id, "title": task["title"], "status": "wontdo"})
     else:
         console.print(f"[dim]⊘ Won't do:[/dim] #{task_id} {task['title']}")
+
+
+@app.command()
+def duplicate(
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
+    note: str | None = typer.Option(None, "-n", "--note", help="Reason for marking duplicate"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Mark a task as duplicate.
+
+    The task is treated as terminal (unblocks dependents) and
+    counts toward epic completion, but is semantically distinct from done.
+
+    Examples:
+        emdx task duplicate 42
+        emdx task duplicate TOOL-12
+        emdx task duplicate 42 --note "Duplicate of #55"
+    """
+    task_id = _resolve_id(task_id_str, json_output=json_output)
+    task = tasks.get_task(task_id)
+    if not task:
+        if json_output:
+            print_json({"error": f"Task #{task_id} not found"})
+        else:
+            console.print(f"[red]Task #{task_id} not found[/red]")
+        raise typer.Exit(1)
+
+    tasks.update_task(task_id, status="duplicate")
+    if note:
+        tasks.log_progress(task_id, f"Duplicate: {note}")
+
+    if json_output:
+        print_json({"id": task_id, "title": task["title"], "status": "duplicate"})
+    else:
+        console.print(f"[dim]◆ Duplicate:[/dim] #{task_id} {task['title']}")
 
 
 @app.command()
