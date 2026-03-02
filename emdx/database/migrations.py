@@ -3,6 +3,7 @@
 # SQL schema definitions contain long lines for readability; breaking them
 # would make the migration scripts harder to understand and maintain.
 
+import logging
 import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -59,14 +60,61 @@ def get_applied_migrations(conn: sqlite3.Connection) -> set[str]:
     return set()
 
 
+def _ensure_schema_migrations(conn: sqlite3.Connection) -> None:
+    """Create schema_migrations table if it doesn't exist, migrating legacy data.
+
+    Called on-demand when a non-integer migration ID needs to be recorded but
+    schema_migrations doesn't exist yet. This handles databases that somehow
+    lack the table (e.g. branch-diverged DBs, or DBs where migration 54 was
+    skipped).
+
+    Copies any existing schema_version rows so that legacy migrations are not
+    re-applied on the next run.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """
+    )
+    # Copy any legacy integer versions so they're not re-applied
+    if _table_exists(conn, "schema_version"):
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO schema_migrations (version, applied_at)
+            SELECT CAST(version AS TEXT), applied_at FROM schema_version
+            """
+        )
+    conn.commit()
+
+
 def record_migration(conn: sqlite3.Connection, version: str) -> None:
     """Record a migration as applied.
 
     Writes to schema_migrations if it exists (post-transition), otherwise
-    falls back to schema_version for legacy migrations running before
-    the transition migration creates schema_migrations.
+    falls back to schema_version for legacy integer migrations.
+
+    For non-integer (timestamp) migration IDs, schema_migrations is created
+    on demand if it doesn't exist yet.  Note: Python's int() accepts underscore
+    separators (int("20260301_140000") == 20260301140000), so we check
+    version.isdigit() rather than catching ValueError to distinguish legacy
+    integer IDs ("0".."58") from timestamp IDs ("20260301_140000").
     """
     if _table_exists(conn, "schema_migrations"):
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)",
+            (version,),
+        )
+        conn.commit()
+        return
+
+    # Timestamp-format IDs contain underscores and cannot be stored in the
+    # INTEGER PRIMARY KEY schema_version table as their original string form.
+    # Create schema_migrations on demand so the migration is durably recorded.
+    if not version.isdigit():
+        _ensure_schema_migrations(conn)
         conn.execute(
             "INSERT OR IGNORE INTO schema_migrations (version) VALUES (?)",
             (version,),
@@ -2460,8 +2508,8 @@ def migration_043_add_document_links(conn: sqlite3.Connection) -> None:
             source_doc_id INTEGER NOT NULL,
             target_doc_id INTEGER NOT NULL,
             similarity_score REAL NOT NULL DEFAULT 0.0,
+            link_type TEXT NOT NULL DEFAULT 'auto',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            method TEXT NOT NULL DEFAULT 'auto',
             FOREIGN KEY (source_doc_id)
                 REFERENCES documents(id) ON DELETE CASCADE,
             FOREIGN KEY (target_doc_id)
@@ -3003,7 +3051,18 @@ def migration_20260301_150000_add_entity_relationships(
 
 
 def migration_20260301_140000_add_schema_flags(conn: sqlite3.Connection) -> None:
-    """Add schema_flags key-value table for tracking one-time operations."""
+    """Add schema_flags key-value table for tracking one-time operations.
+
+    As the first timestamp-format migration, this also bootstraps schema_migrations
+    if it doesn't exist yet.  This ensures that even databases which somehow lack
+    schema_migrations (e.g. branch-diverged DBs that skipped migration 54) can
+    durably record timestamp-format migration IDs without a ValueError from
+    the legacy int(version) path in record_migration().
+    """
+    # Bootstrap schema_migrations so timestamp IDs can be recorded durably.
+    # This is a no-op for databases that already have the table (migration 54
+    # created it), but saves databases that somehow lack it.
+    _ensure_schema_migrations(conn)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS schema_flags (
             key TEXT PRIMARY KEY,
@@ -3012,6 +3071,24 @@ def migration_20260301_140000_add_schema_flags(conn: sqlite3.Connection) -> None
         )
     """)
     conn.commit()
+
+
+def migration_20260302_120000_rename_document_links_method_to_link_type(
+    conn: sqlite3.Connection,
+) -> None:
+    """Rename document_links.method column to link_type.
+
+    The production DB was originally created with `link_type` but migration 43
+    used `method` by mistake. This migration brings dev/new DBs into alignment
+    with the production schema by renaming the column if it exists.
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(document_links)")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "method" in columns and "link_type" not in columns:
+        # SQLite supports RENAME COLUMN since 3.25.0 (released 2018-09-15)
+        cursor.execute("ALTER TABLE document_links RENAME COLUMN method TO link_type")
+        conn.commit()
 
 
 # List of all migrations in order
@@ -3085,6 +3162,11 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
         "Add entity relationships table",
         migration_20260301_150000_add_entity_relationships,
     ),
+    (
+        "20260302_120000",
+        "Rename document_links.method to link_type",
+        migration_20260302_120000_rename_document_links_method_to_link_type,
+    ),
 ]
 
 
@@ -3107,14 +3189,14 @@ def run_migrations(db_path: str | Path | None = None) -> None:
 
         for version, description, migration_func in MIGRATIONS:
             if version not in applied:
-                print(f"Running migration {version}: {description}")
+                logging.getLogger(__name__).info("Running migration %s: %s", version, description)
                 try:
                     migration_func(conn)
                 except Exception as e:
                     conn.rollback()
                     raise RuntimeError(f"Migration {version} ({description}) failed: {e}") from e
                 record_migration(conn, version)
-                print(f"Migration {version} completed")
+                logging.getLogger(__name__).info("Migration %s completed", version)
 
     finally:
         if conn is not None:

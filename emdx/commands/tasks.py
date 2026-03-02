@@ -481,7 +481,9 @@ def list_cmd(
 
     # --since/--today imply --done when no explicit status is given
     if status:
-        status_list = [s.strip() for s in status.split(",")]
+        status_list: list[str] | None = [s.strip() for s in status.split(",")]
+    elif all:
+        status_list = None  # no status filter — return all tasks
     elif done or since_date:
         status_list = ["done"]
     else:

@@ -12,6 +12,7 @@ question generation.
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from datetime import datetime
 from typing import Any, TypedDict
@@ -33,6 +34,7 @@ from ..services.clustering import (
 )
 
 console = Console()
+logger = logging.getLogger(__name__)
 app = typer.Typer(help="Explore what your knowledge base knows")
 
 # Re-export for backwards compatibility with tests that import from here
@@ -444,8 +446,9 @@ def _detect_gaps(
                     f'Epic without docs: "{epic["title"]}" '
                     f"(task #{epic['id']}) has no matching topic cluster"
                 )
-    except Exception:
-        pass  # Tasks table might not have epics
+    except Exception as e:
+        # Tasks table might not have epics
+        logger.warning(f"Failed to query epics for gap detection: {e}")
 
     return gaps
 

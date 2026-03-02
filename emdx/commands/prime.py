@@ -5,6 +5,7 @@ This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
 """
 
+import logging
 import subprocess
 from datetime import datetime, timezone
 
@@ -29,6 +30,7 @@ from .types import (
 )
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def prime(
@@ -653,7 +655,8 @@ def _get_wiki_status() -> WikiPrimeStatus | None:
             articles_generated=articles[0] if articles else 0,
             stale_articles=stale[0] if stale else 0,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to query wiki status tables: {e}")
         return None
 
 
@@ -668,8 +671,8 @@ def _get_current_branch() -> str | None:
         )
         if proc.returncode == 0:
             return proc.stdout.strip() or None
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to get current git branch: {e}")
     return None
 
 

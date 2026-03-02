@@ -104,7 +104,7 @@ def wiki_overview(ctx: typer.Context) -> None:
                 "SELECT COALESCE(SUM(cost_usd), 0) FROM wiki_articles"
             ).fetchone()
             recent_rows = conn.execute(
-                "SELECT wt.id, wt.topic_label, wa.doc_id "
+                "SELECT wt.id, wt.topic_label, wa.document_id "
                 "FROM wiki_articles wa "
                 "JOIN wiki_topics wt ON wa.topic_id = wt.id "
                 "ORDER BY wa.generated_at DESC LIMIT 5"
@@ -163,7 +163,7 @@ def wiki_view(
 
     with _db.get_connection() as conn:
         row = conn.execute(
-            "SELECT doc_id FROM wiki_articles WHERE topic_id = ?",
+            "SELECT document_id FROM wiki_articles WHERE topic_id = ?",
             (topic_id,),
         ).fetchone()
 
@@ -219,7 +219,10 @@ def wiki_search(
     results = search_documents(search_query, limit=limit, doc_type="wiki")
 
     if not results:
-        console.print(f"[yellow]No wiki articles found for '{search_query}'[/yellow]")
+        if json_output:
+            print("[]")
+        else:
+            console.print(f"[yellow]No wiki articles found for '{search_query}'[/yellow]")
         return
 
     if json_output:

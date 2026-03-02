@@ -165,7 +165,7 @@ class KnowledgeGraphPanel(Widget):
                 other_title = link["source_title"]
 
             score = link.get("similarity_score", 0)
-            method = link.get("method", "")
+            method = link.get("link_type", "")
             title_trunc = (other_title or "")[:40]
 
             line = Text("  ")

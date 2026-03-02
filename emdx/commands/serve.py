@@ -100,7 +100,7 @@ def _view_document(params: dict[str, Any]) -> dict[str, Any] | None:
                 "doc_id": other_id,
                 "title": other_title,
                 "similarity_score": link["similarity_score"],
-                "method": link["method"],
+                "method": link["link_type"],
             }
         )
     result["linked_docs"] = linked_docs
