@@ -274,7 +274,8 @@ def list_tasks(
                     WHEN 'done' THEN 4
                     WHEN 'wontdo' THEN 5
                 END,
-                priority,
+                CASE WHEN status IN ('done', 'wontdo') THEN 0 ELSE priority END,
+                CASE WHEN status IN ('done', 'wontdo') THEN completed_at ELSE NULL END DESC,
                 created_at DESC
             LIMIT ?
         """,

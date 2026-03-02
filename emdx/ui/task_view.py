@@ -426,7 +426,9 @@ class TaskView(Widget):
     async def _load_tasks(self, *, restore_row: int | None = None) -> None:
         """Load all manual tasks from the database."""
         try:
-            self._tasks = list_tasks(limit=200)
+            active_tasks = list_tasks(status=["open", "active", "blocked", "failed"], limit=500)
+            done_tasks = list_tasks(status=["done", "wontdo"], limit=200)
+            self._tasks = active_tasks + done_tasks
         except Exception as e:
             logger.error(f"Failed to load tasks: {e}")
             self._tasks = []
