@@ -381,7 +381,7 @@ Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and 
 
 ## Claude Code Plugin
 
-emdx ships as a Claude Code plugin with skills in the `.claude/skills/` directory. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
+emdx ships as a Claude Code plugin with skills in the `skills/` directory at the repo root. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
 
 **Available skills:** `/emdx:bootstrap`, `/emdx:prime`, `/emdx:prioritize`, `/emdx:research`, `/emdx:save`, `/emdx:setup`, `/emdx:tasks`, `/emdx:wrapup`
 

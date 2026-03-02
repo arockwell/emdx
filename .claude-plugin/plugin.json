@@ -13,39 +13,5 @@
     "research",
     "persistence",
     "memory"
-  ],
-  "skills": [
-    {
-      "name": "bootstrap",
-      "description": "Bootstrap a knowledge base from a codebase. Reads source code, docs, git history, and CLAUDE.md to generate foundational KB documents covering architecture, components, patterns, history, and operations. Use when starting a new emdx KB for a project or rebuilding after data loss."
-    },
-    {
-      "name": "prime",
-      "description": "Start a session by loading current work context from emdx \u2014 ready tasks, in-progress work, and recent documents."
-    },
-    {
-      "name": "prioritize",
-      "description": "AI-assisted task triage \u2014 analyze all ready tasks and recommend priorities based on epic progress, dependencies, category, and age."
-    },
-    {
-      "name": "research",
-      "description": "Search the emdx knowledge base for existing research, analysis, and decisions before starting new work. Use when investigating a topic, starting a task, or looking for prior art."
-    },
-    {
-      "name": "save",
-      "description": "Save findings, analysis, or decisions to the emdx knowledge base. Use when you have research results, investigation notes, or decisions worth persisting across sessions."
-    },
-    {
-      "name": "setup",
-      "description": "Install and configure the emdx CLI tool. Run this once to set up emdx on your system."
-    },
-    {
-      "name": "tasks",
-      "description": "Manage tasks in the emdx knowledge base \u2014 add, prioritize, and track work items with epics and categories."
-    },
-    {
-      "name": "wrapup",
-      "description": "End a session cleanly \u2014 save unfinished work, update task statuses, and create tasks for remaining work."
-    }
   ]
 }
