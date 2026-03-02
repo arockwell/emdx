@@ -73,6 +73,14 @@ Stale worktrees can accumulate and block `gh pr checkout` and other git operatio
 - Use `git worktree remove <path>` to remove stale worktrees
 - If `gh pr checkout` fails due to existing worktrees, clone to `/tmp` instead
 
+### Agent Worktree Patch Collection
+
+When using `isolation: "worktree"` agents that create new files (not just modifications):
+- `git diff` only captures modifications to tracked files — new/untracked files must be copied manually from the agent's worktree path (`.claude/worktrees/agent-<id>/`)
+- After copying, run `ruff check --fix` and `ruff format` — agent code may not match project formatting exactly
+- When multiple agents touch the same file, apply their patches sequentially with `git apply` and check for conflicts between each
+- Always run the full test suite after combining all patches, not just individual agent tests
+
 ## Code Quality — MANDATORY
 
 **Pre-commit hooks are active** (ruff lint, ruff format, mypy on staged files). They run automatically on `git commit`. Config: `.pre-commit-config.yaml`. To run manually: `poetry run pre-commit run --files <files>`.
