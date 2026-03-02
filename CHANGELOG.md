@@ -35,6 +35,10 @@ Wiki articles are now automatically flagged as stale when their source documents
 - **TUI task ordering** — task browser matches prime behavior: active tasks before ready, done tasks sorted by completion date (#975, #970)
 - **Plugin skills refined** — removed thin wrapper skills, added `investigate` and `review` skills (#974)
 - **Documentation overhaul** — cli-api.md updated with task plan/brief/hooks, new plugin-guide.md, skills-reference.md, and agent-workflow.md (#978)
+- **Consistency auditor agent** — new `.claude/agents/consistency-auditor.md` for automated codebase audits with worktree isolation (#981)
+- **`/swarm` command** — new slash command for parallel agent orchestration (#980)
+- **Save hook scoped to substantive agents** — only `explore`, `plan`, and `general-purpose` agent output is saved to KB; skips trivial `unknown` type noise (#985)
+- **Stop hook removed** — `save-output.sh` now fires only on SubagentStop, not Stop, reducing redundant saves (#982)
 
 ### 🐛 Bug Fixes
 
@@ -54,6 +58,8 @@ Wiki articles are now automatically flagged as stale when their source documents
 - **Plugin marketplace.json missing** — added for plugin discoverability (#968)
 - Fixed `--ask` error message referencing wrong flag name (#978)
 - Fixed duplicate ID prefix in task lifecycle messages (#978)
+- **Knowledge graph panel rendered off-screen** — toggling with `g` key didn't layout correctly (#984)
+- **Task browser detail pane empty on load** — first task row now auto-selected so detail pane populates immediately (#983)
 
 ### 🗑️ Removed
 
