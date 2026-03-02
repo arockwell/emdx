@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-03-02
+
+**Cloud backup, graph context, smart priming, and onboarding.** This release adds cloud backup to GitHub Gists, a graph-walking `emdx context` command for assembling related documents into a single bundle, context-aware priming with `--smart`, and a first-run onboarding experience that bootstraps new users with tutorial docs and starter tasks. The `find --ask` pipeline gained `--machine` output for scripting, tag/recency scoping, and three commands were promoted to top-level shortcuts: `emdx stale`, `emdx touch`, and `emdx compact`. A major consistency audit fixed 11 bugs including a critical `--dry-run` flag that wasn't actually dry.
+
+### 🚀 Major Features
+
+#### Cloud Backup to GitHub Gists (#954)
+Back up your knowledge base to GitHub Gists with `emdx maintain cloud-backup upload`. Backups are compressed and encrypted, with `list` and `download` subcommands for managing remote copies. Requires a GitHub token with gist scope.
+
+#### Graph-Aware Context Assembly: `emdx context` (#916)
+New command that walks the document link graph from a seed document, collecting related content into a single context bundle. `emdx context 87` traverses outward from doc #87; `--depth` and `--max-tokens` control how far and how much. `--seed "auth error"` finds starting documents from a text query. Useful for assembling focused context windows for LLM prompts.
+
+#### Smart Priming: `emdx prime --smart` (#946)
+Context-aware priming that adapts to your recent activity. Instead of dumping all ready tasks, `--smart` analyzes recent documents, in-progress work, and knowledge hotspots to produce a focused context injection — particularly useful when resuming work after a break.
+
+#### First-Run Onboarding (#917)
+New users now get a guided introduction on first launch. The onboarding creates tutorial documents explaining core concepts and starter tasks that walk through basic workflows — save, find, tag, and task management. Runs automatically on first `emdx` invocation when the database is empty.
+
+### 🔧 Improvements
+
+- **Top-level `emdx stale` and `emdx touch`** — promoted from `maintain` subcommands for quick access to staleness checks and review marking (#947)
+- **Top-level `emdx compact`** — `emdx compact` now works directly as an alias for `maintain compact` (#951)
+- **`find --ask` scripting support** — `--machine` flag outputs pipe-friendly ANSWER/SOURCES/CONFIDENCE blocks; `--tags` and `--recent-days` scope retrieval to matching documents (#948)
+- **JSON output for compact and entities** — both `maintain compact --json` and `maintain entities --json` now produce structured output instead of Rich tables (#955)
+- **Skills relocated to plugin-discoverable path** — skills moved from `.claude/skills/` to the plugin-standard `skills/` directory with `marketplace.json` for plugin discovery (#941, #943, #944)
+- **Dead TUI code removed** — ~1,500 lines of unused TUI code cleaned up (#953)
+- **Lazy-load maintain command** — deferred sklearn/scipy imports save ~0.84s on every non-maintain invocation (#976)
+
+### 🐛 Bug Fixes
+
+- **`maintain --auto --dry-run` performed real mutations** — the `--dry-run` flag wasn't propagated to sub-operations, causing actual deletions and merges. Fixed by threading the flag through all callsites (#976)
+- **`maintain` wizard crashed with `ModuleNotFoundError: emdx.commands.gc`** — referenced a module that never existed; now skips gracefully (#976)
+- **`briefing --json` produced invalid JSON** — `console.print()` rendered `\n` escapes as real newlines; switched to `print()` (#976)
+- **`find --all --no-tags` ignored the filter** — wired the parameter into `_find_list_all()` (#976)
+- **Duplicate ID prefix in task lifecycle messages** — e.g. "FIX-FIX-25" instead of "FIX-25" (#976)
+- **`task add ""` accepted empty titles** — added validation for empty strings (#976)
+- **`task add --epic 999999` said "Task not found"** — changed to "Epic not found" (#976)
+- **`history --json` returned plain text with no versions** — now returns proper JSON (#976)
+- **`wiki generate --dry-run` required `--all`** — now defaults to all topics (#976)
+- **`LazyCommand` inherited deprecated `MultiCommand`** — switched to `click.Group` for Click 9.0 compatibility (#976)
+- **`--ask` error message referenced wrong flag** — said "use --answer" instead of "use --ask" (#976)
+- Prevented SubagentStop hook from falsely marking agents as errored (#942)
+- Removed stale delegate column references (`output_doc_id`, `prompt`) from queries (#944)
+- Stripped ANSI escape codes in test assertions for reliable CI (#932, #947)
+- Added `type: ignore` for `googleapiclient` TYPE_CHECKING import (#954)
+
+[0.27.0]: https://github.com/arockwell/emdx/compare/v0.26.0...v0.27.0
+
 ## [0.26.0] - 2026-03-01
 
 **Knowledge intelligence and infrastructure overhaul.** This release adds a suite of "thinking" modes to search — deliberative reasoning, devil's advocate challenges, Socratic debugging, and inline citations — plus five new `maintain` subcommands for detecting stale work, code drift, contradictions, freshness decay, and knowledge gaps. Standing queries let you save searches and get alerted on new matches. The delegate system (~13,000 lines) has been removed in favor of native Claude Code agents, document versioning and event history are now tracked automatically, and the migration engine was rewritten to use set-based tracking that survives branch divergence. Daily backups now happen automatically with logarithmic retention.

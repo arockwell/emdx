@@ -1,6 +1,6 @@
 {
   "name": "emdx",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "Knowledge base skills for Claude Code. Save research, maintain session memory, and keep knowledge current across conversations.",
   "author": {
     "name": "Alex Rockwell"
@@ -8,7 +8,12 @@
   "homepage": "https://github.com/arockwell/emdx",
   "repository": "https://github.com/arockwell/emdx",
   "license": "MIT",
-  "keywords": ["knowledge-base", "research", "persistence", "memory"],
+  "keywords": [
+    "knowledge-base",
+    "research",
+    "persistence",
+    "memory"
+  ],
   "skills": [
     {
       "name": "bootstrap",
@@ -16,11 +21,11 @@
     },
     {
       "name": "prime",
-      "description": "Start a session by loading current work context from emdx — ready tasks, in-progress work, and recent documents."
+      "description": "Start a session by loading current work context from emdx \u2014 ready tasks, in-progress work, and recent documents."
     },
     {
       "name": "prioritize",
-      "description": "AI-assisted task triage — analyze all ready tasks and recommend priorities based on epic progress, dependencies, category, and age."
+      "description": "AI-assisted task triage \u2014 analyze all ready tasks and recommend priorities based on epic progress, dependencies, category, and age."
     },
     {
       "name": "research",
@@ -36,11 +41,11 @@
     },
     {
       "name": "tasks",
-      "description": "Manage tasks in the emdx knowledge base — add, prioritize, and track work items with epics and categories."
+      "description": "Manage tasks in the emdx knowledge base \u2014 add, prioritize, and track work items with epics and categories."
     },
     {
       "name": "wrapup",
-      "description": "End a session cleanly — save unfinished work, update task statuses, and create tasks for remaining work."
+      "description": "End a session cleanly \u2014 save unfinished work, update task statuses, and create tasks for remaining work."
     }
   ]
 }

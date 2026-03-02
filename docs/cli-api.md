@@ -162,6 +162,8 @@ emdx find "auth" --all-types
 - `--watch-check` - Check all standing queries for new matches
 - `--watch-remove INTEGER` - Remove a standing query by ID
 - `--context` - Output retrieved context as plain text (for piping to claude)
+- `--machine` - Pipe-friendly output for `--ask`: ANSWER/SOURCES/CONFIDENCE blocks
+- `--recent-days INTEGER` - Scope `--ask` retrieval to documents from the last N days
 - `--wiki` - Show only wiki articles (`doc_type='wiki'`)
 - `--all-types` - Show all document types (user, wiki, etc.)
 
@@ -438,6 +440,25 @@ emdx maintain backup --json
 
 > **Tip:** Backups can be triggered automatically via Claude Code hooks (e.g., on session start). Use `--quiet` for silent hook-driven backups.
 
+#### **emdx maintain cloud-backup**
+Upload, list, and download knowledge base backups from GitHub Gists. Requires a GitHub token with `gist` scope.
+
+```bash
+# Upload backup to GitHub Gists
+emdx maintain cloud-backup upload
+
+# List cloud backups
+emdx maintain cloud-backup list
+
+# Download a cloud backup by gist ID
+emdx maintain cloud-backup download <gist_id>
+```
+
+**Subcommands:**
+- `upload` - Upload a compressed backup to GitHub Gists
+- `list` - List existing cloud backups
+- `download` - Download a cloud backup by gist ID
+
 #### **emdx maintain drift**
 Detect abandoned or forgotten work in your knowledge base. Analyzes task and epic timestamps to surface stale epics, orphaned active tasks, and documents linked to stale work.
 
@@ -614,6 +635,7 @@ emdx maintain entities --all --rebuild
 - `--wikify / --no-wikify` - Also create entity-match links (default: wikify)
 - `--rebuild` - Clear entity-match links before regenerating
 - `--cleanup` - Remove noisy entities and re-extract with current filters
+- `--json` - Output as JSON
 
 #### **emdx maintain compact**
 AI-powered document synthesis to reduce knowledge base sprawl (moved from top-level `compact`).
@@ -645,6 +667,7 @@ emdx maintain compact --yes
 - `--topic TEXT` - Filter to documents matching this topic
 - `--model, -m TEXT` - Model to use for synthesis
 - `--yes, -y` - Skip confirmation prompts
+- `--json` - Output as JSON
 
 #### **emdx maintain index**
 Build and manage the embedding index (moved from `emdx ai index`).
@@ -790,6 +813,60 @@ emdx wiki export ./wiki-site --build
 
 ## 📊 **Information Commands**
 
+### **emdx stale**
+Show documents needing review, prioritized by urgency. Top-level shortcut for `emdx maintain stale list`.
+
+```bash
+# Show stale documents
+emdx stale
+
+# Show only critical tier
+emdx stale --tier critical
+```
+
+### **emdx touch**
+Mark a document as reviewed without incrementing the view count. Top-level shortcut for `emdx maintain stale touch`.
+
+```bash
+# Touch a single document
+emdx touch 42
+
+# Touch multiple documents
+emdx touch 42 43 44
+```
+
+### **emdx compact**
+Top-level shortcut for `emdx maintain compact`. AI-powered document synthesis to reduce knowledge base sprawl.
+
+```bash
+# Dry run: show clusters without synthesizing
+emdx compact --dry-run
+
+# Automatically synthesize all discovered clusters
+emdx compact --auto
+```
+
+See [emdx maintain compact](#emdx-maintain-compact) for full options.
+
+### **emdx context**
+Assemble a context bundle by walking the document link graph from a seed document. Useful for building focused context windows for LLM prompts.
+
+```bash
+# Walk graph from doc #87
+emdx context 87
+
+# Control traversal depth and token budget
+emdx context 87 --depth 3 --max-tokens 6000
+
+# Find seed documents from a text query
+emdx context --seed "auth error"
+```
+
+**Options:**
+- `--depth INTEGER` - Maximum graph traversal depth (default: 2)
+- `--max-tokens INTEGER` - Maximum token budget for the context bundle
+- `--seed TEXT` - Find seed documents from a text query instead of specifying an ID
+
 ### **emdx trash**
 Manage deleted documents.
 
@@ -840,6 +917,9 @@ Inject knowledge base context for Claude Code sessions. Shows ready tasks, in-pr
 # Full context injection
 emdx prime
 
+# Context-aware priming (adapts to recent activity)
+emdx prime --smart
+
 # Compact output (tasks + epics only, no git/docs)
 emdx prime --brief
 
@@ -851,6 +931,7 @@ emdx prime --quiet
 ```
 
 **Options:**
+- `--smart, -s` - Context-aware priming: adapts output based on recent activity, in-progress work, and knowledge hotspots
 - `--brief, -b` - Compact output: tasks + epics, no git/docs
 - `--json` - Output as JSON
 - `--quiet, -q` - Suppress output (errors only)
