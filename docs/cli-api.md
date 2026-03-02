@@ -1068,11 +1068,12 @@ Shows relationship data for the selected document in a collapsible bottom panel.
 - `o` - Filter: open tasks
 - `i` - Filter: active tasks
 - `x` - Filter: blocked tasks
-- `f` - Filter: done/failed/wontdo
+- `f` - Filter: done/failed/wontdo/duplicate
 - `*` - Show all (clear status filter)
 - `d` - Mark done
 - `a` - Mark active
 - `w` - Mark won't do
+- `p` - Mark duplicate
 - `r` - Refresh
 - `?` - Help
 
@@ -1367,6 +1368,10 @@ emdx task blocked 42 --reason "Waiting on API key"
 emdx task wontdo 42
 emdx task wontdo TOOL-12
 emdx task wontdo 42 --note "Superseded by #55"
+
+# Mark task as duplicate
+emdx task duplicate 42
+emdx task duplicate 42 --note "Same as FEAT-10"
 ```
 
 **`active` Options:**
@@ -1383,6 +1388,9 @@ emdx task wontdo 42 --note "Superseded by #55"
 **`wontdo` Options:**
 - `--note, -n TEXT` - Reason for closing (logged to task work log)
 - `--json` - Output as JSON
+
+**`duplicate` Options:**
+- `--note, -n TEXT` - Reason/reference for the duplicate (logged to task work log)
 
 ### Setting Priority
 
