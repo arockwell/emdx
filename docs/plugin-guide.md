@@ -110,9 +110,9 @@ The plugin includes three session hooks that run automatically. These are config
 
 **prime.sh** — Injects KB context into Claude's conversation. Runs `emdx prime` to show ready tasks, in-progress work, and recent documents. If `EMDX_TASK_ID` is set, it also activates that task and injects a task brief. If `EMDX_DOC_ID` is set, it injects that document's content.
 
-### Stop / SubagentStop hook
+### SubagentStop hook
 
-**save-output.sh** — Saves Claude's output to the KB after each turn. Filters out short messages (< 200 chars) to avoid noise. Auto-detects PR URLs and adds a `has-pr` tag. If `EMDX_TASK_ID` is set, links the saved document to that task.
+**save-output.sh** — Saves subagent output to the KB when a subagent completes. Filters out short messages (< 200 chars) to avoid noise. Auto-detects PR URLs and adds a `has-pr` tag. If `EMDX_TASK_ID` is set, links the saved document to that task.
 
 ### Hook summary
 
@@ -120,7 +120,7 @@ The plugin includes three session hooks that run automatically. These are config
 |------|-------|--------------|
 | `auto-backup.sh` | SessionStart | Daily KB backup |
 | `prime.sh` | SessionStart | Injects task context and ready work |
-| `save-output.sh` | Stop, SubagentStop | Saves agent output to KB |
+| `save-output.sh` | SubagentStop | Saves subagent output to KB |
 
 ## Environment Variables
 

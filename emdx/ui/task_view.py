@@ -297,6 +297,7 @@ class TaskView(Widget):
         self._filter_text: str = ""
         self._debounce_timer: Timer | None = None
         self._status_filter: set[str] | None = None  # None = show all
+        self._initial_select_done = False
         self._group_by: str = "status"  # "status" or "epic"
         self._epic_filter: str | None = None  # Filter to specific epic key
         self._zoomed: bool = False
@@ -373,7 +374,11 @@ class TaskView(Widget):
         def _deferred_select_first_task() -> None:
             self._update_sidebar_visibility()
             self._sync_title_width()
-            self._select_first_task_row()
+            table = self.query_one("#task-table", DataTable)
+            if table.size.width > 0 and table.size.height > 0:
+                self._select_first_task_row()
+                self._initial_select_done = True
+            # else: on_resize will handle it once layout completes
 
         self.call_after_refresh(_deferred_select_first_task)
 
@@ -381,6 +386,9 @@ class TaskView(Widget):
         """Toggle sidebar visibility and sync title column width."""
         self._update_sidebar_visibility()
         self._sync_title_width()
+        if not self._initial_select_done:
+            self._select_first_task_row()
+            self._initial_select_done = True
 
     def _update_sidebar_visibility(self) -> None:
         """Show/hide sidebar based on current width."""
@@ -739,12 +747,14 @@ class TaskView(Widget):
                     self._render_task_row(table, task)
 
     def _select_first_task_row(self) -> None:
-        """Move cursor to the first status header row so the group label is visible."""
+        """Move cursor to the first actual task row with the header visible above."""
         table = self.query_one("#task-table", DataTable)
         for i, row in enumerate(table.ordered_rows):
             key = str(row.key.value)
-            if key.startswith(HEADER_PREFIX):
-                table.move_cursor(row=i)
+            if key in self._row_key_to_task:
+                # scroll=False prevents DataTable from auto-scrolling the cursor
+                # to the top of the viewport, which would hide the header above.
+                table.move_cursor(row=i, scroll=False)
                 return
 
     def _select_row_by_key(self, key: str) -> None:
