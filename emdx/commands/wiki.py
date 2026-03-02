@@ -11,7 +11,10 @@ import logging
 import re
 import subprocess
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from ..services.types import WikiQualityResult
 
 import typer
 from rich import box
@@ -1332,7 +1335,7 @@ def wiki_quality(
     _print_quality_table(results, threshold)
 
 
-def _print_quality_single(result: dict[str, object]) -> None:
+def _print_quality_single(result: WikiQualityResult) -> None:
     """Print a single article's quality scores in plain text."""
     print(f"Article: {result.get('article_title', '?')}")
     print(f"Topic:   {result.get('topic_label', '?')} (#{result['topic_id']})")
@@ -1348,7 +1351,7 @@ def _print_quality_single(result: dict[str, object]) -> None:
 
 
 def _print_quality_table(
-    results: list[dict[str, object]],
+    results: list[WikiQualityResult],
     threshold: float | None,
 ) -> None:
     """Print a quality ranking table in plain text."""
@@ -1378,10 +1381,10 @@ def _print_quality_table(
         print(f"{tid:>4}  {comp:>9}  {cov:>5}  {fre:>5}  {coh:>5}  {src:>5}  {title}")
 
 
-def _fmt_score(value: object) -> str:
+def _fmt_score(value: float) -> str:
     """Format a score value for display."""
     try:
-        return f"{float(str(value)):.2f}"
+        return f"{value:.2f}"
     except (ValueError, TypeError):
         return "  -  "
 

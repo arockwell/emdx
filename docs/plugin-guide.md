@@ -112,7 +112,7 @@ The plugin includes three session hooks that run automatically. These are config
 
 ### SubagentStop hook
 
-**save-output.sh** — Saves subagent output to the KB when a subagent completes. Filters out short messages (< 200 chars) to avoid noise. Auto-detects PR URLs and adds a `has-pr` tag. If `EMDX_TASK_ID` is set, links the saved document to that task.
+**save-output.sh** — Saves subagent output to the KB when a substantive agent completes. Only fires on SubagentStop (not Stop). Only saves output from substantive agent types: `explore`, `plan`, and `general-purpose` — other agent types (unknown, custom, etc.) are silently skipped. Also filters out short messages (< 200 chars) to avoid noise. Auto-detects PR URLs and adds a `has-pr` tag. If `EMDX_TASK_ID` is set, links the saved document to that task.
 
 ### Hook summary
 
@@ -120,7 +120,7 @@ The plugin includes three session hooks that run automatically. These are config
 |------|-------|--------------|
 | `auto-backup.sh` | SessionStart | Daily KB backup |
 | `prime.sh` | SessionStart | Injects task context and ready work |
-| `save-output.sh` | SubagentStop | Saves subagent output to KB |
+| `save-output.sh` | SubagentStop | Saves output from substantive agents (explore, plan, general-purpose) to KB |
 
 ## Environment Variables
 
