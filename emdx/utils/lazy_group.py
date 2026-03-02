@@ -144,7 +144,7 @@ def register_lazy_commands(
     _LAZY_REGISTRY["help"] = help_strings
 
 
-class LazyCommand(click.MultiCommand):
+class LazyCommand(click.Group):
     """A placeholder command that loads the real command on invocation.
 
     This command appears in help listings with pre-defined help text,
@@ -246,14 +246,14 @@ class LazyCommand(click.MultiCommand):
     def list_commands(self, ctx: click.Context) -> list[str]:
         """List subcommands (delegates to real command if it's a group)."""
         real_cmd = self._load_real_command()
-        if isinstance(real_cmd, click.MultiCommand):
+        if isinstance(real_cmd, click.Group):
             return real_cmd.list_commands(ctx)
         return []
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         """Get a subcommand (delegates to real command if it's a group)."""
         real_cmd = self._load_real_command()
-        if isinstance(real_cmd, click.MultiCommand):
+        if isinstance(real_cmd, click.Group):
             return real_cmd.get_command(ctx, cmd_name)
         return None
 
