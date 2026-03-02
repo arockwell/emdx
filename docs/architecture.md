@@ -72,6 +72,7 @@ emdx/
 │   │   ├── activity_items.py  # item models for activity rows
 │   │   ├── activity_table.py  # flat DataTable with section headers
 │   │   └── sparkline.py       # 7-day activity sparkline
+│   ├── knowledge_graph_panel.py  # linked docs, entities, wiki topics panel
 │   ├── run_browser.py         # execution run browser
 │   ├── task_browser.py        # task management browser
 │   ├── task_view.py           # task detail view
@@ -132,8 +133,7 @@ EMDX has a multi-modal TUI accessible via `emdx gui`:
 ### **Browser Container** (`browser_container.py`)
 - **Activity Mode** (default) - `1`
 - **Task Mode** - `2`
-- **Q&A Mode** - `3`
-- **Quit** - `q` (exits from activity/task/qa; returns to activity from log mode)
+- **Quit** - `q` (exits from activity/task; returns to activity from log mode)
 - **Theme** - `\` cycle theme, `ctrl+t` toggle dark/light
 - **Command Palette** - `ctrl+k` or `ctrl+p`
 
@@ -214,7 +214,8 @@ App (emdx gui)
     │   ├── StatusBar (active count, cost, sparkline)
     │   ├── ActivityTable (flat DataTable with section headers: RUNNING/TASKS/DOCS)
     │   ├── ContextPanel (document metadata, tags, word count)
-    │   └── PreviewPanel (rendered markdown, live log stream, or copy mode)
+    │   ├── PreviewPanel (rendered markdown, live log stream, or copy mode)
+    │   └── KnowledgeGraphPanel (toggle `g`, lazy-loads links/entities/wiki topics)
     └── TaskBrowser (key '2')
         ├── StatusBar (counts by status, filter/group indicators)
         ├── FilterInput (hidden until `/`, debounced text search over title/epic/description)

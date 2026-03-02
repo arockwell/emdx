@@ -16,8 +16,12 @@ import logging
 import math
 import re
 import time
+from typing import TYPE_CHECKING
 
 from ..database import db
+
+if TYPE_CHECKING:
+    from .types import LLMQualityAssessmentResult, WikiQualityResult
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +253,7 @@ def _composite_score(
 
 def score_article(
     topic_id: int,
-) -> dict[str, object]:
+) -> WikiQualityResult:
     """Score a single wiki article by topic ID.
 
     Returns a dict with keys:
@@ -348,7 +352,7 @@ def score_article(
 
 def score_all_articles(
     threshold: float | None = None,
-) -> list[dict[str, object]]:
+) -> list[WikiQualityResult]:
     """Score all wiki articles and persist composite scores.
 
     Args:
@@ -365,7 +369,7 @@ def score_all_articles(
         ).fetchall()
 
     topic_ids = [r[0] for r in topic_rows]
-    results: list[dict[str, object]] = []
+    results: list[WikiQualityResult] = []
 
     for topic_id in topic_ids:
         result = score_article(topic_id)
@@ -383,18 +387,18 @@ def score_all_articles(
             )
             conn.commit()
 
-        if threshold is None or float(str(composite)) < threshold:
+        if threshold is None or composite < threshold:
             results.append(result)
 
     # Sort worst-first
-    results.sort(key=lambda r: float(str(r["composite"])))
+    results.sort(key=lambda r: r["composite"])
     return results
 
 
 def llm_quality_assessment(
     topic_id: int,
     model: str | None = None,
-) -> dict[str, object]:
+) -> LLMQualityAssessmentResult | WikiQualityResult:
     """Run an LLM-based quality assessment on a wiki article.
 
     Sends the article content and source documents to Claude for

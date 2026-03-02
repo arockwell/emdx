@@ -153,7 +153,7 @@ Claude Code hooks in `.claude/settings.json` handle session lifecycle automatica
 |------|-------|-------------|
 | `auto-backup.sh` | SessionStart | Creates a daily KB backup before work begins |
 | `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
-| `save-output.sh` | SubagentStop | Saves subagent output to KB with task linkage |
+| `save-output.sh` | SubagentStop | Saves output from substantive agents (explore, plan, general-purpose) to KB with task linkage |
 
 ### Session Start Protocol
 

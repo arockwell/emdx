@@ -114,3 +114,22 @@ class WikiQualityResult(TypedDict, total=False):
     composite: float
     article_title: str
     error: str  # only present on failure
+
+
+class LLMQualityAssessmentResult(TypedDict, total=False):
+    """Result from llm_quality_assessment().
+
+    On success: topic_id, topic_label, article_title, assessment,
+    overall_grade, scores.
+    On error: topic_id, topic_label, article_title, error, scores.
+    When the underlying score_article() fails, the error result from
+    WikiQualityResult is returned directly (see score_article).
+    """
+
+    topic_id: int
+    topic_label: str
+    article_title: str
+    assessment: str  # LLM output text (success only)
+    overall_grade: str  # A-F grade (success only)
+    scores: WikiQualityResult  # sub-scores from score_article
+    error: str  # only present on failure
