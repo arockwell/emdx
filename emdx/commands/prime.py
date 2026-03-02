@@ -136,6 +136,16 @@ def _output_text(
                     lines.append(_format_epic_line(e))
             lines.append("")
 
+    # In-progress tasks
+    in_progress = _get_in_progress_tasks()
+    if in_progress:
+        lines.append(f"IN-PROGRESS ({len(in_progress)}):")
+        lines.append("")
+        for in_prog_task in in_progress[:5]:
+            label = _task_label(in_prog_task)
+            lines.append(f"  {label}  {in_prog_task['title']}")
+        lines.append("")
+
     # Ready tasks
     ready_tasks = _get_ready_tasks()
     if ready_tasks:
@@ -157,16 +167,6 @@ def _output_text(
         lines.append("")
     else:
         lines.append("No ready tasks. Create new tasks with 'emdx task add'.")
-        lines.append("")
-
-    # In-progress tasks
-    in_progress = _get_in_progress_tasks()
-    if in_progress:
-        lines.append(f"IN-PROGRESS ({len(in_progress)}):")
-        lines.append("")
-        for in_prog_task in in_progress[:5]:
-            label = _task_label(in_prog_task)
-            lines.append(f"  {label}  {in_prog_task['title']}")
         lines.append("")
 
     # Git context — skipped in brief mode
@@ -702,8 +702,8 @@ def _output_json(
         "project": project,
         "timestamp": datetime.now().isoformat(),
         "active_epics": _get_active_epics(),
-        "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
+        "ready_tasks": _get_ready_tasks(),
         "wiki_status": _get_wiki_status(),
     }
 
