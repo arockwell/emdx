@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-03-02
+
+**Wiki intelligence, knowledge graph, and agent orchestration.** This release adds LLM-powered entity extraction with relationship mapping, a knowledge graph panel in the TUI browser, wiki quality scoring across four dimensions, incremental wiki regeneration that auto-flags stale articles, and cross-project auto-linking. Agent orchestration improvements cut startup time from 871ms to 88ms via lazy-loading, and `prime` now shows in-progress work before ready tasks. Two consistency audits (16 bug fixes across 54 files) and a documentation overhaul round out the release.
+
+### 🚀 Major Features
+
+#### LLM-Powered Entity Extraction (#963)
+Opt-in Claude-powered entity extraction via `emdx maintain entities --llm`. Extracts richer entity types (person, organization, technology, location) and discovers relationships between them, stored in a new `entity_relationships` table. Model selection via `--model` flag, defaulting to Haiku for cost efficiency.
+
+#### Knowledge Graph Panel in TUI (#965)
+New panel in the document browser, toggled with `g`. Shows linked documents (clickable to navigate), extracted entities grouped by type with icons, and wiki topics with relevance scores. Data loads lazily for performance.
+
+#### Wiki Quality Scoring (#964)
+Score wiki articles across four dimensions — coverage, freshness, coherence, and source density — with `emdx wiki quality`. Articles are ranked worst-first to prioritize improvement. Optional `--llm` flag enables deep quality assessment. Scores persist to `wiki_articles.quality_score`.
+
+#### Wiki Incremental Regeneration (#962)
+Wiki articles are now automatically flagged as stale when their source documents change. `emdx wiki stale` reports which articles need regeneration; `--regenerate` rebuilds them using existing context. Integrated with the save hook for lightweight staleness checks on every document edit.
+
+#### Cross-Project Auto-Linking (#961)
+`emdx maintain wikify --cross-project` and `emdx maintain entities --cross-project` now create links across project boundaries. Same-project-only remains the default for backward compatibility.
+
+### 🔧 Improvements
+
+- **Agent orchestration** — lazy-load `maintain` module eliminates 700ms scipy import penalty (startup 871ms → 88ms); plugin structure fixed for skill auto-discovery; save hook restored for reliable output capture (#972, #967, #968)
+- **Prime shows active work first** — `emdx prime` now lists in-progress tasks before ready tasks in both text and JSON output (#971)
+- **TUI task ordering** — task browser matches prime behavior: active tasks before ready, done tasks sorted by completion date (#975, #970)
+- **Plugin skills refined** — removed thin wrapper skills, added `investigate` and `review` skills (#974)
+- **Documentation overhaul** — cli-api.md updated with task plan/brief/hooks, new plugin-guide.md, skills-reference.md, and agent-workflow.md (#978)
+- **Consistency auditor agent** — new `.claude/agents/consistency-auditor.md` for automated codebase audits with worktree isolation (#981)
+- **`/swarm` command** — new slash command for parallel agent orchestration (#980)
+- **Save hook scoped to substantive agents** — only `explore`, `plan`, and `general-purpose` agent output is saved to KB; skips trivial `unknown` type noise (#985)
+- **Stop hook removed** — `save-output.sh` now fires only on SubagentStop, not Stop, reducing redundant saves (#982)
+
+### 🐛 Bug Fixes
+
+- **`maintain --auto --dry-run` performed real mutations** — `--dry-run` flag wasn't propagated to sub-operations (#978)
+- **`maintain` wizard crashed with `ModuleNotFoundError: emdx.commands.gc`** — module never existed; now skips gracefully (#978)
+- **`briefing --json` produced invalid JSON** — `console.print()` rendered `\n` as real newlines; switched to `print()` (#978)
+- **`find --all --no-tags` ignored the filter** — wired parameter into `_find_list_all()` (#978)
+- **`task add ""` accepted empty titles** — added validation (#978)
+- **`task add --epic 999999` said "Task not found"** — changed to "Epic not found" (#978)
+- **`history --json` returned plain text with no versions** — now returns proper JSON (#978)
+- **`wiki generate --dry-run` required `--all`** — now defaults to all topics (#978)
+- **`wiki view`/`wiki overview` crash** — `doc_id` column doesn't exist; fixed query (#973)
+- **Done tasks sorted wrong in TUI** — now sorted by `completed_at DESC` instead of `created_at DESC` (#970)
+- **Lazy registry leaked between tests** — restored global registry after each test (#973)
+- **Knowledge graph panel CSS** — switched to class-based selectors for proper widget styling (#965)
+- **`LazyCommand` inherited deprecated `MultiCommand`** — switched to `click.Group` for Click 9.0 compatibility (#973)
+- **Plugin marketplace.json missing** — added for plugin discoverability (#968)
+- Fixed `--ask` error message referencing wrong flag name (#978)
+- Fixed duplicate ID prefix in task lifecycle messages (#978)
+- **Knowledge graph panel rendered off-screen** — toggling with `g` key didn't layout correctly (#984)
+- **Task browser detail pane empty on load** — first task row now auto-selected so detail pane populates immediately (#983)
+
+### 🗑️ Removed
+
+- **Dead delegate cleanup command and ADR** — removed unused `maintain cleanup --delegates` and ADR-004 (#960)
+
+[0.28.0]: https://github.com/arockwell/emdx/compare/v0.27.0...v0.28.0
+
 ## [0.27.0] - 2026-03-01
 
 **Agent-ready knowledge base.** This release focuses on making emdx a better substrate for AI agents — cloud backups to GitHub Gists and Google Drive, graph-aware context assembly for token-budgeted retrieval, smart session priming with activity summaries and staleness detection, machine-readable search output for piping, and a first-run onboarding experience that populates an empty KB with tutorial content. Several maintenance commands gained `--json` output, and ~1,500 lines of dead TUI code were removed.

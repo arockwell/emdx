@@ -609,9 +609,10 @@ emdx maintain wikify --all --dry-run
 **Options:**
 - `--all` - Wikify all documents
 - `--dry-run` - Show matches without creating links
+- `--cross-project` - Create links across project boundaries
 
 #### **emdx maintain entities**
-Extract entities (key concepts, technical terms, proper nouns) from markdown structure and cross-reference them across documents to create links. No AI required.
+Extract entities (key concepts, technical terms, proper nouns) from markdown structure and cross-reference them across documents to create links. Optionally use LLM for richer extraction.
 
 ```bash
 # Extract entities + create links for one document
@@ -635,6 +636,9 @@ emdx maintain entities --all --rebuild
 - `--wikify / --no-wikify` - Also create entity-match links (default: wikify)
 - `--rebuild` - Clear entity-match links before regenerating
 - `--cleanup` - Remove noisy entities and re-extract with current filters
+- `--llm` - Use Claude for richer entity extraction (person, org, technology, location types)
+- `--model TEXT` - Model to use for LLM extraction (default: haiku)
+- `--cross-project` - Create entity-match links across project boundaries
 - `--json, -j` - Output as JSON
 
 #### **emdx maintain compact**
@@ -794,6 +798,8 @@ All existing wiki subcommands are available at `emdx wiki <subcommand>`. See the
 | `merge` | Merge two wiki topics into one |
 | `split` | Split a wiki topic by extracting docs that mention an entity |
 | `sources` | List source documents for a wiki topic with weights and status |
+| `stale` | Check which articles need regeneration due to source document changes |
+| `quality` | Score articles across coverage, freshness, coherence, and source density |
 | `weight` | Set relevance weight for a source document within a topic |
 | `exclude` | Exclude a source document from a wiki topic's synthesis |
 | `include` | Re-include a previously excluded source document in a topic |
@@ -880,8 +886,8 @@ emdx prime --quiet
 ```
 
 **Options:**
-- `--brief, -b` - Compact output: tasks + epics, no git/docs
 - `--smart, -s` - Context-aware priming: recent activity, key docs, knowledge map, stale detection (~500 tokens, no AI calls)
+- `--brief, -b` - Compact output: tasks + epics, no git/docs
 - `--verbose, -v` - Include execution guidance, recent docs, stale docs
 - `--json` - Output as JSON
 - `--quiet, -q` - Minimal output: just ready tasks
