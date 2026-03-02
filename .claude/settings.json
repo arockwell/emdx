@@ -22,18 +22,6 @@
         ]
       }
     ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/hooks/save-output.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "SubagentStop": [
       {
         "matcher": "",
