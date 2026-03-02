@@ -19,5 +19,5 @@ else
     echo "  uv tool install emdx     # recommended"
     echo "  pip install emdx          # alternative"
     echo ""
-    echo "Or run /emdx:setup to install automatically."
+    echo "Then run: emdx status"
 fi

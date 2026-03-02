@@ -194,6 +194,16 @@ def bump_version(new_version: str) -> None:
         plugin_file.write_text(json.dumps(plugin_data, indent=2) + "\n")
         print(f"Updated .claude-plugin/plugin.json to version {new_version}")
 
+    # Update .claude-plugin/marketplace.json
+    marketplace_file = Path(".claude-plugin/marketplace.json")
+    if marketplace_file.exists():
+        mp_data = json.loads(marketplace_file.read_text())
+        for plugin in mp_data.get("plugins", []):
+            if plugin.get("name") == "emdx":
+                plugin["version"] = new_version
+        marketplace_file.write_text(json.dumps(mp_data, indent=2) + "\n")
+        print(f"Updated .claude-plugin/marketplace.json to version {new_version}")
+
 
 def update_changelog(entry: str) -> None:
     """Insert a new entry at the top of the changelog."""

@@ -612,7 +612,21 @@ def restore_document(identifier: Union[str, int]) -> bool:
 def purge_deleted_documents(older_than_days: int | None = None) -> int:
     """Permanently delete soft-deleted documents"""
     with db_connection.get_connection() as conn:
+        # Null out tasks.source_doc_id for documents being purged.
+        # tasks.source_doc_id has no ON DELETE CASCADE/SET NULL, so the DELETE
+        # would fail with "FOREIGN KEY constraint failed" without this cleanup.
         if older_than_days:
+            conn.execute(
+                """
+                UPDATE tasks SET source_doc_id = NULL
+                WHERE source_doc_id IN (
+                    SELECT id FROM documents
+                    WHERE is_deleted = TRUE
+                    AND deleted_at <= datetime('now', '-' || ? || ' days')
+                )
+            """,
+                (older_than_days,),
+            )
             cursor = conn.execute(
                 """
                 DELETE FROM documents
@@ -622,6 +636,14 @@ def purge_deleted_documents(older_than_days: int | None = None) -> int:
                 (older_than_days,),
             )
         else:
+            conn.execute(
+                """
+                UPDATE tasks SET source_doc_id = NULL
+                WHERE source_doc_id IN (
+                    SELECT id FROM documents WHERE is_deleted = TRUE
+                )
+            """
+            )
             cursor = conn.execute(
                 """
                 DELETE FROM documents

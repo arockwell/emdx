@@ -356,8 +356,8 @@ class TaskView(Widget):
             col = table.columns.get(ColumnKey("title"))
             if col:
                 col.auto_width = False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to disable auto_width on title column: {e}")
 
         # Apply initial sidebar visibility based on current width
         self._update_sidebar_visibility()
@@ -420,13 +420,15 @@ class TaskView(Widget):
             if col and col.width != title_w:
                 col.width = title_w
                 col.auto_width = False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to sync title column width: {e}")
 
     async def _load_tasks(self, *, restore_row: int | None = None) -> None:
         """Load all manual tasks from the database."""
         try:
-            self._tasks = list_tasks(limit=200)
+            active_tasks = list_tasks(status=["open", "active", "blocked", "failed"], limit=500)
+            done_tasks = list_tasks(status=["done", "wontdo"], limit=200)
+            self._tasks = active_tasks + done_tasks
         except Exception as e:
             logger.error(f"Failed to load tasks: {e}")
             self._tasks = []
@@ -883,8 +885,8 @@ class TaskView(Widget):
                 }
                 if event.key in vim_keys:
                     return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to check focused widget for vim key passthrough: {e}")
 
         # Status filter keys (only when filter input is not focused)
         if event.key in self.STATUS_FILTERS:
@@ -936,8 +938,8 @@ class TaskView(Widget):
         if self._debounce_timer:
             try:
                 self._debounce_timer.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to stop debounce timer: {e}")
             self._debounce_timer = None
 
         def do_filter() -> None:

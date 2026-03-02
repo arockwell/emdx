@@ -54,7 +54,7 @@ _MOCK_LINKS = [
         "target_title": "Related Architecture Notes",
         "similarity_score": 0.85,
         "created_at": "2025-01-01",
-        "method": "semantic",
+        "link_type": "semantic",
     },
     {
         "id": 2,
@@ -64,7 +64,7 @@ _MOCK_LINKS = [
         "target_title": "Source Doc",
         "similarity_score": 0.72,
         "created_at": "2025-01-02",
-        "method": "entity",
+        "link_type": "entity",
     },
 ]
 

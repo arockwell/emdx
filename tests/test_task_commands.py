@@ -363,7 +363,7 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"],
+            status=None,
             limit=20,
             epic_key=None,
             parent_task_id=None,
@@ -376,7 +376,7 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-a"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"],
+            status=None,
             limit=20,
             epic_key=None,
             parent_task_id=None,

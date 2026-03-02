@@ -86,7 +86,7 @@ class DatabaseForTesting:
                 target_doc_id INTEGER NOT NULL,
                 similarity_score REAL NOT NULL DEFAULT 0.0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                method TEXT NOT NULL DEFAULT 'auto',
+                link_type TEXT NOT NULL DEFAULT 'auto',
                 FOREIGN KEY (source_doc_id)
                     REFERENCES documents(id) ON DELETE CASCADE,
                 FOREIGN KEY (target_doc_id)

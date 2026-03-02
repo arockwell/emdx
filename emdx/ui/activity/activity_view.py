@@ -536,8 +536,8 @@ class ActivityView(HelpMixin, Widget):
             copy_log.clear()
             if self._preview_raw_content.strip():
                 copy_log.write(self._preview_raw_content)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to update copy widget: {e}")
 
     def action_toggle_copy_mode(self) -> None:
         """Toggle between rendered preview and selectable copy mode."""

@@ -86,8 +86,8 @@ class ActivityTable(DataTable[str | Text]):
             col = self.columns.get(ColumnKey("title"))
             if col:
                 col.auto_width = False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to disable auto_width on title column: {e}")
 
     def on_resize(self, event: events.Resize) -> None:
         """Update title column width to fill available space."""
@@ -105,8 +105,8 @@ class ActivityTable(DataTable[str | Text]):
             if col and col.width != w:
                 col.width = w
                 col.auto_width = False
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to sync title column width: {e}")
 
     def _title_fill_width(self) -> int | None:
         """Calculate title column width to exactly fill the table.
@@ -221,9 +221,9 @@ class ActivityTable(DataTable[str | Text]):
                 self.update_cell(row_key, "title", title_text)
                 self.update_cell(row_key, "time", Text(time_str, style="dim"))
                 self.update_cell(row_key, "id", Text(id_str, style="dim"))
-            except Exception:
+            except Exception as e:
                 # Row may not exist yet
-                pass
+                logger.warning(f"Failed to update cell for row {row_key}: {e}")
 
     def _select_row_by_key(self, key: str) -> None:
         """Move cursor to a row by its key string."""

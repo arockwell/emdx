@@ -132,6 +132,28 @@ class TaskTestApp(App[None]):
 # ---------------------------------------------------------------------------
 
 
+def _make_list_tasks_side_effect(
+    mock: MagicMock,
+) -> Any:
+    """Return a side_effect that filters by status like the real list_tasks.
+
+    _load_tasks() calls list_tasks twice with different status filters.
+    This side_effect reads ``mock.return_value`` (set by tests) and filters
+    per-call so existing tests work unchanged.
+    """
+
+    def _side_effect(
+        status: list[str] | None = None,
+        **kwargs: object,
+    ) -> list[TaskDict]:
+        all_tasks: list[TaskDict] = mock.return_value
+        if status is not None:
+            return [t for t in all_tasks if t["status"] in status]
+        return list(all_tasks)
+
+    return _side_effect
+
+
 @pytest.fixture()
 def mock_task_data() -> Generator[MockDict, None, None]:
     """Patch all DB calls in task_view, defaulting to empty lists.
@@ -139,12 +161,14 @@ def mock_task_data() -> Generator[MockDict, None, None]:
     Yields a dict of the mock objects so tests can customise return values.
     """
     with (
-        patch(f"{_MOCK_BASE}.list_tasks", return_value=[]) as m_list,
+        patch(f"{_MOCK_BASE}.list_tasks") as m_list,
         patch(f"{_MOCK_BASE}.list_epics", return_value=[]) as m_epics,
         patch(f"{_MOCK_BASE}.get_dependencies", return_value=[]) as m_deps,
         patch(f"{_MOCK_BASE}.get_dependents", return_value=[]) as m_depts,
         patch(f"{_MOCK_BASE}.get_task_log", return_value=[]) as m_log,
     ):
+        m_list.return_value = []
+        m_list.side_effect = _make_list_tasks_side_effect(m_list)
         yield {
             "list_tasks": m_list,
             "list_epics": m_epics,

@@ -299,7 +299,7 @@ class TestEntityWikify:
         entity_match_wikify(7031)
 
         links = get_links_for_document(7031)
-        entity_links = [lnk for lnk in links if lnk["method"] == "entity_match"]
+        entity_links = [lnk for lnk in links if lnk["link_type"] == "entity_match"]
         assert len(entity_links) >= 1
 
     def test_score_uses_idf_jaccard(self, isolate_test_database: Any) -> None:
@@ -327,7 +327,7 @@ class TestEntityWikify:
         assert result.links_created >= 1
 
         links = get_links_for_document(7041)
-        entity_links = [lnk for lnk in links if lnk["method"] == "entity_match"]
+        entity_links = [lnk for lnk in links if lnk["link_type"] == "entity_match"]
         assert len(entity_links) >= 1
         score = entity_links[0]["similarity_score"]
         assert 0.0 < score <= 1.0
@@ -466,7 +466,7 @@ class TestEntityWikifyAll:
         # Count entity_match links before rebuild
         with db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT COUNT(*) FROM document_links WHERE method = 'entity_match'"
+                "SELECT COUNT(*) FROM document_links WHERE link_type = 'entity_match'"
             )
             count_before = cursor.fetchone()[0]
 
@@ -476,7 +476,7 @@ class TestEntityWikifyAll:
 
         with db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT COUNT(*) FROM document_links WHERE method = 'entity_match'"
+                "SELECT COUNT(*) FROM document_links WHERE link_type = 'entity_match'"
             )
             count_after = cursor.fetchone()[0]
 
