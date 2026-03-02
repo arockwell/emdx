@@ -22,6 +22,7 @@ LAZY_SUBCOMMANDS = {
     "explore": "emdx.commands.explore:app",
     "distill": "emdx.commands.distill:app",
     "compact": "emdx.commands.compact:app",
+    "maintain": "emdx.commands.maintain:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -29,6 +30,7 @@ LAZY_HELP = {
     "explore": "Explore what your knowledge base knows",
     "distill": "Distill KB content into audience-aware summaries",
     "compact": "Reduce KB redundancy through AI synthesis",
+    "maintain": "Maintenance and analysis tools",
 }
 
 
@@ -50,7 +52,6 @@ from emdx.commands.db_manage import app as db_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.history import diff as diff_command  # noqa: E402
 from emdx.commands.history import history as history_command  # noqa: E402
-from emdx.commands.maintain import app as maintain_app  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.serve import serve as serve_command  # noqa: E402
 from emdx.commands.stale import stale_command, touch_command  # noqa: E402
@@ -98,8 +99,7 @@ app.add_typer(trash_app, name="trash", help="Manage deleted documents")
 # Add tasks as a subcommand group
 app.add_typer(tasks_app, name="task", help="Agent work queue")
 
-# Add maintain as a subcommand group (includes maintain, cleanup, cleanup-dirs)
-app.add_typer(maintain_app, name="maintain", help="Maintenance and analysis tools")
+# maintain is lazy-loaded (heavy scipy/sklearn imports via clustering)
 
 # Add wiki as a top-level command group (also available under maintain for backward compat)
 app.add_typer(wiki_app, name="wiki", help="Auto-wiki from your knowledge base")

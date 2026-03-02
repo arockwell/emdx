@@ -44,8 +44,8 @@ _TEMPORAL_PATTERNS = [
     re.compile(r"\b(?:right now|at the moment|currently working on)\b", re.IGNORECASE),
 ]
 
-# Delegate boilerplate patterns
-_DELEGATE_BOILERPLATE = [
+# Agent output boilerplate patterns
+_AGENT_BOILERPLATE = [
     re.compile(r"^Research saved as \*\*#?\d+\*\*.*$", re.MULTILINE),
     re.compile(r"^Saved as #\d+\..*$", re.MULTILINE),
     re.compile(r"^Research complete\. Saved as.*$", re.MULTILINE),
@@ -59,7 +59,7 @@ def preprocess_content(content: str) -> tuple[str, list[str]]:
     """Apply Layer 1 pre-processing filters to document content.
 
     Redacts sensitive data, marks temporal references, and strips
-    delegate boilerplate. Zero cost — pure regex.
+    agent output boilerplate. Zero cost — pure regex.
 
     Args:
         content: Raw document content.
@@ -105,8 +105,8 @@ def preprocess_content(content: str) -> tuple[str, list[str]]:
     for pattern in _TEMPORAL_PATTERNS:
         result = pattern.sub(lambda m: f"[TEMPORAL: {m.group()}]", result)
 
-    # 5. Strip delegate boilerplate
-    for pattern in _DELEGATE_BOILERPLATE:
+    # 5. Strip agent output boilerplate
+    for pattern in _AGENT_BOILERPLATE:
         result = pattern.sub("", result)
 
     # 6. Clean up multiple blank lines left by stripping
@@ -186,7 +186,7 @@ def build_privacy_prompt_section(audience: str = "team") -> str:
         "- [REDACTED] markers — omit the surrounding sentence\n"
         "- [INTERNAL_IP] markers — omit or replace with 'internal server'\n"
         "- [TEMPORAL: X] markers — omit unless the actual date is known\n"
-        "- Delegate execution boilerplate (task IDs, worktree paths)\n"
+        "- Agent output boilerplate (task IDs, execution metadata)\n"
         "- Draft markers (TODO, FIXME, WIP) unless they represent "
         "genuine open questions\n\n"
         "ATTRIBUTION TEST: For each mention of a person, ask: "

@@ -86,3 +86,31 @@ class BackupInfo(TypedDict):
     path: str
     size_bytes: int
     created_at: str
+
+
+# ── Wiki Quality types ─────────────────────────────────────────────
+
+
+class WikiQualityBreakdown(TypedDict):
+    """Per-dimension scores from wiki quality analysis."""
+
+    coverage: float
+    freshness: float
+    coherence: float
+    source_density: float
+
+
+class WikiQualityResult(TypedDict, total=False):
+    """Result from score_article() or score_all_articles()."""
+
+    topic_id: int
+    topic_label: str
+    article_id: int
+    document_id: int
+    coverage: float
+    freshness: float
+    coherence: float
+    source_density: float
+    composite: float
+    article_title: str
+    error: str  # only present on failure

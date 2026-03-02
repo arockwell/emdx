@@ -104,7 +104,7 @@ def wiki_overview(ctx: typer.Context) -> None:
                 "SELECT COALESCE(SUM(cost_usd), 0) FROM wiki_articles"
             ).fetchone()
             recent_rows = conn.execute(
-                "SELECT wt.id, wt.topic_label, wa.doc_id "
+                "SELECT wt.id, wt.topic_label, wa.document_id "
                 "FROM wiki_articles wa "
                 "JOIN wiki_topics wt ON wa.topic_id = wt.id "
                 "ORDER BY wa.generated_at DESC LIMIT 5"
@@ -163,7 +163,7 @@ def wiki_view(
 
     with _db.get_connection() as conn:
         row = conn.execute(
-            "SELECT doc_id FROM wiki_articles WHERE topic_id = ?",
+            "SELECT document_id FROM wiki_articles WHERE topic_id = ?",
             (topic_id,),
         ).fetchone()
 
@@ -219,7 +219,10 @@ def wiki_search(
     results = search_documents(search_query, limit=limit, doc_type="wiki")
 
     if not results:
-        console.print(f"[yellow]No wiki articles found for '{search_query}'[/yellow]")
+        if json_output:
+            print("[]")
+        else:
+            console.print(f"[yellow]No wiki articles found for '{search_query}'[/yellow]")
         return
 
     if json_output:
@@ -478,6 +481,77 @@ def wiki_status() -> None:
                 row_data.append(str(override) if override else "")
             table.add_row(*row_data)
         console.print(table)
+
+
+@wiki_app.command(name="stale")
+def wiki_stale(
+    as_json: bool = typer.Option(False, "--json", help="Output as JSON"),
+    regenerate: bool = typer.Option(False, "--regenerate", help="Regenerate stale articles"),
+    model: str | None = typer.Option(None, "--model", "-m", help="Model override for regeneration"),
+) -> None:
+    """Check wiki articles for staleness and optionally regenerate.
+
+    Compares source document content hashes and topic membership
+    against what was used during article generation.
+
+    Examples:
+        emdx wiki stale                     # Report stale articles
+        emdx wiki stale --json              # Machine-readable output
+        emdx wiki stale --regenerate        # Regenerate stale articles
+        emdx wiki stale --regenerate -m claude-sonnet-4-5-20250929
+    """
+    import json
+
+    from ..services.wiki_staleness_service import check_staleness
+
+    result = check_staleness()
+
+    if as_json:
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    if result["stale_articles"] == 0:
+        print(f"All {result['total_articles']} wiki article(s) are fresh.")
+        return
+
+    print(f"{result['stale_articles']}/{result['total_articles']} article(s) are stale:\n")
+
+    for article in result["details"]:
+        print(f"  Topic #{article['topic_id']}: {article['topic_label']}")
+        print(f"    Reason: {article['stale_reason']}")
+
+        for src in article["changed_sources"]:
+            print(f"    - Source #{src['doc_id']} ({src['doc_title']}) content changed")
+        for mc in article["membership_changes"]:
+            print(f"    - Doc #{mc['doc_id']} ({mc['doc_title']}) {mc['change_type']}")
+        print()
+
+    if not regenerate:
+        return
+
+    # Regenerate stale articles
+    from ..services.wiki_synthesis_service import generate_article
+
+    print("Regenerating stale articles...\n")
+
+    regen_count = 0
+    for article in result["details"]:
+        topic_id = article["topic_id"]
+        gen_result = generate_article(
+            topic_id=topic_id,
+            model=model,
+        )
+        if gen_result.skipped:
+            print(f"  Skipped topic #{topic_id}: {gen_result.skip_reason}")
+        else:
+            regen_count += 1
+            print(
+                f"  Regenerated topic #{topic_id}: "
+                f"{gen_result.topic_label} "
+                f"(${gen_result.cost_usd:.4f})"
+            )
+
+    print(f"\nRegenerated {regen_count} article(s).")
 
 
 @wiki_app.command(name="generate")
@@ -1169,6 +1243,143 @@ def wiki_rate(
 
     stars = "\u2605" * resolved_rating + "\u2606" * (5 - resolved_rating)
     print(f"Rated {row[1]} {stars} ({resolved_rating}/5)")
+
+
+@wiki_app.command(name="quality")
+def wiki_quality(
+    topic: int | None = typer.Option(None, "--topic", "-t", help="Score a single topic by ID"),
+    threshold: float | None = typer.Option(
+        None,
+        "--threshold",
+        help="Only show articles scoring below this value (0.0-1.0)",
+    ),
+    llm: bool = typer.Option(False, "--llm", help="Run LLM-based deep quality assessment"),
+    model: str | None = typer.Option(None, "--model", help="LLM model for --llm assessment"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Score wiki article quality across multiple dimensions.
+
+    Scores each article on coverage, freshness, coherence, and source
+    density (all 0.0-1.0), then computes a weighted composite score.
+    Results are sorted worst-first so you can prioritize improvements.
+
+    Examples:
+        emdx wiki quality                   # Score all articles
+        emdx wiki quality --topic 5         # Score single article
+        emdx wiki quality --threshold 0.5   # Show low-quality only
+        emdx wiki quality --llm --topic 5   # Deep LLM assessment
+        emdx wiki quality --json            # Machine-readable output
+    """
+    import json as json_mod
+
+    from ..services.wiki_quality_service import (
+        llm_quality_assessment,
+        score_all_articles,
+        score_article,
+    )
+
+    if llm and topic is not None:
+        # LLM assessment for a single article
+        result = llm_quality_assessment(topic, model=model)
+        if json_output:
+            print(json_mod.dumps(result, indent=2, default=str))
+        elif "error" in result:
+            print(f"Error: {result['error']}")
+            raise typer.Exit(1)
+        else:
+            print(f"Quality Assessment: {result.get('article_title', '')}")
+            print(f"Grade: {result.get('overall_grade', '?')}")
+            print()
+            print(str(result.get("assessment", "")))
+        return
+
+    if llm and topic is None:
+        print("Error: --llm requires --topic to specify which article")
+        raise typer.Exit(1)
+
+    if topic is not None:
+        # Single article scoring
+        result = score_article(topic)
+        if json_output:
+            print(json_mod.dumps(result, indent=2, default=str))
+        elif "error" in result:
+            print(f"Error: {result['error']}")
+            raise typer.Exit(1)
+        else:
+            _print_quality_single(result)
+        return
+
+    # Score all articles
+    results = score_all_articles(threshold=threshold)
+    if json_output:
+        print(json_mod.dumps(results, indent=2, default=str))
+        return
+
+    if not results:
+        if threshold is not None:
+            print(
+                f"No articles scoring below {threshold:.2f}. "
+                "All articles meet the quality threshold."
+            )
+        else:
+            print("No wiki articles found to score.")
+        return
+
+    _print_quality_table(results, threshold)
+
+
+def _print_quality_single(result: dict[str, object]) -> None:
+    """Print a single article's quality scores in plain text."""
+    print(f"Article: {result.get('article_title', '?')}")
+    print(f"Topic:   {result.get('topic_label', '?')} (#{result['topic_id']})")
+    print()
+    print("Dimension        Score")
+    print("-" * 30)
+    print(f"Coverage         {_fmt_score(result['coverage'])}")
+    print(f"Freshness        {_fmt_score(result['freshness'])}")
+    print(f"Coherence        {_fmt_score(result['coherence'])}")
+    print(f"Source density   {_fmt_score(result['source_density'])}")
+    print("-" * 30)
+    print(f"Composite        {_fmt_score(result['composite'])}")
+
+
+def _print_quality_table(
+    results: list[dict[str, object]],
+    threshold: float | None,
+) -> None:
+    """Print a quality ranking table in plain text."""
+    count = len(results)
+    label = "articles" if count != 1 else "article"
+    if threshold is not None:
+        print(f"{count} {label} below {threshold:.2f} threshold (sorted worst-first):")
+    else:
+        print(f"{count} {label} scored (sorted worst-first):")
+    print()
+
+    # Header
+    header = f"{'ID':>4}  {'Composite':>9}  {'Cov':>5}  {'Fresh':>5}  {'Coh':>5}  {'Src':>5}  Title"
+    print(header)
+    print("-" * len(header))
+
+    for r in results:
+        tid = r["topic_id"]
+        comp = _fmt_score(r["composite"])
+        cov = _fmt_score(r["coverage"])
+        fre = _fmt_score(r["freshness"])
+        coh = _fmt_score(r["coherence"])
+        src = _fmt_score(r["source_density"])
+        title = str(r.get("article_title", ""))
+        if len(title) > 40:
+            title = title[:37] + "..."
+        print(f"{tid:>4}  {comp:>9}  {cov:>5}  {fre:>5}  {coh:>5}  {src:>5}  {title}")
+
+
+def _fmt_score(value: object) -> str:
+    """Format a score value for display."""
+    try:
+        return f"{float(str(value)):.2f}"
+    except (ValueError, TypeError):
+        return "  -  "
 
 
 @wiki_app.command(name="rename")

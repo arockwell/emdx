@@ -97,7 +97,7 @@ def _create_link(
     """Helper to create a document link."""
     conn.execute(
         "INSERT OR IGNORE INTO document_links "
-        "(source_doc_id, target_doc_id, similarity_score, method) "
+        "(source_doc_id, target_doc_id, similarity_score, link_type) "
         "VALUES (?, ?, 0.8, 'auto')",
         (source_id, target_id),
     )

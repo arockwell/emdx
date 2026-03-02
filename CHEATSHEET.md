@@ -168,80 +168,10 @@ $ emdx task view 42  # Shows deps in output
 
 ---
 
-## 🤖 Delegate (Parallel AI Tasks)
-
-### Basic Delegation
-
-```bash
-# Single task
-$ emdx delegate "analyze the auth module"
-
-# Parallel tasks (up to 10 concurrent)
-$ emdx delegate "check auth" "review tests" "scan for XSS"
-
-# Parallel with synthesis (combined summary)
-$ emdx delegate --synthesize "task1" "task2" "task3"
-
-# Control concurrency
-$ emdx delegate -j 5 "t1" "t2" "t3" "t4" "t5" "t6"
-```
-
-### With Context & Output Control
-
-```bash
-# Include document as context
-$ emdx delegate --doc 42 "implement the plan described here"
-
-# Custom title & tags for saved output
-$ emdx delegate --title "Auth Analysis" --tags "analysis,security" "analyze auth"
-
-# Quiet mode (suppress progress, only show results)
-$ emdx delegate -q "quick check"
-
-# Use specific model
-$ emdx delegate --sonnet "fast task"
-$ emdx delegate --opus "complex analysis"
-$ emdx delegate --model haiku "trivial check"
-```
-
-### Code Changes & PRs
-
-```bash
-# Work in isolated worktree
-$ emdx delegate --worktree "experiment with new approach"
-$ emdx delegate -w "refactor auth module"
-
-# Push branch (implies --worktree)
-$ emdx delegate --branch "add logging to auth module"
-
-# Create PR (implies --worktree and --branch)
-$ emdx delegate --pr "fix the auth bug"
-
-# Draft PR
-$ emdx delegate --pr --draft "experimental feature"
-
-# Custom base branch
-$ emdx delegate --branch -b develop "add feature X"
-
-# Track as task
-$ emdx delegate --epic 42 --cat FEAT "implement feature"
-```
-
-### Cleanup
-
-```bash
-# Remove stale worktrees (older than 1 hour)
-$ emdx delegate --cleanup
-```
-
-**Flag Order:** All `--flags` MUST come BEFORE positional arguments.
-
----
-
 ## 📊 Status & Stats
 
 ```bash
-# Delegate activity overview
+# Knowledge base overview
 $ emdx status
 
 # Knowledge base statistics
@@ -340,11 +270,11 @@ $ emdx task done 42
 # 1. Check existing knowledge first
 $ emdx find "topic" --recent
 
-# 2. Run parallel research
-$ emdx delegate --synthesize "aspect1" "aspect2" "aspect3"
+# 2. Research using Claude Code agents directly
+# (use Explore or general-purpose subagents for parallel research)
 
-# 3. Review results
-$ emdx view 123
+# 3. Save findings
+$ echo "research results" | emdx save --title "Topic Analysis" --tags "analysis"
 
 # 4. Tag appropriately
 $ emdx tag add 123 analysis done success
@@ -356,17 +286,13 @@ $ emdx tag add 123 analysis done success
 # 1. Create task
 $ emdx task add "Fix bug X" --cat FIX -D "Details..."
 
-# 2. Delegate with PR
-$ emdx delegate --pr --epic 42 "fix bug X as described in doc"
+# 2. Implement fix (use Claude Code agents for code changes and PRs)
 
 # 3. Check status
 $ emdx status
 
 # 4. After PR merges, mark task done
 $ emdx task done 42
-
-# 5. Clean up worktrees
-$ emdx delegate --cleanup
 ```
 
 ### Bulk Operations
@@ -423,11 +349,6 @@ $ emdx find "bug"
 $ emdx find "error"
 $ emdx find --tags "bug,error" --any-tags
 
-# ❌ DON'T put flags after positional args in delegate
-$ emdx delegate "task" --doc 42  # Won't work
-
-# ✅ DO put flags before positional args
-$ emdx delegate --doc 42 "task"
 ```
 
 ---

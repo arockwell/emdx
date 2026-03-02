@@ -6,7 +6,6 @@
 #   agent_id, session_id, agent_transcript_path
 #
 # Saves substantive output (200+ chars) with agent-type tags.
-# Skips delegate sessions (EMDX_AUTO_SAVE=1) to avoid double-saving.
 set -uo pipefail
 # Note: -e intentionally omitted — the Python heredoc's exit code must not
 # cause bash to report a non-zero exit, which Claude Code interprets as an
@@ -15,12 +14,6 @@ set -uo pipefail
 # Read stdin JSON to a temp file (env vars hit size limits on large payloads)
 TMPFILE=$(mktemp /tmp/emdx-hook-input.XXXXXX)
 cat > "$TMPFILE"
-
-# Skip if inside a delegate session (has its own save pipeline)
-if [[ "${EMDX_AUTO_SAVE:-}" == "1" ]]; then
-    rm -f "$TMPFILE"
-    exit 0
-fi
 
 python3 - "$TMPFILE" << 'PYEOF' || true
 import json

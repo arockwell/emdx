@@ -307,7 +307,7 @@ class TestTitleMatchWikify:
 
         links = get_links_for_document(5111)
         assert len(links) >= 1
-        title_match_links = [lnk for lnk in links if lnk["method"] == "title_match"]
+        title_match_links = [lnk for lnk in links if lnk["link_type"] == "title_match"]
         assert len(title_match_links) == 1
         assert title_match_links[0]["similarity_score"] == pytest.approx(1.0)
 

@@ -2,97 +2,11 @@
 Git utility functions for emdx
 """
 
-import hashlib
 import logging
-import os
-import random
-import re
 import subprocess
-import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-
-
-def slugify_for_branch(text: str, max_length: int = 40) -> str:
-    """Convert text to a git branch-safe slug.
-
-    Examples:
-        "Gameplan #1: Contextual Save" -> "contextual-save"
-        "Smart Priming (context-aware)" -> "smart-priming-context-aware"
-        "Fix the auth bug in login.py" -> "fix-the-auth-bug-in-loginpy"
-    """
-    slug = re.sub(
-        r"^(?:gameplan|feature|plan|doc(?:ument)?|kink\s*\d*[:\s—-]*)\s*#?\d*[:\s—-]*",
-        "",
-        text,
-        flags=re.IGNORECASE,
-    ).strip()
-    slug = re.sub(r"[^a-zA-Z0-9\s-]", "", slug)
-    slug = re.sub(r"\s+", "-", slug).strip("-").lower()
-    return slug[:max_length].rstrip("-") or "task"
-
-
-def create_worktree(
-    base_branch: str = "main",
-    task_title: str | None = None,
-) -> tuple[str, str]:
-    """Create a unique git worktree for isolated execution.
-
-    Args:
-        base_branch: Branch to base the worktree on
-        task_title: Optional title for meaningful branch naming.
-
-    Returns:
-        Tuple of (worktree_path, branch_name)
-    """
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    repo_root = result.stdout.strip()
-
-    if task_title:
-        slug = slugify_for_branch(task_title)
-        hash_input = f"{task_title}-{time.time()}"
-        short_hash = hashlib.sha1(hash_input.encode()).hexdigest()[:5]  # noqa: S324
-        branch_name = f"worktree/{slug}-{short_hash}"
-    else:
-        timestamp = int(time.time())
-        random_suffix = random.randint(1000, 9999)
-        pid = os.getpid()
-        branch_name = f"worktree-{timestamp}-{pid}-{random_suffix}"
-
-    timestamp = int(time.time())
-    random_suffix = random.randint(1000, 9999)
-    pid = os.getpid()
-    unique_id = f"{timestamp}-{pid}-{random_suffix}"
-    worktree_dir = Path(repo_root).parent / f"emdx-worktree-{unique_id}"
-
-    subprocess.run(
-        ["git", "worktree", "add", "-b", branch_name, str(worktree_dir), base_branch],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    return str(worktree_dir), branch_name
-
-
-def cleanup_worktree(worktree_path: str) -> None:
-    """Clean up a worktree after completion.
-
-    Args:
-        worktree_path: Path to the worktree to clean up
-    """
-    try:
-        subprocess.run(
-            ["git", "worktree", "remove", worktree_path, "--force"], capture_output=True, text=True
-        )
-    except Exception as e:
-        logger.warning("Could not clean up worktree %s: %s", worktree_path, e)
 
 
 def get_git_project(path: Path | None = None) -> str | None:

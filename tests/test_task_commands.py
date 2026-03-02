@@ -45,6 +45,16 @@ class TestTaskAdd:
             depends_on=None,
         )
 
+    def test_add_empty_title_rejected(self):
+        result = runner.invoke(app, ["add", ""])
+        assert result.exit_code == 1
+        assert "cannot be empty" in _out(result)
+
+    def test_add_whitespace_title_rejected(self):
+        result = runner.invoke(app, ["add", "   "])
+        assert result.exit_code == 1
+        assert "cannot be empty" in _out(result)
+
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_shows_epic_key(self, mock_tasks):
         mock_tasks.create_task.return_value = 10
@@ -174,6 +184,15 @@ class TestTaskAdd:
             epic_key=None,
             depends_on=None,
         )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_add_task_nonexistent_epic_says_epic_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = None
+        result = runner.invoke(app, ["add", "Test task", "--epic", "999999"])
+        assert result.exit_code == 1
+        out = _out(result)
+        assert "Epic not found" in out
+        assert "Task not found" not in out
 
     def test_add_task_requires_title(self):
         result = runner.invoke(app, ["add"])
@@ -358,12 +377,12 @@ class TestTaskList:
         )
 
     @patch("emdx.commands.tasks.tasks")
-    def test_list_includes_delegate_with_all_flag(self, mock_tasks):
+    def test_list_includes_all_statuses_with_all_flag(self, mock_tasks):
         mock_tasks.list_tasks.return_value = []
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"],
+            status=None,
             limit=20,
             epic_key=None,
             parent_task_id=None,
@@ -376,7 +395,7 @@ class TestTaskList:
         result = runner.invoke(app, ["list", "-a"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
-            status=["open", "active", "blocked"],
+            status=None,
             limit=20,
             epic_key=None,
             parent_task_id=None,

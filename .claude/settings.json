@@ -34,30 +34,18 @@
         ]
       }
     ],
-    "SessionEnd": [
+    "SubagentStop": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/session-end.sh",
-            "timeout": 15
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [],
-    "SubagentStop": [
-      {
-        "matcher": "Explore|general-purpose|Plan",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "hooks/save-subagent-output.sh",
+            "command": ".claude/hooks/save-output.sh",
             "timeout": 30
           }
         ]
       }
-    ]
+    ],
+    "PreToolUse": []
   }
 }

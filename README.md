@@ -41,6 +41,18 @@ uv tool install emdx    # or: pip install emdx
 emdx --help
 ```
 
+## Claude Code Plugin
+
+Use emdx as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plugin for built-in skills:
+
+```bash
+$ claude --plugin-dir /path/to/emdx
+```
+
+**Available skills:** `/emdx:bootstrap`, `/emdx:investigate`, `/emdx:prioritize`, `/emdx:research`, `/emdx:review`, `/emdx:save`, `/emdx:tasks`, `/emdx:work`
+
+Skills give Claude Code native access to your knowledge base — save research, manage tasks, and maintain session memory without leaving the conversation.
+
 ## Save
 
 Files, notes, piped command output — anything you save becomes searchable. Tag things so you can find them by topic later.
@@ -214,6 +226,7 @@ emdx gui                                         # Interactive TUI browser
 | Search wiki articles | `emdx wiki search "query"` |
 | Check KB health | `emdx maintain freshness && emdx maintain gaps` |
 | Detect contradictions | `emdx maintain contradictions` |
+| Use as Claude Code plugin | `claude --plugin-dir /path/to/emdx` |
 
 ## Documentation
 

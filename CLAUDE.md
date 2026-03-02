@@ -36,7 +36,7 @@ poetry run pytest tests/ -x -q  # Run tests
 
 ### Dev Database Isolation
 
-When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of `~/.config/emdx/knowledge.db`. This prevents dev/delegate processes from corrupting the production database.
+When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of `~/.config/emdx/knowledge.db`. This prevents development processes from corrupting the production database.
 
 **Priority chain for database path:**
 1. `EMDX_TEST_DB` — test isolation (set by pytest fixtures)
@@ -55,12 +55,22 @@ Migrations use **set-based tracking** with string IDs. Existing migrations (0-58
 
 Example: `("20260301_120000", "Add new feature", migration_20260301_120000_add_new_feature)`
 
-## Worktree Cleanup
+## Worktree Development
 
-When working in the emdx repo, stale worktrees may accumulate. These can block `gh pr checkout` and other git operations.
+When working in a worktree, the global `emdx` command points to the system install — **not** the worktree code. Always run `poetry install` first, then use `poetry run emdx` to get the worktree's version:
+
+```bash
+poetry install              # Set up venv with worktree code
+poetry run emdx --help      # Uses THIS worktree's code
+emdx --help                 # Uses global install (may be outdated!)
+```
+
+### Worktree Cleanup
+
+Stale worktrees can accumulate and block `gh pr checkout` and other git operations.
 
 - Use `git worktree list` to find active worktrees
-- Use `emdx maintain cleanup --branches --execute` to remove old worktree branches
+- Use `git worktree remove <path>` to remove stale worktrees
 - If `gh pr checkout` fails due to existing worktrees, clone to `/tmp` instead
 
 ## Code Quality — MANDATORY
@@ -135,9 +145,7 @@ Claude Code hooks in `.claude/settings.json` handle session lifecycle automatica
 |------|-------|-------------|
 | `auto-backup.sh` | SessionStart | Creates a daily KB backup before work begins |
 | `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
-| `save-output.sh` | Stop | Saves conversation output to KB after each turn |
-| `session-end.sh` | SessionEnd | Captures session summary on exit |
-| `save-subagent-output.sh` | SubagentStop | Saves subagent output (Explore, general-purpose, Plan) |
+| `save-output.sh` | Stop, SubagentStop | Saves agent output to KB with task linkage |
 
 ### Session Start Protocol
 
@@ -155,15 +163,24 @@ emdx status   # Quick overview
 1. **Check ready tasks** before starting work: `emdx task ready`
 2. **Track progress on multi-step work** — for any task with 3+ steps, create subtasks BEFORE starting:
    ```bash
-   emdx task add "Read and understand relevant code" --epic <id>
-   emdx task add "Implement the changes" --epic <id>
-   emdx task add "Run tests and fix issues" --epic <id>
+   emdx task plan <parent_id> "Read and understand relevant code" "Implement the changes" "Run tests and fix issues"
    emdx task done <id>   # mark each step done as you complete it
    ```
    This gives the user real-time visibility into progress, especially for longer tasks.
 3. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
 4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
 5. **Never end session** without updating task status and creating tasks for remaining work
+
+#### For Agent/Subagent Sessions
+
+1. **Get task brief first**: `emdx task brief $EMDX_TASK_ID` (or `--json`)
+2. **Create subtasks for multi-step work**:
+   `emdx task plan $EMDX_TASK_ID "Step 1" "Step 2" "Step 3"`
+3. **Mark subtasks done** as you complete them: `emdx task done <id>`
+4. **Save significant findings** to KB:
+   `echo "findings" | emdx save --title "Title"`
+5. **Mark parent task done** with output doc when complete:
+   `emdx task done $EMDX_TASK_ID --output-doc <doc_id>`
 
 ### Document Tags vs Task Organization
 
@@ -214,6 +231,8 @@ emdx find "query" --watch              # Save as standing query (alerts on new m
 emdx find --watch-check                # Check standing queries for new matches
 emdx find --watch-list                 # List all standing queries
 emdx find --watch-remove 1             # Remove a standing query by ID
+emdx find --ask --machine "question"   # Pipe-friendly output (ANSWER/SOURCES/CONFIDENCE)
+emdx find --ask --recent-days 7 "q"    # Scope ask to recent docs only
 
 # View
 emdx view 42                           # View document content
@@ -222,9 +241,13 @@ emdx view 42 --review                  # Adversarial review of the document
 
 # Tasks (use --epic and --cat, NOT --tags)
 emdx task add "Title" -D "Details" --epic 898 --cat FEAT
+emdx task plan <parent> "Step 1" "Step 2" "Step 3"  # Batch create subtasks
+emdx task brief <id>                   # Agent-ready task context
+emdx task brief <id> --json            # Structured for programmatic use
 emdx task ready                        # Show unblocked tasks
 emdx task active <id>                  # Mark in-progress
 emdx task done <id>                    # Mark complete
+emdx task done <id> --output-doc <doc> # Complete and link output document
 emdx task epic list                    # See active epics
 emdx task cat list                     # See available categories
 emdx task cat rename OLD NEW           # Rename or merge categories
@@ -232,6 +255,21 @@ emdx task cat rename OLD NEW           # Rename or merge categories
 # Tags
 emdx tag add 42 gameplan active
 emdx tag list
+
+# Priming
+emdx prime                             # Full context injection
+emdx prime --smart                     # Context-aware: recent activity, key docs, knowledge map
+emdx prime --brief                     # Compact: tasks + epics only
+
+# Context assembly
+emdx context 87                        # Graph-walk context bundle from doc 87
+emdx context --seed "auth error"       # Find seeds from text query
+emdx context 87 --depth 3 --max-tokens 6000  # Control traversal and budget
+
+# Staleness
+emdx stale                             # Show documents needing review by urgency
+emdx stale --tier critical             # Show only critical tier
+emdx touch 42                          # Mark doc as reviewed (no view count bump)
 
 # Status
 emdx status                            # Knowledge base overview
@@ -256,6 +294,10 @@ emdx maintain drift                    # Detect stale work items (default 30 day
 emdx maintain drift --days 7           # More aggressive threshold
 emdx maintain contradictions           # Find conflicting claims via NLI
 emdx maintain code-drift               # Detect code references that have drifted
+emdx maintain cloud-backup upload      # Upload backup to GitHub Gists
+emdx maintain cloud-backup list        # List cloud backups
+emdx maintain cloud-backup download <id>  # Download a cloud backup
+emdx compact --dry-run                 # Top-level alias for maintain compact
 
 # Wiki (top-level; `emdx maintain wiki ...` still works)
 emdx wiki                              # Compact wiki overview
@@ -355,14 +397,14 @@ just bump 0.X.Y         # Bump version in pyproject.toml + emdx/__init__.py
 git tag vX.Y.Z && git push --tags
 ```
 
-Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and `.claude-plugin/plugin.json`.
+Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`.
 
 **Doc check:** If new commands or flags were added, verify they appear in `docs/cli-api.md` (subcommand tables + examples) and `CLAUDE.md` (essential commands section).
 
 ## Claude Code Plugin
 
-emdx ships as a Claude Code plugin with skills in the `.claude/skills/` directory. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
+emdx ships as a Claude Code plugin with skills in the `skills/` directory at the repo root. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
 
-**Available skills:** `/emdx:bootstrap`, `/emdx:prime`, `/emdx:prioritize`, `/emdx:research`, `/emdx:save`, `/emdx:setup`, `/emdx:tasks`, `/emdx:wrapup`
+**Available skills:** `/emdx:bootstrap`, `/emdx:investigate`, `/emdx:prioritize`, `/emdx:research`, `/emdx:review`, `/emdx:save`, `/emdx:tasks`, `/emdx:work`
 
 The plugin manifest lives at `.claude-plugin/plugin.json`. Skills follow the [Agent Skills](https://agentskills.io) open standard.

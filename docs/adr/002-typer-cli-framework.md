@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-EMDX requires a robust CLI framework to handle its command-line interface. The CLI is the primary interface for users, supporting commands like `save`, `find`, `view`, `delegate`, and many others. Requirements include:
+EMDX requires a robust CLI framework to handle its command-line interface. The CLI is the primary interface for users, supporting commands like `save`, `find`, `view`, `task`, and many others. Requirements include:
 
 - **Type safety**: Python type hints for better IDE support and error catching
 - **Rich output**: Terminal formatting, colors, and tables for better UX
@@ -37,18 +37,18 @@ We chose **Typer** as the CLI framework.
 
 ```python
 import typer
-from typing import Optional, List
+from typing import Optional
 
-app = typer.Typer(name="delegate", help="Delegate tasks to agents")
+app = typer.Typer(name="task", help="Manage tasks")
 
 @app.command()
-def run(
-    tasks: List[str] = typer.Argument(..., help="Tasks to execute"),
-    synthesize: bool = typer.Option(False, "--synthesize", "-s", help="Combine results"),
-    doc: Optional[int] = typer.Option(None, "--doc", "-d", help="Document ID for context"),
-    worktree: bool = typer.Option(False, "--worktree", "-w", help="Run in isolated worktree"),
+def add(
+    title: str = typer.Argument(..., help="Task title"),
+    description: Optional[str] = typer.Option(None, "--description", "-D", help="Task description"),
+    epic: Optional[int] = typer.Option(None, "--epic", help="Parent epic ID"),
+    category: Optional[str] = typer.Option(None, "--cat", help="Task category"),
 ):
-    """Execute tasks with Claude agents."""
+    """Create a new task."""
     # Implementation...
 ```
 

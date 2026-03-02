@@ -5,6 +5,7 @@ This is the key command for making Claude use emdx natively.
 It outputs priming context that should be injected at session start.
 """
 
+import logging
 import subprocess
 from datetime import datetime, timezone
 
@@ -29,6 +30,7 @@ from .types import (
 )
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 def prime(
@@ -136,6 +138,16 @@ def _output_text(
                     lines.append(_format_epic_line(e))
             lines.append("")
 
+    # In-progress tasks
+    in_progress = _get_in_progress_tasks()
+    if in_progress:
+        lines.append(f"IN-PROGRESS ({len(in_progress)}):")
+        lines.append("")
+        for in_prog_task in in_progress[:5]:
+            label = _task_label(in_prog_task)
+            lines.append(f"  {label}  {in_prog_task['title']}")
+        lines.append("")
+
     # Ready tasks
     ready_tasks = _get_ready_tasks()
     if ready_tasks:
@@ -157,16 +169,6 @@ def _output_text(
         lines.append("")
     else:
         lines.append("No ready tasks. Create new tasks with 'emdx task add'.")
-        lines.append("")
-
-    # In-progress tasks
-    in_progress = _get_in_progress_tasks()
-    if in_progress:
-        lines.append(f"IN-PROGRESS ({len(in_progress)}):")
-        lines.append("")
-        for in_prog_task in in_progress[:5]:
-            label = _task_label(in_prog_task)
-            lines.append(f"  {label}  {in_prog_task['title']}")
         lines.append("")
 
     # Git context — skipped in brief mode
@@ -653,7 +655,8 @@ def _get_wiki_status() -> WikiPrimeStatus | None:
             articles_generated=articles[0] if articles else 0,
             stale_articles=stale[0] if stale else 0,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to query wiki status tables: {e}")
         return None
 
 
@@ -668,8 +671,8 @@ def _get_current_branch() -> str | None:
         )
         if proc.returncode == 0:
             return proc.stdout.strip() or None
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to get current git branch: {e}")
     return None
 
 
@@ -702,8 +705,8 @@ def _output_json(
         "project": project,
         "timestamp": datetime.now().isoformat(),
         "active_epics": _get_active_epics(),
-        "ready_tasks": _get_ready_tasks(),
         "in_progress_tasks": _get_in_progress_tasks(),
+        "ready_tasks": _get_ready_tasks(),
         "wiki_status": _get_wiki_status(),
     }
 

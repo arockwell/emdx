@@ -33,7 +33,7 @@ def create_link(
         try:
             cursor = c.execute(
                 "INSERT INTO document_links "
-                "(source_doc_id, target_doc_id, similarity_score, method) "
+                "(source_doc_id, target_doc_id, similarity_score, link_type) "
                 "VALUES (?, ?, ?, ?)",
                 (source_doc_id, target_doc_id, similarity_score, method),
             )
@@ -79,7 +79,7 @@ def get_links_for_document(doc_id: int) -> list[DocumentLinkDetail]:
         cursor = conn.execute(
             "SELECT l.id, l.source_doc_id, s.title AS source_title, "
             "l.target_doc_id, t.title AS target_title, "
-            "l.similarity_score, l.created_at, l.method "
+            "l.similarity_score, l.created_at, l.link_type "
             "FROM document_links l "
             "JOIN documents s ON l.source_doc_id = s.id "
             "JOIN documents t ON l.target_doc_id = t.id "
@@ -154,7 +154,7 @@ def create_links_batch(
                 c.execute(
                     "INSERT INTO document_links "
                     "(source_doc_id, target_doc_id, "
-                    "similarity_score, method) "
+                    "similarity_score, link_type) "
                     "VALUES (?, ?, ?, ?)",
                     (source_id, target_id, score, method),
                 )

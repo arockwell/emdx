@@ -311,6 +311,11 @@ def _build_json_output(
     blockers: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build JSON output for --json flag."""
+    # Convert comma-joined tag strings to arrays for JSON output
+    for doc in documents:
+        tags = doc.get("tags")
+        doc["tags"] = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+
     return {
         "since": since.isoformat(),
         "generated_at": datetime.now().isoformat(),
@@ -398,7 +403,7 @@ def briefing(
     # Output
     if json_output:
         output = _build_json_output(since_dt, documents, tasks_completed, tasks_added, blockers)
-        console.print(json.dumps(output, indent=2, default=str))
+        print(json.dumps(output, indent=2, default=str))
     else:
         _display_human_briefing(since_dt, documents, tasks_completed, tasks_added, blockers)
 

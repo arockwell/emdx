@@ -33,7 +33,7 @@ type IncomingMessage =
   | { type: "loading"; data: boolean }
   | { type: "error"; data: string };
 
-const STATUS_ORDER: TaskStatus[] = ["open", "active", "blocked", "done", "failed", "wontdo"];
+const STATUS_ORDER: TaskStatus[] = ["active", "open", "blocked", "done", "failed", "wontdo"];
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
   open: "Open",

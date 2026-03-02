@@ -133,7 +133,7 @@ run_migrations()
 
 #### **Dev Database Isolation**
 
-When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of the production database. This prevents dev/delegate processes from corrupting production data.
+When running via `poetry run emdx` (editable install), emdx automatically uses a local `.emdx/dev.db` instead of the production database. This prevents development processes from corrupting production data.
 
 **Priority chain for database path:**
 1. `EMDX_TEST_DB` — test isolation (set by pytest fixtures)

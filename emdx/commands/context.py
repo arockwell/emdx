@@ -80,7 +80,7 @@ def compute_link_score(
     source_score: float,
 ) -> float:
     """Score = source_score * method_weight * link_score * decay^depth."""
-    method = link["method"]
+    method = link["link_type"]
     method_weight = METHOD_WEIGHTS.get(method, 0.5)
     decay = HOP_DECAY**depth
     return source_score * method_weight * link["similarity_score"] * decay
@@ -156,7 +156,7 @@ def traverse_graph(
                     if doc is None:
                         continue
 
-                    method = link["method"]
+                    method = link["link_type"]
                     reason = f"{depth}-hop {method} from #{source_id}"
                     visited[target_id] = ScoredDocument(
                         doc_id=target_id,

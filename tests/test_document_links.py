@@ -253,7 +253,7 @@ class TestDocumentLinksCRUD:
         assert link["target_doc_id"] == 971
         assert link["target_title"] == "Beta Doc"
         assert link["similarity_score"] == pytest.approx(0.9)
-        assert link["method"] == "auto"
+        assert link["link_type"] == "auto"
 
     def test_create_link_with_conn_param(self, isolate_test_database):
         """Test creating a link with explicit connection for atomicity."""

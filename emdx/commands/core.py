@@ -303,7 +303,7 @@ def save(
     if task is not None:
         from emdx.models.tasks import update_task
 
-        update_kwargs: dict[str, Any] = {"output_doc_id": doc_id}
+        update_kwargs: dict[str, Any] = {"source_doc_id": doc_id}
         if mark_done:
             update_kwargs["status"] = "done"
         update_task(task, **update_kwargs)
@@ -603,8 +603,10 @@ def find(
         ask_mode = _resolve_ask_mode(ask, think, challenge, debug, cite)
         if ask_mode is not None:
             if not search_query:
-                mode_name = ask_mode.value
-                console.print(f"[red]Error: --{mode_name} requires a question[/red]")
+                from ..services.ask_service import AskMode
+
+                flag = "ask" if ask_mode == AskMode.ANSWER else ask_mode.value
+                console.print(f"[red]Error: --{flag} requires a question[/red]")
                 raise typer.Exit(1)
             _find_ask(
                 search_query,
@@ -1652,7 +1654,7 @@ def view(
                             "id": link["target_doc_id"],
                             "title": link["target_title"],
                             "similarity": link["similarity_score"],
-                            "method": link["method"],
+                            "method": link["link_type"],
                         }
                     )
                 else:
@@ -1661,7 +1663,7 @@ def view(
                             "id": link["source_doc_id"],
                             "title": link["source_title"],
                             "similarity": link["similarity_score"],
-                            "method": link["method"],
+                            "method": link["link_type"],
                         }
                     )
             output = {
@@ -1706,7 +1708,7 @@ def view(
                     other_id = link["source_doc_id"]
                     other_title = link["source_title"]
                 score = f"{link['similarity_score']:.0%}"
-                table.add_row(str(other_id), score, other_title, link["method"])
+                table.add_row(str(other_id), score, other_title, link["link_type"])
 
             console.print(table)
             return
@@ -1979,6 +1981,15 @@ def edit(
                 console.print(
                     f"[green]✅ Updated title of #{doc['id']} to:[/green] [cyan]{title}[/cyan]"
                 )
+                # Flag wiki articles sourced from this doc as stale
+                try:
+                    from emdx.services.wiki_staleness_service import (
+                        check_doc_staleness,
+                    )
+
+                    check_doc_staleness(doc["id"])
+                except Exception:
+                    pass  # Wiki tables may not exist; non-critical
             else:
                 console.print("[red]Error updating document title[/red]")
                 raise typer.Exit(1)
@@ -2055,6 +2066,16 @@ def edit(
                 if new_title != doc["title"]:
                     console.print(f"   [dim]Title changed from:[/dim] {doc['title']}")
                 console.print("   [dim]Content updated[/dim]")
+
+                # Flag wiki articles sourced from this doc as stale
+                try:
+                    from emdx.services.wiki_staleness_service import (
+                        check_doc_staleness,
+                    )
+
+                    check_doc_staleness(doc["id"])
+                except Exception:
+                    pass  # Wiki tables may not exist; non-critical
             else:
                 console.print("[red]Error updating document[/red]")
                 raise typer.Exit(1)

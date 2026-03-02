@@ -91,7 +91,10 @@ def _build_title_pattern(normalized_title: str) -> re.Pattern[str]:
     return re.compile(r"\b" + escaped + r"\b", re.IGNORECASE)
 
 
-def _load_title_candidates(exclude_doc_id: int | None = None) -> list[TitleCandidate]:
+def _load_title_candidates(
+    exclude_doc_id: int | None = None,
+    project: str | None = None,
+) -> list[TitleCandidate]:
     """Load all document titles as match candidates.
 
     Filters out:
@@ -99,9 +102,19 @@ def _load_title_candidates(exclude_doc_id: int | None = None) -> list[TitleCandi
     - Titles shorter than MIN_TITLE_LENGTH
     - Stopword titles
     - The document being wikified (if exclude_doc_id is set)
+
+    Args:
+        exclude_doc_id: Document ID to exclude from candidates.
+        project: If set, only load candidates from this project.
     """
     with db.get_connection() as conn:
-        cursor = conn.execute("SELECT id, title FROM documents WHERE is_deleted = 0")
+        if project is not None:
+            cursor = conn.execute(
+                "SELECT id, title FROM documents WHERE is_deleted = 0 AND project = ?",
+                (project,),
+            )
+        else:
+            cursor = conn.execute("SELECT id, title FROM documents WHERE is_deleted = 0")
         rows = cursor.fetchall()
 
     candidates: list[TitleCandidate] = []
@@ -144,9 +157,21 @@ def _get_document_content(doc_id: int) -> str | None:
         return row[0] if row else None
 
 
+def _get_document_project(doc_id: int) -> str | None:
+    """Fetch document project by ID."""
+    with db.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT project FROM documents WHERE id = ? AND is_deleted = 0",
+            (doc_id,),
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+
 def title_match_wikify(
     doc_id: int,
     dry_run: bool = False,
+    cross_project: bool = False,
 ) -> WikifyResult:
     """Find title mentions in a document and create links.
 
@@ -157,6 +182,8 @@ def title_match_wikify(
     Args:
         doc_id: The document to wikify.
         dry_run: If True, report matches without creating links.
+        cross_project: If True, match titles across all projects.
+            If False, only match within the document's project.
 
     Returns:
         WikifyResult with details of links created or matches found.
@@ -166,8 +193,13 @@ def title_match_wikify(
         logger.warning("Document %d not found or deleted", doc_id)
         return WikifyResult(doc_id=doc_id, links_created=0)
 
+    # Determine project scope
+    scope_project: str | None = None
+    if not cross_project:
+        scope_project = _get_document_project(doc_id)
+
     content_lower = content.lower()
-    candidates = _load_title_candidates(exclude_doc_id=doc_id)
+    candidates = _load_title_candidates(exclude_doc_id=doc_id, project=scope_project)
 
     # Get existing links to avoid duplicates
     existing = set(document_links.get_linked_doc_ids(doc_id))
@@ -209,8 +241,15 @@ def title_match_wikify(
     )
 
 
-def wikify_all(dry_run: bool = False) -> tuple[int, int]:
+def wikify_all(
+    dry_run: bool = False,
+    cross_project: bool = False,
+) -> tuple[int, int]:
     """Backfill title-match wikification for all documents.
+
+    Args:
+        dry_run: If True, report matches without creating links.
+        cross_project: If True, match titles across all projects.
 
     Returns:
         Tuple of (total_links_created_or_would_create, documents_processed).
@@ -221,7 +260,7 @@ def wikify_all(dry_run: bool = False) -> tuple[int, int]:
 
     total = 0
     for did in doc_ids:
-        result = title_match_wikify(did, dry_run=dry_run)
+        result = title_match_wikify(did, dry_run=dry_run, cross_project=cross_project)
         if dry_run:
             total += len(result.dry_run_matches)
         else:
