@@ -375,7 +375,7 @@ just bump 0.X.Y         # Bump version in pyproject.toml + emdx/__init__.py
 git tag vX.Y.Z && git push --tags
 ```
 
-Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and `.claude-plugin/plugin.json`.
+Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`.
 
 **Doc check:** If new commands or flags were added, verify they appear in `docs/cli-api.md` (subcommand tables + examples) and `CLAUDE.md` (essential commands section).
 
