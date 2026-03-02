@@ -28,6 +28,5 @@ Reconcile open tasks with merged PRs — find tasks that are already done but no
 
 ## Important
 
-- Session hooks auto-update task status via session-end.sh, but this can miss some
 - DOC tasks are the most likely to be done-but-not-marked — docs get updated in feature PRs
 - Check both PR titles AND PR diffs for task coverage
