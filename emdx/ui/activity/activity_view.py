@@ -256,6 +256,15 @@ class ActivityView(HelpMixin, Widget):
     #graph-panel.visible {
         display: block;
     }
+
+    /* Shrink list + preview when graph panel is visible */
+    #main-content.graph-visible #activity-panel {
+        height: 30%;
+    }
+
+    #main-content.graph-visible #preview-panel {
+        height: 40%;
+    }
     """
 
     # Doc type filter cycle order
@@ -829,15 +838,18 @@ class ActivityView(HelpMixin, Widget):
         """Toggle the knowledge graph panel visibility."""
         try:
             panel = self.query_one("#graph-panel")
+            main = self.query_one("#main-content")
         except Exception:
             return
 
         self._graph_panel_visible = not self._graph_panel_visible
         if self._graph_panel_visible:
             panel.add_class("visible")
+            main.add_class("graph-visible")
             self._update_graph_panel()
         else:
             panel.remove_class("visible")
+            main.remove_class("graph-visible")
 
     def _update_graph_panel(self) -> None:
         """Update the knowledge graph panel with current selection."""
