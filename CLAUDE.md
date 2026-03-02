@@ -55,9 +55,19 @@ Migrations use **set-based tracking** with string IDs. Existing migrations (0-58
 
 Example: `("20260301_120000", "Add new feature", migration_20260301_120000_add_new_feature)`
 
-## Worktree Cleanup
+## Worktree Development
 
-When working in the emdx repo, stale worktrees may accumulate. These can block `gh pr checkout` and other git operations.
+When working in a worktree, the global `emdx` command points to the system install — **not** the worktree code. Always run `poetry install` first, then use `poetry run emdx` to get the worktree's version:
+
+```bash
+poetry install              # Set up venv with worktree code
+poetry run emdx --help      # Uses THIS worktree's code
+emdx --help                 # Uses global install (may be outdated!)
+```
+
+### Worktree Cleanup
+
+Stale worktrees can accumulate and block `gh pr checkout` and other git operations.
 
 - Use `git worktree list` to find active worktrees
 - Use `git worktree remove <path>` to remove stale worktrees
