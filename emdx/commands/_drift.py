@@ -97,7 +97,7 @@ def _find_stale_epics(days: int) -> list[StaleEpicDict]:
             FROM tasks e
             JOIN tasks c ON c.parent_task_id = e.id
             WHERE e.type = 'epic'
-              AND e.status NOT IN ('done', 'wontdo', 'failed')
+              AND e.status NOT IN ('done', 'wontdo', 'failed', 'duplicate')
               AND c.status IN ('open', 'active', 'blocked')
             GROUP BY e.id
             HAVING days_silent > ?
@@ -219,7 +219,7 @@ def _find_burst_epics(days: int) -> list[BurstEpicDict]:
             FROM tasks e
             JOIN tasks c ON c.parent_task_id = e.id
             WHERE e.type = 'epic'
-              AND e.status NOT IN ('done', 'wontdo', 'failed')
+              AND e.status NOT IN ('done', 'wontdo', 'failed', 'duplicate')
             GROUP BY e.id
             HAVING total_tasks >= 3
               AND burst_days <= 7

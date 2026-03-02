@@ -22,6 +22,7 @@ class TaskBrowser(HelpMixin, Widget):
         "mark_active": "Actions",
         "mark_blocked": "Actions",
         "mark_wontdo": "Actions",
+        "mark_duplicate": "Actions",
         "mark_open": "Actions",
     }
 
@@ -57,7 +58,8 @@ class TaskBrowser(HelpMixin, Widget):
             "[dim]1[/dim] Docs  [dim]2[/dim] Tasks  "
             "[dim]j/k[/dim] Navigate  "
             "[dim]d[/dim] Done  [dim]a[/dim] Active  "
-            "[dim]b[/dim] Blocked  [dim]w[/dim] Won't do  [dim]u[/dim] Reopen  "
+            "[dim]b[/dim] Blocked  [dim]w[/dim] Won't do  "
+            "[dim]p[/dim] Dup  [dim]u[/dim] Reopen  "
             "[dim]/[/dim] Filter  "
             "[dim]?[/dim] Help",
             id="task-help-bar",
