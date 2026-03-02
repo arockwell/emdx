@@ -3091,6 +3091,22 @@ def migration_20260302_120000_rename_document_links_method_to_link_type(
         conn.commit()
 
 
+def migration_20260302_140000_restore_output_doc_id(
+    conn: sqlite3.Connection,
+) -> None:
+    """Restore output_doc_id column on tasks table.
+
+    Re-adds the output_doc_id FK that was removed in migration 053 when the
+    delegate system was dropped.  Needed so that subagent output documents can
+    be linked back to the task that produced them.
+    """
+    # Check if column already exists (idempotent)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+    if "output_doc_id" not in cols:
+        conn.execute("ALTER TABLE tasks ADD COLUMN output_doc_id INTEGER REFERENCES documents(id)")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("0", "Create documents table", migration_000_create_documents_table),
@@ -3166,6 +3182,11 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
         "20260302_120000",
         "Rename document_links.method to link_type",
         migration_20260302_120000_rename_document_links_method_to_link_type,
+    ),
+    (
+        "20260302_140000",
+        "Restore output_doc_id column on tasks table",
+        migration_20260302_140000_restore_output_doc_id,
     ),
 ]
 

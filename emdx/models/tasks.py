@@ -30,6 +30,7 @@ def create_task(
     project: str | None = None,
     depends_on: list[int] | None = None,
     source_doc_id: int | None = None,
+    output_doc_id: int | None = None,
     parent_task_id: int | None = None,
     task_type: str = "single",
     status: str = "open",
@@ -70,10 +71,10 @@ def create_task(
             """
             INSERT INTO tasks (
                 title, description, priority, gameplan_id, project, status,
-                type, source_doc_id, parent_task_id,
+                type, source_doc_id, output_doc_id, parent_task_id,
                 epic_key, epic_seq
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 title,
@@ -84,6 +85,7 @@ def create_task(
                 status,
                 task_type,
                 source_doc_id,
+                output_doc_id,
                 parent_task_id,
                 epic_key,
                 epic_seq_val,
@@ -295,6 +297,7 @@ ALLOWED_UPDATE_COLUMNS = frozenset(
         "project",
         "type",
         "source_doc_id",
+        "output_doc_id",
         "parent_task_id",
         "epic_key",
         "epic_seq",
@@ -333,6 +336,20 @@ def update_task(task_id: int, **kwargs: Any) -> bool:
         cursor = conn.execute(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", params)
         conn.commit()
         return cursor.rowcount > 0
+
+
+def set_task_output_doc(task_id: int, doc_id: int) -> None:
+    """Set the output_doc_id for a task.
+
+    Links a KB document (e.g. subagent findings) back to the task that
+    produced it.
+    """
+    with db.get_connection() as conn:
+        conn.execute(
+            "UPDATE tasks SET output_doc_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (doc_id, task_id),
+        )
+        conn.commit()
 
 
 def delete_task(task_id: int) -> bool:

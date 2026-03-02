@@ -135,8 +135,7 @@ Claude Code hooks in `.claude/settings.json` handle session lifecycle automatica
 |------|-------|-------------|
 | `auto-backup.sh` | SessionStart | Creates a daily KB backup before work begins |
 | `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
-| `save-output.sh` | Stop | Saves conversation output to KB after each turn |
-| `session-end.sh` | SessionEnd | Captures session summary on exit |
+| `save-output.sh` | Stop, SubagentStop | Saves agent output to KB with task linkage |
 
 ### Session Start Protocol
 
@@ -154,15 +153,24 @@ emdx status   # Quick overview
 1. **Check ready tasks** before starting work: `emdx task ready`
 2. **Track progress on multi-step work** — for any task with 3+ steps, create subtasks BEFORE starting:
    ```bash
-   emdx task add "Read and understand relevant code" --epic <id>
-   emdx task add "Implement the changes" --epic <id>
-   emdx task add "Run tests and fix issues" --epic <id>
+   emdx task plan <parent_id> "Read and understand relevant code" "Implement the changes" "Run tests and fix issues"
    emdx task done <id>   # mark each step done as you complete it
    ```
    This gives the user real-time visibility into progress, especially for longer tasks.
 3. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
 4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
 5. **Never end session** without updating task status and creating tasks for remaining work
+
+#### For Agent/Subagent Sessions
+
+1. **Get task brief first**: `emdx task brief $EMDX_TASK_ID` (or `--json`)
+2. **Create subtasks for multi-step work**:
+   `emdx task plan $EMDX_TASK_ID "Step 1" "Step 2" "Step 3"`
+3. **Mark subtasks done** as you complete them: `emdx task done <id>`
+4. **Save significant findings** to KB:
+   `echo "findings" | emdx save --title "Title"`
+5. **Mark parent task done** with output doc when complete:
+   `emdx task done $EMDX_TASK_ID --output-doc <doc_id>`
 
 ### Document Tags vs Task Organization
 
@@ -223,9 +231,13 @@ emdx view 42 --review                  # Adversarial review of the document
 
 # Tasks (use --epic and --cat, NOT --tags)
 emdx task add "Title" -D "Details" --epic 898 --cat FEAT
+emdx task plan <parent> "Step 1" "Step 2" "Step 3"  # Batch create subtasks
+emdx task brief <id>                   # Agent-ready task context
+emdx task brief <id> --json            # Structured for programmatic use
 emdx task ready                        # Show unblocked tasks
 emdx task active <id>                  # Mark in-progress
 emdx task done <id>                    # Mark complete
+emdx task done <id> --output-doc <doc> # Complete and link output document
 emdx task epic list                    # See active epics
 emdx task cat list                     # See available categories
 emdx task cat rename OLD NEW           # Rename or merge categories

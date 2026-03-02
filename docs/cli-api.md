@@ -866,6 +866,9 @@ Inject knowledge base context for Claude Code sessions. Shows ready tasks, in-pr
 # Full context injection
 emdx prime
 
+# Context-aware priming (~500 tokens, no AI calls)
+emdx prime --smart
+
 # Compact output (tasks + epics only, no git/docs)
 emdx prime --brief
 
