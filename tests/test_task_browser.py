@@ -239,9 +239,9 @@ class TestRendering:
                 t for t in titles if any(label in t for label in ("READY", "ACTIVE", "DONE"))
             ]
             assert len(headers) == 3
-            # STATUS_ORDER: open, active, blocked, done, failed
-            assert "READY" in headers[0]
-            assert "ACTIVE" in headers[1]
+            # STATUS_ORDER: active, open, blocked, done, failed
+            assert "ACTIVE" in headers[0]
+            assert "READY" in headers[1]
             assert "DONE" in headers[2]
 
     @pytest.mark.asyncio

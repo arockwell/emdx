@@ -36,7 +36,7 @@ from emdx.ui.link_helpers import linkify_text as _linkify_text
 logger = logging.getLogger(__name__)
 
 # Status display order and icons
-STATUS_ORDER = ["open", "active", "blocked", "done", "failed", "wontdo"]
+STATUS_ORDER = ["active", "open", "blocked", "done", "failed", "wontdo"]
 STATUS_ICONS = {
     "open": "○",
     "active": "●",
@@ -739,11 +739,11 @@ class TaskView(Widget):
                     self._render_task_row(table, task)
 
     def _select_first_task_row(self) -> None:
-        """Move cursor to the first actual task row (skip headers/separators)."""
+        """Move cursor to the first status header row so the group label is visible."""
         table = self.query_one("#task-table", DataTable)
         for i, row in enumerate(table.ordered_rows):
             key = str(row.key.value)
-            if not key.startswith(HEADER_PREFIX) and not key.startswith(SEPARATOR_PREFIX):
+            if key.startswith(HEADER_PREFIX):
                 table.move_cursor(row=i)
                 return
 
