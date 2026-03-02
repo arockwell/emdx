@@ -39,6 +39,12 @@ fi
 AGENT_TYPE=$(echo "$INPUT" | jq -r '.agent_type // "unknown"' 2>/dev/null)
 AGENT_TYPE_LOWER=$(echo "$AGENT_TYPE" | tr '[:upper:]' '[:lower:]')
 
+# Only save output from substantive agent types
+case "$AGENT_TYPE_LOWER" in
+    explore|plan|general-purpose) ;;  # allowed
+    *) exit 0 ;;                      # skip unknown, custom, etc.
+esac
+
 # --- Title derivation ---
 # Prefer first markdown heading, fall back to first non-empty line
 TITLE=""
