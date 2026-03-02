@@ -78,6 +78,7 @@ def _make_test_db(db_path: Path) -> sqlite3.Connection:
             completed_at TIMESTAMP,
             type TEXT DEFAULT 'single',
             source_doc_id INTEGER REFERENCES documents(id),
+            output_doc_id INTEGER REFERENCES documents(id),
             parent_task_id INTEGER REFERENCES tasks(id),
             epic_key TEXT REFERENCES categories(key),
             epic_seq INTEGER
