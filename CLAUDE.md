@@ -256,6 +256,7 @@ emdx task ready                        # Show unblocked tasks
 emdx task active <id>                  # Mark in-progress
 emdx task done <id>                    # Mark complete
 emdx task done <id> --output-doc <doc> # Complete and link output document
+emdx task duplicate <id>               # Mark as duplicate
 emdx task epic list                    # See active epics
 emdx task cat list                     # See available categories
 emdx task cat rename OLD NEW           # Rename or merge categories
