@@ -1,9 +1,10 @@
 # EMDX Command Audit
 
-> **Note:** This audit was performed prior to v0.26.0. The delegate system
-> referenced below was subsequently removed in favor of native Claude Code agents.
-
-Comprehensive audit of all top-level commands. For each: justification, verdict, and migration path.
+> **Note — Partially Historical:** This audit was performed prior to v0.26.0.
+> The delegate system referenced below was removed in v0.28 in favor of native
+> Claude Code agents. Sections referencing `delegate`, `exec`, and `distill` are
+> historical context only. The **API Ergonomic Issues** section and general
+> command-surface observations remain relevant.
 
 ## Current Top-Level Surface (30 commands/groups, ~90 subcommands)
 
@@ -21,11 +22,13 @@ Comprehensive audit of all top-level commands. For each: justification, verdict,
 
 ### Tier 2: Agent workflow (keep as-is)
 
+> *Historical: `delegate` was removed in v0.28. `prime` and `status` remain.*
+
 | Command | Justification | Verdict |
 |---------|--------------|---------|
-| `delegate` | Core agent execution. Complex but irreplaceable. | **Keep** |
+| ~~`delegate`~~ | ~~Core agent execution. Complex but irreplaceable.~~ | ~~**Keep**~~ *(removed v0.28)* |
 | `prime` | Session bootstrap for agents. Unique purpose. | **Keep** |
-| `status` | Live delegate monitoring. | **Keep** |
+| `status` | ~~Live delegate monitoring.~~ Project overview. | **Keep** |
 
 ### Tier 3: Cut entirely
 
@@ -37,7 +40,7 @@ Comprehensive audit of all top-level commands. For each: justification, verdict,
 | ~~`gist`~~ | ~~Creates GitHub gist from existing doc.~~ | **Keep.** Frequently used to share good docs. Standalone `gist` command is more ergonomic than `save --gist` for existing docs. Consider removing the inline `--gist` flags from `save` to reduce its flag count — `save` creates docs, `gist` shares them. |
 | `version` | `--version` flag already exists on the main app callback. Redundant. | `emdx --version` already works. Drop the `version` subcommand. |
 | `task note` | Docs say it's "shorthand for `task log`." One command shouldn't be a pure alias of another. | Drop. Use `task log`. |
-| `distill` | AI-powered audience synthesis. Cool idea but niche. Overlaps with `delegate "summarize docs tagged X for audience Y"`. | Drop. Same result via delegate with a prompt. |
+| `distill` | AI-powered audience synthesis. Cool idea but niche. ~~Overlaps with `delegate "summarize docs tagged X for audience Y"`.~~ | ~~Drop. Same result via delegate with a prompt.~~ *(kept; delegate removed)* |
 
 ### Tier 4: Fold into other commands
 
@@ -49,7 +52,7 @@ Comprehensive audit of all top-level commands. For each: justification, verdict,
 | `wrapup` | `briefing --save` | `wrapup` collects recent activity and generates an AI summary. `briefing` already shows recent activity. Adding `--synthesize`/`--save` to `briefing` gives you `wrapup` without a separate command. They share the same time-window concept (`--hours`/`--since`). |
 | `explore` | `find --topics` | Topic map via TF-IDF clustering. Unique analysis but could be a mode of `find` since it's searching across docs. Or keep if you value discoverability. Borderline. |
 | `compact` | `maintain compact` | AI-powered document merging. This is maintenance/housekeeping, not a daily workflow command. Belongs under `maintain`. |
-| `exec` | ~~`status --exec` or fold into `delegate` subgroup~~ **DONE** → `delegate list/show/kill/...` | Execution management folded into delegate as flat subcommands. |
+| `exec` | ~~`status --exec` or fold into `delegate` subgroup~~ ~~**DONE** → `delegate list/show/kill/...`~~ | ~~Execution management folded into delegate as flat subcommands.~~ *(delegate removed v0.28)* |
 | `group` | Evaluate usage — possible cut | If groups are lightly used, consider whether tags + epics cover the same need. If heavily used, keep. |
 | `stale` | `maintain stale` | Staleness tracking is maintenance work. Could live under `maintain`. Counter-argument: it's queried often enough to justify top-level. |
 
@@ -176,7 +179,7 @@ Should be `emdx save --file README.md` (post-0.18.0).
 | `delete` | Remove docs |
 | `tag` | Tag management (add/remove/list/rename/merge/batch) |
 | `task` | Work queue + epics + categories |
-| `delegate` | Agent execution (possibly absorbs `exec` as `delegate exec`) |
+| ~~`delegate`~~ | ~~Agent execution~~ *(removed v0.28)* |
 | `prime` | Session bootstrap |
 | `status` | Project overview (absorbs browse `stats`) |
 | `briefing` | Activity summary (absorbs `wrapup` via `--save`) |
@@ -192,7 +195,7 @@ Should be `emdx save --file README.md` (post-0.18.0).
 - `touch` (keep only as `stale touch` or `maintain touch`)
 - `version` (use `--version` flag)
 - `task note` (use `task log`)
-- `distill` (use `delegate`)
+- ~~`distill` (use `delegate`)~~ *(kept; delegate removed v0.28)*
 - `list` (folded into `find`)
 - `recent` (folded into `find`)
 - `stats` (folded into `status`)

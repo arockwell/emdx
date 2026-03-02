@@ -571,18 +571,43 @@ class MaintenanceApplication:
         """
         Run garbage collection on the database.
 
+        Cleans orphaned tags (referencing deleted/missing documents)
+        and old soft-deleted documents (trash older than 30 days).
+
         Args:
             dry_run: If True, only report what would be done.
 
         Returns:
             MaintenanceResult with operation details.
         """
-        from ..commands.gc import GarbageCollector  # type: ignore[import-untyped]
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
 
-        gc = GarbageCollector(self._db_path)
-        analysis = gc.analyze()
+            # Count orphaned tags (tags referencing deleted or missing documents)
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM document_tags dt
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM documents d
+                    WHERE d.id = dt.document_id AND d.is_deleted = 0
+                )
+                """
+            )
+            orphaned_tags = cursor.fetchone()[0]
 
-        if not analysis["recommendations"]:
+            # Count old trash (soft-deleted docs older than 30 days)
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM documents
+                WHERE is_deleted = 1
+                AND deleted_at < datetime('now', '-30 days')
+                """
+            )
+            old_trash = cursor.fetchone()[0]
+
+        total_items = orphaned_tags + old_trash
+
+        if total_items == 0:
             return MaintenanceResult(
                 operation="gc",
                 success=True,
@@ -591,35 +616,55 @@ class MaintenanceApplication:
                 message="No garbage collection needed",
             )
 
-        total_items = analysis["orphaned_tags"] + analysis["old_trash"]
-
         if dry_run:
             return MaintenanceResult(
                 operation="gc",
                 success=True,
                 items_processed=total_items,
                 items_affected=total_items,
-                message=f"Would clean {total_items} items ({analysis['orphaned_tags']} orphaned tags, {analysis['old_trash']} old trash)",  # noqa: E501
+                message=(
+                    f"Would clean {total_items} items"
+                    f" ({orphaned_tags} orphaned tags,"
+                    f" {old_trash} old trash)"
+                ),
             )
 
         # Perform cleanup
         cleaned = 0
         details = []
 
-        if analysis["orphaned_tags"] > 0:
-            deleted_tags = gc.clean_orphaned_tags()
+        if orphaned_tags > 0:
+            with self._db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    DELETE FROM document_tags
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM documents d
+                        WHERE d.id = document_tags.document_id
+                        AND d.is_deleted = 0
+                    )
+                    """
+                )
+                deleted_tags = cursor.rowcount
+                conn.commit()
             cleaned += deleted_tags
             details.append(f"Removed {deleted_tags} orphaned tags")
 
-        if analysis["old_trash"] > 0:
-            deleted_trash = gc.clean_old_trash()
+        if old_trash > 0:
+            with self._db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    DELETE FROM documents
+                    WHERE is_deleted = 1
+                    AND deleted_at < datetime('now', '-30 days')
+                    """
+                )
+                deleted_trash = cursor.rowcount
+                conn.commit()
             cleaned += deleted_trash
             details.append(f"Deleted {deleted_trash} old trash items")
-
-        if analysis["fragmentation"] > 20:
-            vacuum_result = gc.vacuum_database()
-            saved_mb = vacuum_result["space_saved"] / 1024 / 1024
-            details.append(f"Vacuumed database, saved {saved_mb:.1f} MB")
 
         return MaintenanceResult(
             operation="gc",

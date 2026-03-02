@@ -603,8 +603,10 @@ def find(
         ask_mode = _resolve_ask_mode(ask, think, challenge, debug, cite)
         if ask_mode is not None:
             if not search_query:
-                mode_name = ask_mode.value
-                console.print(f"[red]Error: --{mode_name} requires a question[/red]")
+                from ..services.ask_service import AskMode
+
+                flag = "ask" if ask_mode == AskMode.ANSWER else ask_mode.value
+                console.print(f"[red]Error: --{flag} requires a question[/red]")
                 raise typer.Exit(1)
             _find_ask(
                 search_query,

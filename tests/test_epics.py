@@ -35,6 +35,16 @@ class TestCreateEpic:
         cat = categories.get_category("ACAT")
         assert cat is not None
 
+    def test_create_epic_empty_name_rejected(self) -> None:
+        result = runner.invoke(epics_app, ["create", "", "--cat", "EMPT"])
+        assert result.exit_code == 1
+        assert "cannot be empty" in _out(result)
+
+    def test_create_epic_whitespace_name_rejected(self) -> None:
+        result = runner.invoke(epics_app, ["create", "   ", "--cat", "EMPT"])
+        assert result.exit_code == 1
+        assert "cannot be empty" in _out(result)
+
 
 class TestTaskInEpic:
     """Tests for creating tasks within epics."""

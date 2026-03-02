@@ -15,6 +15,10 @@ This folder contains detailed documentation for EMDX.
 - [Event-Driven Streaming](event-driven-streaming.md) - Log streaming implementation
 - [Architecture Decision Records](adr/) - ADRs for key design decisions
 
+### Plugin & Skills
+- [Plugin Guide](plugin-guide.md) - Installing and using the emdx Claude Code plugin
+- [Skills Reference](skills-reference.md) - All available `/emdx:*` skills with usage examples
+
 ### Development
 - [Development Setup](development-setup.md) - Installation, testing, and contributing
 - [Testing Guide](testing.md) - Test suite overview and patterns
@@ -30,6 +34,8 @@ This folder contains detailed documentation for EMDX.
 | Write tests | [Testing Guide](testing.md) |
 | Build TUI components | [UI Architecture](ui-architecture.md) |
 | Work with the database | [Database Design](database-design.md) |
+| Use the Claude Code plugin | [Plugin Guide](plugin-guide.md) |
+| See available skills | [Skills Reference](skills-reference.md) |
 | Understand design decisions | [ADRs](adr/) |
 
 ## Documentation Standards

@@ -39,6 +39,10 @@ def create(
         emdx task epic create "Security Hardening" --cat SEC
         emdx task epic create "Security Hardening" --cat SEC -D "January 2026 security sweep"
     """
+    if not name.strip():
+        console.print("[red]Error: Epic name cannot be empty[/red]")
+        raise typer.Exit(1)
+
     try:
         epic_id = tasks.create_epic(name, cat, description or "")
         epic = tasks.get_task(epic_id)
