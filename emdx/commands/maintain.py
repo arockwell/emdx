@@ -19,7 +19,6 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm
 
-from ..applications import MaintenanceApplication
 from ..utils.output import console, is_non_interactive
 
 if TYPE_CHECKING:
@@ -119,6 +118,8 @@ def maintain(
 
 def _interactive_wizard(dry_run: bool) -> None:
     """Run interactive maintenance wizard using MaintenanceApplication."""
+    from ..applications import MaintenanceApplication
+
     app = MaintenanceApplication()
 
     with console.status("[bold green]Analyzing knowledge base..."):
@@ -284,6 +285,8 @@ def _interactive_wizard(dry_run: bool) -> None:
 
 def _clean_documents(dry_run: bool) -> str | None:
     """Clean duplicates and empty documents using MaintenanceApplication."""
+    from ..applications import MaintenanceApplication
+
     app = MaintenanceApplication()
     try:
         result = app.clean_duplicates(dry_run=dry_run)
@@ -308,6 +311,8 @@ def _clean_documents(dry_run: bool) -> str | None:
 
 def _auto_tag_documents(dry_run: bool) -> str | None:
     """Auto-tag untagged documents using MaintenanceApplication."""
+    from ..applications import MaintenanceApplication
+
     app = MaintenanceApplication()
     result = app.auto_tag_documents(dry_run=dry_run)
 
@@ -331,6 +336,8 @@ def _auto_tag_documents(dry_run: bool) -> str | None:
 
 def _merge_documents(dry_run: bool, threshold: float = 0.7) -> str | None:
     """Merge similar documents using MaintenanceApplication."""
+    from ..applications import MaintenanceApplication
+
     app = MaintenanceApplication()
     try:
         result = app.merge_similar(dry_run=dry_run, threshold=threshold)
@@ -404,6 +411,8 @@ def _deduplicate_pairs(pairs: list) -> str | None:
 
 def _garbage_collect(dry_run: bool) -> str | None:
     """Run garbage collection using MaintenanceApplication."""
+    from ..applications import MaintenanceApplication
+
     app = MaintenanceApplication()
     result = app.garbage_collect(dry_run=dry_run)
 

@@ -589,8 +589,12 @@ def wiki_generate(
     )
 
     if not all_topics and topic_id is None:
-        console.print("[red]Provide a topic ID or use --all[/red]")
-        raise typer.Exit(1)
+        if dry_run:
+            # --dry-run without --all or topic ID: default to all topics
+            all_topics = True
+        else:
+            console.print("[red]Provide a topic ID or use --all[/red]")
+            raise typer.Exit(1)
 
     if concurrency < 1:
         console.print("[red]--concurrency must be >= 1[/red]")
