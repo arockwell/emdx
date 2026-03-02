@@ -34,14 +34,14 @@
         ]
       }
     ],
-    "SessionEnd": [
+    "SubagentStop": [
       {
         "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/session-end.sh",
-            "timeout": 15
+            "command": ".claude/hooks/save-output.sh",
+            "timeout": 30
           }
         ]
       }

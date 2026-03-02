@@ -22,7 +22,10 @@ if [[ -n "${EMDX_DOC_ID:-}" ]]; then
     emdx view "$EMDX_DOC_ID" 2>/dev/null || true
 fi
 
-# Task activation
+# Task activation + lifecycle instructions
 if [[ -n "${EMDX_TASK_ID:-}" ]]; then
     emdx task active "$EMDX_TASK_ID" 2>/dev/null || true
+    echo ""
+    echo "=== Assigned Task ==="
+    emdx task brief "$EMDX_TASK_ID" --agent-prompt 2>/dev/null || true
 fi
