@@ -221,6 +221,61 @@ def list_documents(
         return docs
 
 
+def get_documents_for_export(
+    project: str | None = None,
+    tags: list[str] | None = None,
+    doc_type: str | None = "user",
+) -> list[DocumentRow]:
+    """Fetch all documents for export without bumping access counts.
+
+    Args:
+        project: Filter by project name (None = all projects)
+        tags: Filter by tags (AND — doc must have all tags)
+        doc_type: Filter by type. 'user' (default), 'wiki', or None for all.
+
+    Returns:
+        Full document rows ordered by id.
+    """
+    with db_connection.get_connection() as conn:
+        conditions = ["d.is_deleted = FALSE"]
+        params: list[str | int | None] = []
+
+        if doc_type is not None:
+            conditions.append("d.doc_type = ?")
+            params.append(doc_type)
+
+        if project:
+            conditions.append("d.project = ?")
+            params.append(project)
+
+        if tags:
+            tag_placeholders = ",".join("?" * len(tags))
+            conditions.append(
+                f"d.id IN ("
+                f"SELECT dt.document_id FROM document_tags dt "
+                f"JOIN tags t ON dt.tag_id = t.id "
+                f"WHERE t.name IN ({tag_placeholders}) "
+                f"GROUP BY dt.document_id "
+                f"HAVING COUNT(DISTINCT t.name) = ?"
+                f")"
+            )
+            params.extend(t.lower().strip() for t in tags)
+            params.append(len(tags))
+
+        where_clause = " AND ".join(conditions)
+        cursor = conn.execute(
+            f"SELECT d.* FROM documents d WHERE {where_clause} ORDER BY d.id",
+            params,
+        )
+
+        docs: list[DocumentRow] = []
+        for row in cursor.fetchall():
+            raw = dict(row)
+            _parse_doc_datetimes(raw)
+            docs.append(cast(DocumentRow, raw))
+        return docs
+
+
 def count_documents(
     project: str | None = None,
     parent_id: int | None = None,

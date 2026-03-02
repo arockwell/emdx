@@ -47,6 +47,7 @@ from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
 from emdx.commands.context import context as context_command  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.db_manage import app as db_app  # noqa: E402
+from emdx.commands.export import app as export_app  # noqa: E402
 from emdx.commands.gist import app as gist_app  # noqa: E402
 from emdx.commands.history import diff as diff_command  # noqa: E402
 from emdx.commands.history import history as history_command  # noqa: E402
@@ -106,6 +107,9 @@ app.add_typer(wiki_app, name="wiki", help="Auto-wiki from your knowledge base")
 
 # Add db as a subcommand group
 app.add_typer(db_app, name="db", help="Database management")
+
+# Add export as a subcommand group (emdx export obsidian, etc.)
+app.add_typer(export_app, name="export", help="Export to external formats")
 
 # Add the context command for graph-aware context assembly
 app.command(name="context")(context_command)

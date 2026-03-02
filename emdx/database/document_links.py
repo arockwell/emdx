@@ -124,6 +124,47 @@ def link_exists(source_doc_id: int, target_doc_id: int) -> bool:
         return cursor.fetchone() is not None
 
 
+def get_links_for_documents_batch(
+    doc_ids: list[int],
+) -> dict[int, list[DocumentLinkDetail]]:
+    """Get links for multiple documents in a single query.
+
+    Returns a dict mapping each doc_id to its list of links (both directions).
+    Avoids N+1 queries when exporting many documents.
+    """
+    if not doc_ids:
+        return {}
+
+    result: dict[int, list[DocumentLinkDetail]] = {doc_id: [] for doc_id in doc_ids}
+    doc_id_set = set(doc_ids)
+    placeholders = ",".join("?" * len(doc_ids))
+
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT l.id, l.source_doc_id, s.title AS source_title, "
+            "l.target_doc_id, t.title AS target_title, "
+            "l.similarity_score, l.created_at, l.method "
+            "FROM document_links l "
+            "JOIN documents s ON l.source_doc_id = s.id "
+            "JOIN documents t ON l.target_doc_id = t.id "
+            f"WHERE (l.source_doc_id IN ({placeholders}) "
+            f"OR l.target_doc_id IN ({placeholders})) "
+            "AND s.is_deleted = 0 AND t.is_deleted = 0 "
+            "ORDER BY l.similarity_score DESC",
+            doc_ids + doc_ids,
+        )
+        for row in cursor.fetchall():
+            link = cast(DocumentLinkDetail, dict(row))
+            src = link["source_doc_id"]
+            tgt = link["target_doc_id"]
+            if src in doc_id_set:
+                result[src].append(link)
+            if tgt in doc_id_set and tgt != src:
+                result[tgt].append(link)
+
+    return result
+
+
 def get_link_count(doc_id: int) -> int:
     """Get the number of links for a document."""
     with db_connection.get_connection() as conn:
