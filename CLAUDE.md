@@ -153,7 +153,7 @@ Claude Code hooks in `.claude/settings.json` handle session lifecycle automatica
 |------|-------|-------------|
 | `auto-backup.sh` | SessionStart | Creates a daily KB backup before work begins |
 | `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
-| `save-output.sh` | Stop, SubagentStop | Saves agent output to KB with task linkage |
+| `save-output.sh` | SubagentStop | Saves subagent output to KB with task linkage |
 
 ### Session Start Protocol
 
@@ -177,7 +177,7 @@ emdx status   # Quick overview
    This gives the user real-time visibility into progress, especially for longer tasks.
 3. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
 4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
-5. **Never end session** without updating task status and creating tasks for remaining work
+5. **Update task status as you work** — mark tasks done when complete, create new tasks for discovered work
 
 #### For Agent/Subagent Sessions
 

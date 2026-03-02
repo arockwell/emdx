@@ -1610,8 +1610,7 @@ Hooks are configured in `.claude/settings.json` and run shell scripts from
 |-------|-------------|-------------|
 | `SessionStart` | `auto-backup.sh` | Creates a daily KB backup (skips if today's backup exists) |
 | `SessionStart` | `prime.sh` | Injects KB context: ready tasks, in-progress work, recent docs |
-| `Stop` | `save-output.sh` | Saves substantive agent output (200+ chars) to KB |
-| `SubagentStop` | `save-output.sh` | Same as Stop, also runs for subagent completions |
+| `SubagentStop` | `save-output.sh` | Saves substantive subagent output (200+ chars) to KB |
 
 ### Environment Variables
 
@@ -1629,7 +1628,7 @@ Hooks respond to these environment variables for task-scoped sessions:
 `EMDX_TASK_ID` is set, also runs `emdx task active` and `emdx task brief
 --agent-prompt` to give the agent its assignment and lifecycle instructions.
 
-**`save-output.sh`** (Stop/SubagentStop): Captures the agent's last assistant
+**`save-output.sh`** (SubagentStop): Captures the subagent's last assistant
 message from the hook JSON payload. Skips short output (<200 chars). Derives a
 title from the first markdown heading. Tags output with `subagent` and
 `agent:<type>`. If `EMDX_TASK_ID` is set, links the saved document to the task
