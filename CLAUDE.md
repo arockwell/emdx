@@ -73,6 +73,14 @@ Stale worktrees can accumulate and block `gh pr checkout` and other git operatio
 - Use `git worktree remove <path>` to remove stale worktrees
 - If `gh pr checkout` fails due to existing worktrees, clone to `/tmp` instead
 
+### Agent Worktree Patch Collection
+
+When using `isolation: "worktree"` agents that create new files (not just modifications):
+- `git diff` only captures modifications to tracked files — new/untracked files must be copied manually from the agent's worktree path (`.claude/worktrees/agent-<id>/`)
+- After copying, run `ruff check --fix` and `ruff format` — agent code may not match project formatting exactly
+- When multiple agents touch the same file, apply their patches sequentially with `git apply` and check for conflicts between each
+- Always run the full test suite after combining all patches, not just individual agent tests
+
 ## Code Quality — MANDATORY
 
 **Pre-commit hooks are active** (ruff lint, ruff format, mypy on staged files). They run automatically on `git commit`. Config: `.pre-commit-config.yaml`. To run manually: `poetry run pre-commit run --files <files>`.
@@ -373,6 +381,7 @@ grep -E "ERROR|WARNING|CRITICAL" ~/.config/emdx/tui_debug.log | tail -30
 - **Textual `@click` meta namespace resolution**: `@click` actions in Rich Text rendered inside a widget resolve ONLY on the widget that received the click — they do NOT walk up the DOM. If you put `meta={"@click": "open_url(...)"}` in a RichLog's text, Textual looks for `action_open_url` on the RichLog, not on parent widgets. Use `app.open_url(...)` prefix to target the App, or `screen.open_url(...)` for the Screen. This applies to `@click`, `@mouse.down`, and `@mouse.up` meta actions.
 - **Don't add `on_click`/`on_mouse_down` to parent widgets**: Adding `on_click`, `on_mouse_down`, or `on_mouse_up` handlers to a parent Widget (or subclassing RichLog with these handlers) can break all mouse interaction in the TUI globally. Prefer Rich Style `@click` meta with namespace prefixes (e.g. `app.action_name(...)`) instead of custom mouse event handlers.
 - **`@click` actions that mutate the DOM must be sync + `run_worker`**: Textual dispatches `@click` meta actions synchronously. If the target action is `async` and does DOM mutations (`remove_children`, `mount`, `switch_browser`), it will deadlock the message loop and freeze the TUI. **Fix:** Make the action method sync, store any state you need, and use `self.run_worker(async_fn(), exclusive=True)` to defer the async work. See `BrowserContainer.action_select_doc()` for the canonical pattern. `action_open_url()` (sync, no DOM changes) works fine as-is.
+- **Agent worktree isolation in nested worktrees**: When CWD is already a git worktree (e.g., `.worktrees/feature-xyz`), `isolation: "worktree"` on Agent tool may fail silently — agents fall back to writing directly to the shared working tree. This is fine if agents own non-overlapping files. If two agents need the same file, group them into one agent. Clean stale worktrees periodically: `git worktree list` + `git worktree remove --force <path>`.
 
 ## Textual Pilot Testing Patterns
 
