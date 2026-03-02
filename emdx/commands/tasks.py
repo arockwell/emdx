@@ -503,6 +503,11 @@ def brief(
     task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     log_limit: int = typer.Option(10, "--log-limit", help="Max log entries to show"),
+    agent_prompt: bool = typer.Option(
+        False,
+        "--agent-prompt",
+        help="Append lifecycle instructions for subagents",
+    ),
 ) -> None:
     """Get a comprehensive brief for a task.
 
@@ -513,7 +518,7 @@ def brief(
     Examples:
         emdx task brief FEAT-25
         emdx task brief 42 --json
-        emdx task brief FEAT-25 --log-limit 20
+        emdx task brief FEAT-25 --agent-prompt
     """
     task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
@@ -525,11 +530,20 @@ def brief(
         raise typer.Exit(1)
 
     brief_data = _assemble_brief(task, task_id, log_limit)
+    display = _display_id(task)
 
     if json_output:
+        if agent_prompt:
+            brief_data["agent_instructions"] = {
+                "on_complete": f"emdx task done {display}",
+                "on_blocked": f'emdx task log {display} "Blocked: <reason>"',
+                "on_incomplete": (f'emdx task log {display} "Stopped at: <description>"'),
+            }
         print_json(brief_data)
     else:
         _print_brief_plain(brief_data)
+        if agent_prompt:
+            _print_agent_instructions(display)
 
 
 def _assemble_brief(
@@ -734,6 +748,15 @@ def _print_brief_plain(data: dict[str, object]) -> None:
         for f in key_files:
             print(f"  {f}")
         print()
+
+
+def _print_agent_instructions(display_id: str) -> None:
+    """Print lifecycle instructions for subagents."""
+    print("INSTRUCTIONS:")
+    print(f"  WHEN DONE:   emdx task done {display_id}")
+    print(f'  IF BLOCKED:  emdx task log {display_id} "Blocked: <reason>"')
+    print(f'  IF STOPPED:  emdx task log {display_id} "Stopped at: <where>"')
+    print()
 
 
 @app.command()
