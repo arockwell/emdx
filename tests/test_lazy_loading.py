@@ -1,8 +1,12 @@
 """Tests for lazy loading CLI commands."""
 
+from __future__ import annotations
+
 import sys
+from collections.abc import Generator
 
 import click
+import pytest
 from typer.testing import CliRunner
 
 from emdx.utils.lazy_group import (
@@ -13,6 +17,21 @@ from emdx.utils.lazy_group import (
 )
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _restore_lazy_registry() -> Generator[None, None, None]:
+    """Save and restore the global lazy registry around each test.
+
+    Tests that call register_lazy_commands() replace the global registry,
+    which corrupts state for later tests that rely on it (e.g. maintain
+    subcommand tests). This fixture ensures the registry is always restored.
+    """
+    saved_subcommands = _LAZY_REGISTRY["subcommands"].copy()
+    saved_help = _LAZY_REGISTRY["help"].copy()
+    yield
+    _LAZY_REGISTRY["subcommands"] = saved_subcommands
+    _LAZY_REGISTRY["help"] = saved_help
 
 
 class TestLazyTyperGroup:
