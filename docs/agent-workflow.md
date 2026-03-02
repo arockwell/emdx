@@ -98,7 +98,7 @@ emdx task done $EMDX_TASK_ID --note "Fixed in #123" # With note
 | Hook | Event | Behavior |
 |------|-------|----------|
 | `prime.sh` | SessionStart | Injects task context via `emdx prime` |
-| `session-end.sh` | SessionEnd | Marks `EMDX_TASK_ID` as done |
+| `save-output.sh` | Stop, SubagentStop | Saves agent output to KB with task linkage |
 | `auto-backup.sh` | SessionStart | Creates daily KB backup |
 
 ### How prime.sh Uses EMDX_TASK_ID
