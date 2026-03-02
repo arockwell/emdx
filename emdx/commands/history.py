@@ -42,6 +42,9 @@ def history(
         ).fetchall()
 
     if not rows:
+        if json_output:
+            print(json.dumps({"error": f"No version history for document #{doc_id}"}))
+            return
         print(f"No version history for document #{doc_id}")
         return
 

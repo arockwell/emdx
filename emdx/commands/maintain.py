@@ -257,20 +257,28 @@ def _interactive_wizard(dry_run: bool) -> None:
         console.print("\n[yellow]No actions selected[/yellow]")
         return
 
-    # Execute selected actions - always execute (not dry run) after user confirmation
-    console.print("\n[bold]Executing maintenance...[/bold]\n")
+    # Execute selected actions (respecting dry_run flag)
+    if dry_run:
+        console.print("\n[yellow]🔍 DRY RUN — no changes will be made[/yellow]")
+        console.print("[dim]Run with --execute to perform these actions[/dim]\n")
+    else:
+        console.print("\n[bold]Executing maintenance...[/bold]\n")
 
     for action in actions:
         if action == "clean":
-            _clean_documents(False)
+            _clean_documents(dry_run)
         elif action == "tags":
-            _auto_tag_documents(False)
+            _auto_tag_documents(dry_run)
         elif action == "merge":
-            _merge_documents(False)
+            _merge_documents(dry_run)
         elif isinstance(action, tuple) and action[0] == "dedup_high":
-            _deduplicate_pairs(action[1])
+            if dry_run:
+                n = len(action[1])
+                console.print(f"  Would delete {n} obvious duplicates")
+            else:
+                _deduplicate_pairs(action[1])
         elif action == "gc":
-            _garbage_collect(False)
+            _garbage_collect(dry_run)
         console.print()
 
 

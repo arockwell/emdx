@@ -1081,6 +1081,8 @@ emdx gist 42 --update abc123def456
 ### **Environment Variables**
 - `EMDX_DB` - Override database path (e.g., `EMDX_DB=/tmp/test.db emdx status`)
 - `EMDX_TEST_DB` - Test isolation database (set by pytest fixtures)
+- `EMDX_TASK_ID` - Task ID for agent sessions (used by hooks, see [Hooks & Integration](#-hooks--integration))
+- `EMDX_DOC_ID` - Document ID for context injection (used by `prime.sh` hook)
 - `GITHUB_TOKEN` - For Gist integration
 - `EDITOR` - Default editor for `emdx edit`
 
@@ -1163,12 +1165,70 @@ emdx task add "Fix auth bug" --cat SEC
 - `--epic, -e INTEGER` - Add to epic (task ID)
 - `--cat, -c TEXT` - Category key (e.g. SEC)
 
+### Batch Subtask Creation (`emdx task plan`)
+
+Create multiple subtasks under a parent task in one call. Subtasks are chained
+sequentially: each depends on the previous one.
+
+```bash
+# Create subtasks under an epic
+emdx task plan FEAT-25 "Read code" "Implement" "Test"
+
+# With category override
+emdx task plan FEAT-25 --cat FEAT "Read code" "Implement"
+
+# JSON output
+emdx task plan FEAT-25 --json "Step 1" "Step 2"
+```
+
+**Arguments:**
+- `PARENT` - Parent task ID (e.g. `FEAT-25` or `510`)
+- `TITLES` - One or more subtask titles (positional, at least one required)
+
+**Options:**
+- `--cat, -c TEXT` - Category for all subtasks (inherits from parent if not set)
+- `--json` - Output as JSON
+
+### Task Brief (`emdx task brief`)
+
+Get a comprehensive brief for a task. Assembles task details, dependencies,
+subtasks, work log, related documents, and key file paths in one call.
+Designed for agents starting work on a task.
+
+```bash
+# Plain text brief
+emdx task brief FEAT-25
+
+# JSON output (for agent consumption)
+emdx task brief 42 --json
+
+# Include lifecycle instructions for subagents
+emdx task brief FEAT-25 --agent-prompt
+
+# Limit log entries
+emdx task brief FEAT-25 --log-limit 5
+```
+
+**Arguments:**
+- `TASK_ID` - Task ID (e.g. `42` or `FEAT-25`)
+
+**Options:**
+- `--json` - Output as JSON
+- `--agent-prompt` - Append lifecycle instructions (on_complete, on_blocked, on_incomplete)
+- `--log-limit INTEGER` - Max log entries to show (default: 10)
+
 ### Finding Ready Tasks
 
 ```bash
 # Show tasks ready to work on
 emdx task ready
+
+# JSON output
+emdx task ready --json
 ```
+
+**Options:**
+- `--json` - Output as JSON
 
 ### Viewing Tasks
 
@@ -1180,35 +1240,74 @@ emdx task view 1
 ### Listing Tasks
 
 ```bash
-# List all tasks
+# List open/active/blocked tasks (default)
 emdx task list
 
-# List by status or category
+# Filter by status
+emdx task list --status open,active
 emdx task list --done
+emdx task list --all
+
+# Filter by category or epic
 emdx task list --cat FEAT
+emdx task list --epic 510
+emdx task list --epic SEC-1
 
 # Filter completed tasks by date
 emdx task list --done --today
 emdx task list --done --since 2026-02-15
+
+# Limit results
+emdx task list --limit 50
+
+# JSON output
+emdx task list --json
 ```
+
+**Options:**
+- `--status, -s TEXT` - Filter by status (comma-separated, e.g. `open,active`)
+- `--all, -a` - Include all tasks (no status filter)
+- `--done` - Show done tasks
+- `--limit, -n INTEGER` - Maximum results (default: 20)
+- `--epic, -e TEXT` - Filter by epic ID (e.g. `510` or `SEC-1`)
+- `--cat, -c TEXT` - Filter by category
+- `--since TEXT` - Show tasks completed on or after date (YYYY-MM-DD)
+- `--today` - Show tasks completed today
+- `--json` - Output as JSON
 
 ### Updating Task Status
 
 ```bash
 # Mark task as in-progress
 emdx task active 1
+emdx task active 42 --note "Starting work on auth refactor"
 
 # Mark task as done
 emdx task done 1
+emdx task done 42 --note "Fixed in PR #123"
+emdx task done 42 --output-doc 99
+emdx task done 42 --json
 
 # Mark task as blocked
 emdx task blocked 1
+emdx task blocked 42 --reason "Waiting on API key"
 
 # Mark task as won't do (closed without completing)
 emdx task wontdo 42
 emdx task wontdo TOOL-12
 emdx task wontdo 42 --note "Superseded by #55"
 ```
+
+**`active` Options:**
+- `--note, -n TEXT` - Progress note (logged to task work log)
+
+**`done` Options:**
+- `--note, -n TEXT` - Completion note (logged to task work log)
+- `--output-doc INTEGER` - Link an output document to this task
+- `--json` - Output as JSON
+
+**`blocked` Options:**
+- `--reason, -r TEXT` - Why the task is blocked (logged to task work log)
 
 **`wontdo` Options:**
 - `--note, -n TEXT` - Reason for closing (logged to task work log)
@@ -1496,4 +1595,52 @@ emdx briefing --save
 emdx briefing --save --hours 8
 emdx briefing --save --model sonnet
 ```
+
+---
+
+## 🔌 Hooks & Integration
+
+EMDX ships with Claude Code hooks that automate session lifecycle tasks.
+Hooks are configured in `.claude/settings.json` and run shell scripts from
+`.claude/hooks/`.
+
+### Session Lifecycle Hooks
+
+| Event | Hook Script | What it does |
+|-------|-------------|-------------|
+| `SessionStart` | `auto-backup.sh` | Creates a daily KB backup (skips if today's backup exists) |
+| `SessionStart` | `prime.sh` | Injects KB context: ready tasks, in-progress work, recent docs |
+| `Stop` | `save-output.sh` | Saves substantive agent output (200+ chars) to KB |
+| `SubagentStop` | `save-output.sh` | Same as Stop, also runs for subagent completions |
+
+### Environment Variables
+
+Hooks respond to these environment variables for task-scoped sessions:
+
+| Variable | Used by | Effect |
+|----------|---------|--------|
+| `EMDX_TASK_ID` | `prime.sh` | Marks task as active; shows task brief with `--agent-prompt` |
+| `EMDX_TASK_ID` | `save-output.sh` | Links saved output document to the task via `--task` |
+| `EMDX_DOC_ID` | `prime.sh` | Includes the specified document as additional context |
+
+### How It Works
+
+**`prime.sh`** (SessionStart): Runs `emdx prime` for full orientation. If
+`EMDX_TASK_ID` is set, also runs `emdx task active` and `emdx task brief
+--agent-prompt` to give the agent its assignment and lifecycle instructions.
+
+**`save-output.sh`** (Stop/SubagentStop): Captures the agent's last assistant
+message from the hook JSON payload. Skips short output (<200 chars). Derives a
+title from the first markdown heading. Tags output with `subagent` and
+`agent:<type>`. If `EMDX_TASK_ID` is set, links the saved document to the task
+via `emdx save --task`.
+
+**`auto-backup.sh`** (SessionStart): Fast-path check — if today's backup
+already exists (single glob), exits immediately. Otherwise runs
+`emdx maintain backup --quiet`.
+
+### Agent Workflow
+
+For detailed patterns on running task-scoped agent sessions, see
+[Agent Workflow](agent-workflow.md).
 

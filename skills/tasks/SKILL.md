@@ -89,6 +89,32 @@ emdx task epic delete <id>                    # Delete (unlinks tasks)
 | `blocked` | ⚠ | Waiting on dependencies |
 | `done` | ✓ | Completed |
 
+## Batch Subtasks
+
+Create multiple subtasks under a parent in one call. Subtasks are chained sequentially — each depends on the previous one.
+
+```bash
+emdx task plan FEAT-25 "Read code" "Implement" "Test"
+emdx task plan FEAT-25 --cat FEAT "Read code" "Implement"
+```
+
+Inherits the parent's epic if `--cat` is not specified.
+
+## Task Brief
+
+Get a comprehensive context bundle for a task — details, dependencies, subtasks, work log, and related documents in one call. Designed for agents starting work on a task.
+
+```bash
+emdx task brief FEAT-25              # Plain text brief
+emdx task brief 42 --json            # Structured JSON output
+emdx task brief FEAT-25 --agent-prompt  # Include lifecycle instructions
+```
+
+Options:
+- `--json` — structured output for programmatic use
+- `--log-limit N` — max log entries to include (default: 10)
+- `--agent-prompt` — append on_complete/on_blocked/on_incomplete instructions
+
 ## Important
 
 - The subcommand is `task add`, NOT `task create`

@@ -66,6 +66,7 @@ def _display_id(task: TaskDict) -> str:
 def _resolve_id(
     identifier: TaskRef,
     json_output: bool = False,
+    label: str = "Task",
 ) -> int:
     """Resolve a task identifier string to a database ID.
 
@@ -73,7 +74,7 @@ def _resolve_id(
     """
     task_id = tasks.resolve_task_id(identifier)
     if task_id is None:
-        msg = f"Task not found: {identifier}"
+        msg = f"{label} not found: {identifier}"
         if json_output:
             print_json({"error": msg})
         else:
@@ -104,11 +105,15 @@ def add(
         emdx task add "Another task" --cat SEC
         emdx task add "Deploy" --after 10 --after 11
     """
+    if not title.strip():
+        console.print("[red]Error: Task title cannot be empty[/red]")
+        raise typer.Exit(1)
+
     parent_task_id = None
     epic_key = cat.upper() if cat else None
 
     if epic:
-        epic_id = _resolve_id(epic)
+        epic_id = _resolve_id(epic, label="Epic")
         parent_task = tasks.get_task(epic_id)
         if not parent_task:
             console.print(f"[red]Epic #{epic_id} not found[/red]")
@@ -164,7 +169,7 @@ def plan(
             console.print(f"[red]{msg}[/red]")
         raise typer.Exit(1)
 
-    parent_id = _resolve_id(parent, json_output=json_output)
+    parent_id = _resolve_id(parent, json_output=json_output, label="Parent task")
     parent_task = tasks.get_task(parent_id)
     if not parent_task:
         msg = f"Parent task {parent} not found"
