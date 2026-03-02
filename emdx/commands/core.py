@@ -1652,7 +1652,7 @@ def view(
                             "id": link["target_doc_id"],
                             "title": link["target_title"],
                             "similarity": link["similarity_score"],
-                            "method": link["method"],
+                            "method": link["link_type"],
                         }
                     )
                 else:
@@ -1661,7 +1661,7 @@ def view(
                             "id": link["source_doc_id"],
                             "title": link["source_title"],
                             "similarity": link["similarity_score"],
-                            "method": link["method"],
+                            "method": link["link_type"],
                         }
                     )
             output = {
@@ -1706,7 +1706,7 @@ def view(
                     other_id = link["source_doc_id"]
                     other_title = link["source_title"]
                 score = f"{link['similarity_score']:.0%}"
-                table.add_row(str(other_id), score, other_title, link["method"])
+                table.add_row(str(other_id), score, other_title, link["link_type"])
 
             console.print(table)
             return

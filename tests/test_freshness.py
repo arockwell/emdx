@@ -109,7 +109,7 @@ def _add_link(source_id: int, target_id: int) -> None:
         conn.execute(
             """
             INSERT OR IGNORE INTO document_links
-                (source_doc_id, target_doc_id, similarity_score, method)
+                (source_doc_id, target_doc_id, similarity_score, link_type)
             VALUES (?, ?, 0.8, 'test')
             """,
             (source_id, target_id),

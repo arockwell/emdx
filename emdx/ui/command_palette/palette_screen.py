@@ -36,8 +36,8 @@ def _debug_log(msg: str) -> None:
         DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
         with open(DEBUG_LOG, "a") as f:
             f.write(f"{msg}\n")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to write to palette debug log: {e}")
 
 
 class PaletteResultWidget(ListItem):

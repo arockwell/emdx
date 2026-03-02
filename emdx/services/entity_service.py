@@ -559,9 +559,7 @@ def entity_match_wikify(
         df = entity_doc_freq.get(entity.normalized, 1)
         if df > max_docs:
             continue  # Too common to be informative
-        matching_doc_ids = _find_docs_with_entity(
-            entity.normalized, doc_id, project=scope_project
-        )
+        matching_doc_ids = _find_docs_with_entity(entity.normalized, doc_id, project=scope_project)
         for mid in matching_doc_ids:
             if mid not in existing:
                 if mid not in target_shared:
@@ -646,7 +644,7 @@ def entity_wikify_all(
     """
     if rebuild:
         with db.get_connection() as conn:
-            conn.execute("DELETE FROM document_links WHERE method = 'entity_match'")
+            conn.execute("DELETE FROM document_links WHERE link_type = 'entity_match'")
             conn.commit()
         logger.info("Cleared all entity_match links for rebuild")
 

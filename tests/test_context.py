@@ -55,7 +55,7 @@ class TestComputeLinkScore:
             target_title="Target",
             similarity_score=score,
             created_at=None,
-            method=method,
+            link_type=method,
         )
 
     def test_title_match_depth_1(self) -> None:
@@ -175,7 +175,7 @@ def _setup_graph(conn: sqlite3.Connection) -> None:
         conn.execute(
             "INSERT OR REPLACE INTO document_links "
             "(source_doc_id, target_doc_id, "
-            "similarity_score, method) "
+            "similarity_score, link_type) "
             "VALUES (?, ?, ?, ?)",
             (src, tgt, score, method),
         )

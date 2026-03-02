@@ -120,7 +120,7 @@ class DocumentLinkDetail(TypedDict):
     target_title: str
     similarity_score: float
     created_at: str | None
-    method: str
+    link_type: str
 
 
 class WikiArticleTimingDict(TypedDict):
