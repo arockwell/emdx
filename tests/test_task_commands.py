@@ -286,6 +286,48 @@ class TestTaskDone:
         assert result.exit_code != 0
 
 
+class TestTaskDuplicate:
+    """Tests for task duplicate command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_duplicate_marks_status(self, mock_tasks: Any) -> None:
+        mock_tasks.resolve_task_id.return_value = 1
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["duplicate", "1"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Duplicate" in out
+        assert "#1" in out
+        assert "Test task" in out
+        mock_tasks.update_task.assert_called_once_with(1, status="duplicate")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_duplicate_with_reason(self, mock_tasks: Any) -> None:
+        mock_tasks.resolve_task_id.return_value = 2
+        mock_tasks.get_task.return_value = {"id": 2, "title": "Bug fix"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["duplicate", "2", "--note", "Duplicate of #55"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Duplicate" in out
+        assert "#2" in out
+        mock_tasks.log_progress.assert_called_once_with(2, "Duplicate: Duplicate of #55")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_duplicate_sets_completed_at(self, mock_tasks: Any) -> None:
+        """Verify duplicate calls update_task with status='duplicate'.
+
+        The model layer sets completed_at when status is 'duplicate'.
+        """
+        mock_tasks.resolve_task_id.return_value = 3
+        mock_tasks.get_task.return_value = {"id": 3, "title": "Feature"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["duplicate", "3"])
+        assert result.exit_code == 0
+        mock_tasks.update_task.assert_called_once_with(3, status="duplicate")
+
+
 class TestTaskList:
     """Tests for task list command."""
 
