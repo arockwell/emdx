@@ -3,6 +3,7 @@
 Agent-facing commands for creating and consuming work items.
 """
 
+import re
 from datetime import date, datetime
 
 import typer
@@ -141,6 +142,70 @@ def add(
 
 
 @app.command()
+def plan(
+    parent: str = typer.Argument(..., help="Parent task epic_key (e.g. FEAT-25)"),
+    titles: list[str] = typer.Argument(..., help="Subtask titles (at least one)"),
+    cat: str | None = typer.Option(None, "-c", "--cat", help="Category for all subtasks"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Create multiple subtasks under a parent in one call.
+
+    Subtasks are chained sequentially: each depends on the previous one.
+
+    Examples:
+        emdx task plan FEAT-25 "Read code" "Implement" "Test"
+        emdx task plan FEAT-25 --cat FEAT "Read code" "Implement"
+    """
+    if not titles:
+        msg = "At least one subtask title is required"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise typer.Exit(1)
+
+    parent_id = _resolve_id(parent, json_output=json_output)
+    parent_task = tasks.get_task(parent_id)
+    if not parent_task:
+        msg = f"Parent task {parent} not found"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise typer.Exit(1)
+
+    epic_key = cat.upper() if cat else None
+    if not epic_key and parent_task.get("epic_key"):
+        epic_key = parent_task["epic_key"]
+
+    created: list[dict[str, str | int]] = []
+    prev_id: int | None = None
+
+    for title in titles:
+        depends_on = [prev_id] if prev_id is not None else None
+        task_id = tasks.create_task(
+            title,
+            description="",
+            parent_task_id=parent_id,
+            epic_key=epic_key,
+            depends_on=depends_on,
+        )
+        task_data = tasks.get_task(task_id)
+        display = _display_id(task_data) if task_data else f"#{task_id}"
+        created.append({"id": task_id, "epic_key": display, "title": title})
+        prev_id = task_id
+
+    parent_display = _display_id(parent_task)
+
+    if json_output:
+        print_json({"parent": parent_display, "subtasks": created})
+    else:
+        print(f"Created {len(created)} subtasks under {parent_display}:")
+        for sub in created:
+            print(f"  {sub['epic_key']}  {sub['title']}")
+
+
+@app.command()
 def ready(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -175,6 +240,9 @@ def ready(
 def done(
     task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     note: str | None = typer.Option(None, "-n", "--note", help="Completion note"),
+    output_doc: int | None = typer.Option(
+        None, "--output-doc", help="Link an output document to this task"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Mark a task as done.
@@ -183,6 +251,7 @@ def done(
         emdx task done 42
         emdx task done TOOL-12
         emdx task done 42 --note "Fixed in PR #123"
+        emdx task done 42 --output-doc 99
     """
     task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
@@ -193,15 +262,27 @@ def done(
             console.print(f"[red]Task #{task_id} not found[/red]")
         raise typer.Exit(1)
 
+    if output_doc is not None:
+        tasks.set_task_output_doc(task_id, output_doc)
     kwargs = {"status": "done"}
     tasks.update_task(task_id, **kwargs)
     if note:
         tasks.log_progress(task_id, note)
 
     if json_output:
-        print_json({"id": task_id, "title": task["title"], "status": "done"})
+        result: dict[str, str | int | None] = {
+            "id": task_id,
+            "title": task["title"],
+            "status": "done",
+        }
+        if output_doc is not None:
+            result["output_doc_id"] = output_doc
+        print_json(result)
     else:
-        console.print(f"[green]✓ Done:[/green] {_display_id(task)} {task['title']}")
+        msg = f"[green]✓ Done:[/green] {_display_id(task)} {task['title']}"
+        if output_doc is not None:
+            msg += f" [dim](output #{output_doc})[/dim]"
+        console.print(msg)
 
 
 @app.command()
@@ -281,13 +362,21 @@ def view(
     from emdx.models.documents import get_document
 
     source_id = task.get("source_doc_id")
-    if source_id:
+    output_id = task.get("output_doc_id")
+    if source_id or output_id:
         console.print()
+    if source_id:
         source_doc = get_document(source_id)
         if source_doc:
             console.print(f"  [dim]Source:[/dim] #{source_id} [cyan]{source_doc['title']}[/cyan]")
         else:
             console.print(f"  [dim]Source:[/dim] #{source_id} [dim](deleted)[/dim]")
+    if output_id:
+        output_doc = get_document(output_id)
+        if output_doc:
+            console.print(f"  [dim]Output:[/dim] #{output_id} [cyan]{output_doc['title']}[/cyan]")
+        else:
+            console.print(f"  [dim]Output:[/dim] #{output_id} [dim](deleted)[/dim]")
 
     # Description
     desc = task.get("description") or ""
@@ -407,6 +496,244 @@ def note(
 
     tasks.log_progress(task_id, message)
     console.print(f"[green]Logged:[/green] {_display_id(task)} — {message}")
+
+
+@app.command()
+def brief(
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    log_limit: int = typer.Option(10, "--log-limit", help="Max log entries to show"),
+) -> None:
+    """Get a comprehensive brief for a task.
+
+    Assembles task details, dependencies, subtasks, work log,
+    and related documents in one call. Designed for agents
+    starting work on a task.
+
+    Examples:
+        emdx task brief FEAT-25
+        emdx task brief 42 --json
+        emdx task brief FEAT-25 --log-limit 20
+    """
+    task_id = _resolve_id(task_id_str, json_output=json_output)
+    task = tasks.get_task(task_id)
+    if not task:
+        if json_output:
+            print_json({"error": f"Task not found: {task_id_str}"})
+        else:
+            print(f"Error: Task not found: {task_id_str}")
+        raise typer.Exit(1)
+
+    brief_data = _assemble_brief(task, task_id, log_limit)
+
+    if json_output:
+        print_json(brief_data)
+    else:
+        _print_brief_plain(brief_data)
+
+
+def _assemble_brief(
+    task: TaskDict,
+    task_id: int,
+    log_limit: int,
+) -> dict[str, object]:
+    """Gather all context for a task brief."""
+    from emdx.models.documents import get_document
+
+    display = _display_id(task)
+
+    data: dict[str, object] = {
+        "id": task_id,
+        "display_id": display,
+        "title": _display_title(task),
+        "status": task["status"],
+        "priority": task.get("priority", 3),
+        "category": task.get("epic_key"),
+        "description": task.get("description") or "",
+    }
+
+    # Epic info
+    parent_id = task.get("parent_task_id")
+    if parent_id:
+        parent = tasks.get_task(parent_id)
+        data["epic"] = {
+            "id": parent_id,
+            "title": parent["title"] if parent else "(deleted)",
+            "display_id": _display_id(parent) if parent else f"#{parent_id}",
+        }
+
+    # Dependencies
+    deps = tasks.get_dependencies(task_id)
+    data["dependencies"] = [
+        {
+            "id": d["id"],
+            "display_id": _display_id(d),
+            "title": _display_title(d),
+            "status": d["status"],
+        }
+        for d in deps
+    ]
+
+    # Dependents
+    dependents = tasks.get_dependents(task_id)
+    data["dependents"] = [
+        {
+            "id": d["id"],
+            "display_id": _display_id(d),
+            "title": _display_title(d),
+            "status": d["status"],
+        }
+        for d in dependents
+    ]
+
+    # Subtasks
+    children = tasks.get_children(task_id)
+    data["subtasks"] = [
+        {
+            "id": c["id"],
+            "display_id": _display_id(c),
+            "title": _display_title(c),
+            "status": c["status"],
+        }
+        for c in children
+    ]
+
+    # Task log
+    log_entries = tasks.get_task_log(task_id, limit=log_limit)
+    data["log"] = [
+        {"created_at": e.get("created_at", ""), "message": e["message"]} for e in log_entries
+    ]
+
+    # Related documents
+    related_docs: list[dict[str, object]] = []
+
+    source_id = task.get("source_doc_id")
+    if source_id:
+        source_doc = get_document(source_id)
+        related_docs.append(
+            {
+                "id": source_id,
+                "title": source_doc["title"] if source_doc else "(deleted)",
+                "relation": "source",
+            }
+        )
+
+    output_id: int | None = None
+    try:
+        output_id = dict(task).get("output_doc_id")  # type: ignore[assignment]
+    except Exception:
+        pass
+    if output_id:
+        output_doc = get_document(output_id)
+        related_docs.append(
+            {
+                "id": output_id,
+                "title": output_doc["title"] if output_doc else "(deleted)",
+                "relation": "output",
+            }
+        )
+
+    data["related_documents"] = related_docs
+
+    # Key files extracted from description and log
+    all_text = task.get("description") or ""
+    for entry in log_entries:
+        all_text += "\n" + entry["message"]
+    data["key_files"] = _extract_file_paths(all_text)
+
+    return data
+
+
+# Pattern for file paths: word/word.ext or word/word/word etc.
+_FILE_PATH_RE = re.compile(
+    r"(?:^|[\s`\"'(])"  # preceded by whitespace, backtick, quote, or paren
+    r"((?:[\w.-]+/)+[\w.-]+\.[\w]+)"  # path/to/file.ext
+)
+
+
+def _extract_file_paths(text: str) -> list[str]:
+    """Extract likely file paths from text."""
+    matches = _FILE_PATH_RE.findall(text)
+    seen: set[str] = set()
+    result: list[str] = []
+    for m in matches:
+        if m not in seen:
+            seen.add(m)
+            result.append(m)
+    return result
+
+
+def _print_brief_plain(data: dict[str, object]) -> None:
+    """Print task brief in plain text format."""
+    display_id = data["display_id"]
+    title = data["title"]
+    print(f"TASK BRIEF: {display_id} — {title}")
+    print("=" * 50)
+    print()
+
+    print(f"Status: {data['status']}")
+    if data.get("category"):
+        print(f"Category: {data['category']}")
+    epic = data.get("epic")
+    if epic and isinstance(epic, dict):
+        print(f"Epic: {epic.get('display_id')} — {epic.get('title')}")
+    print(f"Priority: {data['priority']}")
+    print()
+
+    desc = data.get("description", "")
+    if desc:
+        print("DESCRIPTION:")
+        for line in str(desc).splitlines():
+            print(f"  {line}")
+        print()
+
+    deps = data.get("dependencies")
+    if isinstance(deps, list) and deps:
+        print("DEPENDENCIES (must complete first):")
+        for d in deps:
+            assert isinstance(d, dict)
+            print(f"  {d['display_id']} ({d['status']}) — {d['title']}")
+        print()
+
+    dependents = data.get("dependents")
+    if isinstance(dependents, list) and dependents:
+        print("BLOCKED TASKS (waiting on this):")
+        for d in dependents:
+            assert isinstance(d, dict)
+            print(f"  {d['display_id']} — {d['title']}")
+        print()
+
+    subtasks = data.get("subtasks")
+    if isinstance(subtasks, list) and subtasks:
+        print("SUBTASKS:")
+        for s in subtasks:
+            assert isinstance(s, dict)
+            print(f"  {s['display_id']} ({s['status']}) — {s['title']}")
+        print()
+
+    log_entries = data.get("log")
+    if isinstance(log_entries, list) and log_entries:
+        print("TASK LOG (recent):")
+        for entry in log_entries:
+            assert isinstance(entry, dict)
+            ts = entry.get("created_at", "")
+            print(f"  {ts} — {entry['message']}")
+        print()
+
+    related = data.get("related_documents")
+    if isinstance(related, list) and related:
+        print("RELATED DOCUMENTS:")
+        for doc in related:
+            assert isinstance(doc, dict)
+            print(f'  #{doc["id"]} "{doc["title"]}" ({doc["relation"]})')
+        print()
+
+    key_files = data.get("key_files")
+    if isinstance(key_files, list) and key_files:
+        print("KEY FILES (from task description/log):")
+        for f in key_files:
+            print(f"  {f}")
+        print()
 
 
 @app.command()

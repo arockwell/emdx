@@ -26,6 +26,7 @@ class TaskDict(TypedDict):
     completed_at: str | None
     type: str
     source_doc_id: int | None
+    output_doc_id: int | None
     parent_task_id: int | None
     epic_key: str | None
     epic_seq: int | None

@@ -135,8 +135,8 @@ Claude Code hooks in `.claude/settings.json` handle session lifecycle automatica
 |------|-------|-------------|
 | `auto-backup.sh` | SessionStart | Creates a daily KB backup before work begins |
 | `prime.sh` | SessionStart | Injects KB context (ready tasks, in-progress) |
-| `save-output.sh` | Stop | Saves conversation output to KB after each turn |
-| `session-end.sh` | SessionEnd | Captures session summary on exit |
+| `save-output.sh` | Stop | No-op placeholder (auto-save removed in v0.26.0) |
+| `session-end.sh` | SessionEnd | Marks tracked task as done (when EMDX_TASK_ID set) |
 
 ### Session Start Protocol
 
@@ -375,13 +375,13 @@ just bump 0.X.Y         # Bump version in pyproject.toml + emdx/__init__.py
 git tag vX.Y.Z && git push --tags
 ```
 
-Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, and `.claude-plugin/plugin.json`.
+Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`.
 
 **Doc check:** If new commands or flags were added, verify they appear in `docs/cli-api.md` (subcommand tables + examples) and `CLAUDE.md` (essential commands section).
 
 ## Claude Code Plugin
 
-emdx ships as a Claude Code plugin with skills in the `.claude/skills/` directory. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
+emdx ships as a Claude Code plugin with skills in the `skills/` directory at the repo root. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
 
 **Available skills:** `/emdx:bootstrap`, `/emdx:prime`, `/emdx:prioritize`, `/emdx:research`, `/emdx:save`, `/emdx:setup`, `/emdx:tasks`, `/emdx:wrapup`
 
