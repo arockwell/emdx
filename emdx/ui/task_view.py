@@ -38,13 +38,13 @@ logger = logging.getLogger(__name__)
 # Status display order and icons
 STATUS_ORDER = ["active", "open", "blocked", "done", "failed", "wontdo", "duplicate"]
 STATUS_ICONS = {
-    "open": "○",
-    "active": "●",
-    "blocked": "⚠",
-    "done": "✓",
-    "failed": "✗",
-    "wontdo": "⊘",
-    "duplicate": "◆",
+    "open": "⚪",
+    "active": "🟢",
+    "blocked": "🟡",
+    "done": "✅",
+    "failed": "❌",
+    "wontdo": "🚫",
+    "duplicate": "🔁",
 }
 STATUS_LABELS = {
     "open": "READY",
@@ -56,7 +56,7 @@ STATUS_LABELS = {
     "duplicate": "DUPLICATE",
 }
 STATUS_COLORS = {
-    "open": "",
+    "open": "cyan",
     "active": "green",
     "blocked": "yellow",
     "done": "dim",
@@ -64,6 +64,9 @@ STATUS_COLORS = {
     "wontdo": "dim",
     "duplicate": "cyan",
 }
+
+# Legacy statuses that should be mapped to canonical ones
+STATUS_ALIASES = {"closed": "done"}
 
 # Row key prefix for section headers
 HEADER_PREFIX = "header:"
@@ -140,6 +143,17 @@ def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -
         if title.startswith(prefix):
             return title[len(prefix) :]
     return title
+
+
+def _task_badge(task: TaskDict) -> str:
+    """Return the KEY-N badge for a task, or empty string if unavailable."""
+    epic_key = task.get("epic_key")
+    epic_seq = task.get("epic_seq")
+    if epic_key and epic_seq:
+        return f"{epic_key}-{epic_seq}"
+    if epic_key:
+        return epic_key
+    return ""
 
 
 def _task_label(task: TaskDict) -> str:
@@ -302,8 +316,10 @@ class TaskView(Widget):
         self._debounce_timer: Timer | None = None
         self._status_filter: set[str] | None = None  # None = show all
         self._initial_select_done = False
-        self._group_by: str = "status"  # "status" or "epic"
+        self._group_by: str = "epic"  # "epic" or "status"
         self._epic_filter: str | None = None  # Filter to specific epic key
+        self._collapsed: set[int] = set()  # Explicitly collapsed parent IDs
+        self._expanded: set[int] = set()  # Explicitly expanded parent IDs
         self._zoomed: bool = False
         self._sidebar_visible: bool = True
         self._current_task: TaskDict | None = None
@@ -350,7 +366,7 @@ class TaskView(Widget):
     async def on_mount(self) -> None:
         """Load tasks on mount."""
         table = self.query_one("#task-table", DataTable)
-        table.add_column("icon", key="icon", width=3)
+        table.add_column("icon", key="icon", width=5)
         table.add_column("epic", key="epic", width=7)
         table.add_column("title", key="title", width=60)
         table.add_column("age", key="age", width=4)
@@ -458,7 +474,8 @@ class TaskView(Widget):
         for task in self._tasks:
             if not self._task_passes_filters(task):
                 continue
-            self._tasks_by_status[task["status"]].append(task)
+            status = STATUS_ALIASES.get(task["status"], task["status"])
+            self._tasks_by_status[status].append(task)
 
         self._render_task_table(restore_row=restore_row)
         self._update_status_bar()
@@ -528,34 +545,38 @@ class TaskView(Widget):
         """
         row_key = self._row_key_for_task(task)
         self._row_key_to_task[row_key] = task
-        is_epic = task.get("type") == "epic"
+        is_parent = task.get("type") in {"epic", "group"}
         color = STATUS_COLORS.get(task["status"], "")
-        icon = "📋" if is_epic else STATUS_ICONS.get(task["status"], "?")
+        icon = "📋" if is_parent else STATUS_ICONS.get(task["status"], "?")
         title = _strip_epic_prefix(
             task["title"],
             task.get("epic_key"),
             task.get("epic_seq"),
         )
-        # Epic badge: epics and children show "KEY-N" when available
+        # Epic badge: parents and children show "KEY-N" colored by status
         epic_key = task.get("epic_key")
         epic_seq = task.get("epic_seq")
-        if is_epic and epic_key and epic_seq:
-            epic_text = Text(f"{epic_key}-{epic_seq}", style="bold cyan")
-        elif is_epic:
-            epic_text = Text(f"#{task['id']}", style="bold cyan")
+        badge_color = color or "cyan"
+        bold_badge = f"bold {badge_color}" if badge_color else "bold"
+        if is_parent and epic_key and epic_seq:
+            epic_text = Text(f"{epic_key}-{epic_seq}", style=bold_badge)
+        elif is_parent and epic_key:
+            epic_text = Text(epic_key, style=bold_badge)
+        elif is_parent:
+            epic_text = Text("")
         elif epic_key and epic_seq:
-            epic_text = Text(f"{epic_key}-{epic_seq}", style="cyan")
+            epic_text = Text(f"{epic_key}-{epic_seq}", style=badge_color)
         elif epic_key:
-            epic_text = Text(epic_key, style="cyan")
+            epic_text = Text(epic_key, style=badge_color)
         else:
             epic_text = Text("")
 
-        title_style = "bold cyan" if is_epic else (f"{color}" if color else "")
+        title_style = "bold" if is_parent else ""
         prefix = "  " if indent else ""
 
-        # Show inline progress for epic tasks
+        # Show inline progress for parent tasks (epics/groups)
         age_text = _format_time_short(task.get("created_at"))
-        if is_epic:
+        if is_parent:
             epic_data = self._epics.get(task["id"])
             if epic_data:
                 done = epic_data.get("children_done", 0)
@@ -646,7 +667,7 @@ class TaskView(Widget):
                     total = epic_data.get("child_count", 0)
                     ref_text = f"{ek} ({done}/{total} done)"
                 else:
-                    ref_text = f"epic #{parent_id}"
+                    ref_text = f"(parent {parent_id})"
                 table.add_row(
                     "",
                     "",
@@ -664,41 +685,119 @@ class TaskView(Widget):
                 self._render_task_row(table, task)
 
     def _render_groups_by_epic(self, table: "DataTable[str | Text]") -> None:
-        """Render tasks grouped by epic with tree connectors."""
-        # Collect all filtered tasks into epic groups.
-        # Only group under an epic if the task is actually a child (has parent_task_id)
-        # or is the epic itself. Tasks with epic_key but no parent go to ungrouped.
-        tasks_by_epic: dict[str, list[TaskDict]] = defaultdict(list)
-        for status in STATUS_ORDER:
-            for task in self._tasks_by_status.get(status, []):
-                is_epic = task.get("type") == "epic"
-                has_parent = bool(task.get("parent_task_id"))
-                if is_epic or has_parent:
-                    epic_key = task.get("epic_key") or ""
-                else:
-                    epic_key = ""
-                tasks_by_epic[epic_key].append(task)
+        """Render tasks grouped by parent epic, with status sub-groups.
 
-        # Sort epic keys: named epics alphabetically, ungrouped last
-        epic_keys = sorted(
-            tasks_by_epic.keys(),
-            key=lambda k: (k == "", k),
+        Groups tasks by their parent_task_id (actual epic relationship).
+        Active epics (with open/active/blocked children) render first with
+        non-finished status sub-groups. Fully-done epics render at the
+        bottom as collapsed header-only rows showing progress.
+        Orphan tasks (no parent) go to UNGROUPED.
+        """
+        finished = {"done", "failed", "wontdo", "duplicate"}
+        showing_finished = bool(self._status_filter and self._status_filter & finished)
+        visible_statuses = (
+            STATUS_ORDER if showing_finished else [s for s in STATUS_ORDER if s not in finished]
         )
 
-        finished = {"done", "failed", "wontdo", "duplicate"}
+        # Group children by parent_task_id.
+        # First pass: collect all tasks and find which IDs are parents.
+        all_loaded: dict[int, TaskDict] = {}
+        referenced_parents: set[int] = set()
+        for status in STATUS_ORDER:
+            for task in self._tasks_by_status.get(status, []):
+                all_loaded[task["id"]] = task
+                pid = task.get("parent_task_id")
+                if pid is not None:
+                    referenced_parents.add(pid)
+
+        # Second pass: separate parents from children.
+        parent_types = {"epic", "group"}
+        children_by_parent: dict[int | None, list[TaskDict]] = defaultdict(
+            list,
+        )
+        epic_task_by_id: dict[int, TaskDict] = {}
+        for task in all_loaded.values():
+            is_parent = task.get("type") in parent_types or task["id"] in referenced_parents
+            if is_parent:
+                epic_task_by_id[task["id"]] = task
+            else:
+                parent = task.get("parent_task_id")
+                children_by_parent[parent].append(task)
+
+        # Build ordered list of parent IDs: epics with children first,
+        # then epics without children, then None (ungrouped).
+        parent_ids: list[int | None] = []
+        seen: set[int | None] = set()
+        # Epics that have children in our data
+        for pid in children_by_parent:
+            if pid is not None and pid not in seen:
+                parent_ids.append(pid)
+                seen.add(pid)
+        # Epics from the epics list that may not have children loaded
+        for eid in self._epics:
+            if eid not in seen:
+                parent_ids.append(eid)
+                seen.add(eid)
+
+        # Sort: active epics first (alphabetically by title),
+        # then done, then ungrouped (None) last
+        def _sort_key(pid: int | None) -> tuple[int, str]:
+            if pid is None:
+                return (2, "")
+            epic = epic_task_by_id.get(pid) or self._epics.get(pid)
+            title = epic.get("title", "") if epic else ""
+            kids = children_by_parent.get(pid, [])
+            has_open = any(k["status"] not in finished for k in kids)
+            if has_open:
+                return (0, title.lower())
+            epic_status = epic.get("status", "done") if epic else "done"
+            if epic_status not in finished:
+                return (0, title.lower())
+            return (1, title.lower())
+
+        parent_ids.sort(key=_sort_key)
+        # Ensure None (ungrouped) is in the list
+        if None not in seen and children_by_parent.get(None):
+            parent_ids.append(None)
+
+        # Partition into active and done groups
+        active_parents: list[int | None] = []
+        done_parents: list[int] = []
+        for pid in parent_ids:
+            kids = children_by_parent.get(pid, [])
+            has_open = any(k["status"] not in finished for k in kids)
+            if has_open or showing_finished or pid is None:
+                active_parents.append(pid)
+            else:
+                # pid cannot be None here (handled by `pid is None` above)
+                assert pid is not None
+                epic = epic_task_by_id.get(pid) or self._epics.get(pid)
+                epic_status = epic.get("status", "done") if epic else "done"
+                if epic_status not in finished:
+                    active_parents.append(pid)
+                else:
+                    done_parents.append(pid)
+
         first_group = True
-        for epic_key in epic_keys:
-            all_tasks = tasks_by_epic[epic_key]
-            # Separate epic tasks (headers) from child tasks
-            epic_tasks = [t for t in all_tasks if t.get("type") == "epic"]
-            child_tasks = [
-                t for t in all_tasks if t.get("type") != "epic" and t["status"] not in finished
-            ]
-            if not child_tasks and not epic_tasks:
+
+        # Render active epic groups with status sub-groups
+        for pid in active_parents:
+            kids = children_by_parent.get(pid, [])
+            if not kids and pid is not None:
                 continue
-            # Skip fully-finished epics with no open children
-            if not child_tasks and epic_tasks and epic_tasks[0]["status"] in finished:
-                continue
+            # Skip UNGROUPED when all children are in non-visible statuses
+            if pid is None:
+                visible_kids = [
+                    k
+                    for k in kids
+                    if STATUS_ALIASES.get(
+                        k["status"],
+                        k["status"],
+                    )
+                    in set(visible_statuses)
+                ]
+                if not visible_kids:
+                    continue
 
             if not first_group:
                 table.add_row(
@@ -706,49 +805,123 @@ class TaskView(Widget):
                     "",
                     Text(""),
                     "",
-                    key=f"{SEPARATOR_PREFIX}epic:{epic_key or 'none'}",
+                    key=f"{SEPARATOR_PREFIX}epic:{pid or 'none'}",
                 )
             first_group = False
 
-            # Render epic task row (uses 📋 icon and #id badge via _render_task_row)
-            if epic_key and epic_tasks:
-                self._render_task_row(table, epic_tasks[0])
-            elif epic_key:
-                # No epic task record — non-selectable header
-                epic_data = next(
-                    (e for e in self._epics.values() if e.get("epic_key") == epic_key),
-                    None,
-                )
-                if epic_data:
-                    done = epic_data.get("children_done", 0)
-                    total = epic_data.get("child_count", 0)
-                    header_text = f"{epic_key} ({done}/{total} done)"
+            # Render epic header
+            if pid is not None:
+                epic = epic_task_by_id.get(pid)
+                if not epic:
+                    # Epic not in loaded tasks — use _epics data
+                    epic_data = self._epics.get(pid)
+                    if epic_data:
+                        epic = epic_data  # EpicTaskDict extends TaskDict
+                if epic:
+                    self._render_task_row(table, epic)
                 else:
-                    header_text = f"{epic_key} ({len(child_tasks)})"
-                table.add_row(
-                    "",
-                    "",
-                    Text(header_text, style="bold cyan"),
-                    "",
-                    key=f"{HEADER_PREFIX}epic:{epic_key}",
-                )
+                    table.add_row(
+                        "",
+                        "",
+                        Text("Unknown parent", style="bold cyan"),
+                        "",
+                        key=f"{HEADER_PREFIX}epic:{pid}",
+                    )
             else:
                 table.add_row(
                     "",
                     "",
-                    Text(f"UNGROUPED ({len(child_tasks)})", style="bold cyan"),
+                    Text(
+                        f"UNGROUPED ({len(kids)})",
+                        style="bold cyan",
+                    ),
                     "",
                     key=f"{HEADER_PREFIX}epic:none",
                 )
 
-            # Render child tasks — tree connectors only under real epics
-            for i, task in enumerate(child_tasks):
-                if epic_key:
-                    is_last = i == len(child_tasks) - 1
-                    connector = "└─" if is_last else "├─"
-                    self._render_task_row(table, task, tree_prefix=connector)
+            # Skip children if this parent is collapsed
+            if pid is not None and pid in self._collapsed:
+                continue
+
+            # Render children flat, sorted by status order
+            filtered_kids: list[TaskDict] = []
+            status_set = set(visible_statuses)
+            for task in kids:
+                normalized = STATUS_ALIASES.get(
+                    task["status"],
+                    task["status"],
+                )
+                if normalized in status_set:
+                    filtered_kids.append(task)
+            # Sort by status order
+            status_rank = {s: i for i, s in enumerate(STATUS_ORDER)}
+            filtered_kids.sort(
+                key=lambda t: status_rank.get(
+                    STATUS_ALIASES.get(t["status"], t["status"]),
+                    len(STATUS_ORDER),
+                ),
+            )
+            for i, task in enumerate(filtered_kids):
+                is_last = i == len(filtered_kids) - 1
+                connector = "└─" if is_last else "├─"
+                self._render_task_row(
+                    table,
+                    task,
+                    tree_prefix=connector,
+                )
+
+        # Render done epics — collapsed by default, expandable
+        if done_parents and (showing_finished or not self._status_filter):
+            # Auto-collapse done parents that haven't been explicitly toggled
+            for pid in done_parents:
+                if pid not in self._collapsed and pid not in self._expanded:
+                    # First render: default to collapsed
+                    self._collapsed.add(pid)
+
+            if not first_group:
+                table.add_row(
+                    "",
+                    "",
+                    Text(""),
+                    "",
+                    key=f"{SEPARATOR_PREFIX}done-epics",
+                )
+            first_group = False
+
+            table.add_row(
+                "",
+                "",
+                Text("COMPLETED", style="dim bold"),
+                "",
+                key=f"{HEADER_PREFIX}done-epics",
+            )
+            for pid in done_parents:
+                epic = epic_task_by_id.get(pid)
+                if not epic:
+                    epic_data = self._epics.get(pid)
+                    if epic_data:
+                        epic = epic_data
+                if epic:
+                    self._render_task_row(table, epic)
                 else:
-                    self._render_task_row(table, task)
+                    table.add_row(
+                        "",
+                        "",
+                        Text("Unknown parent", style="dim cyan"),
+                        "",
+                        key=f"{HEADER_PREFIX}epic:{pid}",
+                    )
+                # Show children if expanded
+                if pid not in self._collapsed:
+                    kids = children_by_parent.get(pid, [])
+                    for i, task in enumerate(kids):
+                        is_last = i == len(kids) - 1
+                        connector = "└─" if is_last else "├─"
+                        self._render_task_row(
+                            table,
+                            task,
+                            tree_prefix=connector,
+                        )
 
     def _select_first_task_row(self) -> None:
         """Move cursor to the first actual task row with the header visible above."""
@@ -798,8 +971,8 @@ class TaskView(Widget):
         # Mode indicators (separated from counts with │)
         mode_parts: list[str] = []
 
-        if self._group_by == "epic":
-            mode_parts.append("[magenta]by epic[/magenta]")
+        if self._group_by == "status":
+            mode_parts.append("[magenta]by status[/magenta]")
 
         if self._status_filter:
             labels = [STATUS_LABELS.get(s, s) for s in sorted(self._status_filter)]
@@ -848,7 +1021,8 @@ class TaskView(Widget):
         for task in self._tasks:
             if not self._task_passes_filters(task):
                 continue
-            self._tasks_by_status[task["status"]].append(task)
+            status = STATUS_ALIASES.get(task["status"], task["status"])
+            self._tasks_by_status[status].append(task)
         self._render_task_table()
         self._update_status_bar()
 
@@ -938,6 +1112,10 @@ class TaskView(Widget):
             event.stop()
         elif event.key == "O":
             self._open_task_urls()
+            event.prevent_default()
+            event.stop()
+        elif event.key == "enter":
+            self._toggle_collapse()
             event.prevent_default()
             event.stop()
 
@@ -1099,7 +1277,9 @@ class TaskView(Widget):
         detail_log.clear()
 
         icon = STATUS_ICONS.get(task["status"], "?")
-        header.update(f"{icon} Task #{task['id']}")
+        badge = _task_badge(task)
+        header_label = f"{icon} {badge}" if badge else f"{icon} Task"
+        header.update(header_label)
 
         # Title
         detail_log.write(f"[bold]{task['title']}[/bold]")
@@ -1111,7 +1291,8 @@ class TaskView(Widget):
                 sidebar_log = self.query_one("#task-sidebar-content", RichLog)
                 sidebar_header = self.query_one("#task-sidebar-header", Static)
                 sidebar_log.clear()
-                sidebar_header.update(f"{icon} #{task['id']}")
+                sidebar_label = f"{icon} {badge}" if badge else f"{icon} Task"
+                sidebar_header.update(sidebar_label)
                 self._render_task_metadata(sidebar_log, task)
             except Exception as e:
                 logger.warning("Sidebar not ready: %s", e)
@@ -1168,7 +1349,9 @@ class TaskView(Widget):
                 target.write("[bold]Depends on:[/bold]")
                 for dep in deps:
                     dep_icon = STATUS_ICONS.get(dep["status"], "?")
-                    target.write(f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]")
+                    dep_badge = _task_badge(dep)
+                    dep_label = f"{dep_badge} " if dep_badge else ""
+                    target.write(f"  {dep_icon} {dep_label}{dep['title'][:60]} [{dep['status']}]")
         except Exception as e:
             logger.debug(f"Error loading dependencies: {e}")
 
@@ -1179,7 +1362,9 @@ class TaskView(Widget):
                 target.write("[bold]Blocks:[/bold]")
                 for dep in dependents:
                     dep_icon = STATUS_ICONS.get(dep["status"], "?")
-                    target.write(f"  {dep_icon} #{dep['id']} {dep['title'][:60]} [{dep['status']}]")
+                    dep_badge = _task_badge(dep)
+                    dep_label = f"{dep_badge} " if dep_badge else ""
+                    target.write(f"  {dep_icon} {dep_label}{dep['title'][:60]} [{dep['status']}]")
         except Exception as e:
             logger.debug(f"Error loading dependents: {e}")
 
@@ -1229,7 +1414,9 @@ class TaskView(Widget):
         detail_log.clear()
 
         icon = STATUS_ICONS.get(task["status"], "?")
-        header.update(f"{icon} Epic #{task['id']}")
+        badge = _task_badge(task)
+        epic_header = f"{icon} {badge}" if badge else f"{icon} Epic"
+        header.update(epic_header)
 
         # Title
         detail_log.write(f"[bold]{task['title']}[/bold]")
@@ -1354,6 +1541,27 @@ class TaskView(Widget):
             return
         self._toggle_filter_focus()
 
+    # Collapse/expand
+
+    def _toggle_collapse(self) -> None:
+        """Toggle collapse state of the selected parent task."""
+        task = self._get_selected_task()
+        if not task:
+            return
+        tid = task["id"]
+        # Toggle: if currently shown as collapsed, expand; otherwise collapse
+        if tid in self._collapsed:
+            self._collapsed.discard(tid)
+            self._expanded.add(tid)
+        elif tid in self._expanded:
+            self._expanded.discard(tid)
+            self._collapsed.add(tid)
+        else:
+            # First toggle — default state depends on context;
+            # just collapse it (active parents default to expanded)
+            self._collapsed.add(tid)
+        self._render_task_table()
+
     # Status mutation actions
 
     async def _set_task_status(self, new_status: str) -> None:
@@ -1374,7 +1582,9 @@ class TaskView(Widget):
 
         try:
             update_task(task["id"], status=new_status)
-            self.notify(f"Task #{task['id']} → {new_status}", timeout=2)
+            badge = _task_badge(task)
+            label = badge if badge else task["title"][:30]
+            self.notify(f"{label} → {new_status}", timeout=2)
             await self._load_tasks(restore_row=saved_row)
         except Exception as e:
             logger.error(f"Failed to update task: {e}")
