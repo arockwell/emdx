@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-03-04
+
+**Epic-centered task TUI.** The task browser now groups tasks by epic (parent) instead of status, with tree connectors showing hierarchy. Done epics collapse into a COMPLETED section at the bottom. Enter key toggles collapse/expand. Emoji status icons and colored KEY-N badges replace the old `#id` references throughout the UI.
+
+### 🚀 Major Features
+
+#### Epic-Based Task Grouping (#990)
+Task TUI default view groups children under their parent epic with tree connectors (`├─`/`└─`). Active epics with open children appear at the top; done epics collapse into a COMPLETED section at the bottom, expandable with Enter. Two-pass parent detection correctly groups `emdx task plan` subtasks under their parent. UNGROUPED section catches orphan tasks.
+
+### 🔧 Improvements
+
+- **Emoji status icons** — replaced subtle Unicode markers with emoji (⚪🟢🟡✅❌🚫🔁) for instant visual status recognition (#990)
+- **Colored KEY-N badges** — task identifiers like `FEAT-49` are now colored by status; titles remain white for readability (#990)
+- **Legacy status normalization** — `STATUS_ALIASES` maps old statuses like `closed` to `done` so legacy tasks render correctly (#990)
+- **No more `#id` references** — all task references in detail panes, dependency lists, and notifications now use KEY-N badges instead of raw database IDs (#990)
+- **README skills table** — replaced flat skills list with a structured table showing each skill's purpose and invocation; CLAUDE.md also restructured for skills-first organization (#989)
+
+[0.29.0]: https://github.com/arockwell/emdx/compare/v0.28.1...v0.29.0
+
 ## [0.28.1] - 2026-03-02
 
 **Duplicate task status and post-release quality sweep.** Adds a new "duplicate" terminal status for task management, plus docs fixes, TypedDict improvements, and 12 regression tests from a comprehensive v0.28 sanity audit.
