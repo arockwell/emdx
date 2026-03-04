@@ -31,6 +31,8 @@ def make_task(
     updated_at: str | None = None,
     completed_at: str | None = None,
     parent_task_id: int | None = None,
+    type: str = "manual",
+    epic_seq: int | None = None,
     **kwargs: object,
 ) -> TaskDict:
     base: TaskDict = {
@@ -46,10 +48,10 @@ def make_task(
         "gameplan_id": None,
         "project": None,
         "current_step": None,
-        "type": "manual",
+        "type": type,
         "source_doc_id": None,
         "parent_task_id": parent_task_id,
-        "epic_seq": None,
+        "epic_seq": epic_seq,
     }
     return base
 
@@ -57,12 +59,21 @@ def make_task(
 def make_epic(
     id: int = 1,
     epic_key: str = "AUTH",
+    status: str = "open",
     child_count: int = 10,
     children_done: int = 7,
     children_open: int = 3,
+    epic_seq: int = 1,
     **kwargs: object,
 ) -> EpicTaskDict:
-    base = make_task(id=id, title=f"Epic: {epic_key}", status="open", epic_key=epic_key)
+    base = make_task(
+        id=id,
+        title=f"Epic: {epic_key}",
+        status=status,
+        epic_key=epic_key,
+        type="epic",
+        epic_seq=epic_seq,
+    )
     epic: EpicTaskDict = {
         **base,  # type: ignore[typeddict-item]
         "child_count": child_count,
@@ -109,6 +120,20 @@ def _table_cell_texts(table: DataTable[Any], col_key: str) -> list[str]:
         except Exception:
             texts.append("")
     return texts
+
+
+def _task_titles(table: DataTable[Any]) -> list[str]:
+    """Get title texts for actual task rows only (skip headers/separators)."""
+    titles: list[str] = []
+    for row in table.ordered_rows:
+        key = str(row.key.value)
+        if key.startswith("task:"):
+            try:
+                val = table.get_cell(row.key, "title")
+                titles.append(str(val))
+            except Exception:
+                pass
+    return titles
 
 
 # ---------------------------------------------------------------------------
@@ -210,12 +235,15 @@ class TestRendering:
 
     @pytest.mark.asyncio
     async def test_single_status_group_header(self, mock_task_data: MockDict) -> None:
-        """A single-status list renders the correct section header."""
+        """A single-status list renders the correct section header in status mode."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, status="open"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
+            await pilot.pause()
+            # Switch to status grouping
+            await pilot.press("g")
             await pilot.pause()
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
@@ -223,7 +251,7 @@ class TestRendering:
 
     @pytest.mark.asyncio
     async def test_multi_status_groups_in_order(self, mock_task_data: MockDict) -> None:
-        """Multiple status groups render in STATUS_ORDER."""
+        """Multiple status groups render in STATUS_ORDER (in status grouping mode)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, status="done"),
             make_task(id=2, status="open"),
@@ -231,6 +259,9 @@ class TestRendering:
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
+            await pilot.pause()
+            # Switch to status grouping to test status header ordering
+            await pilot.press("g")
             await pilot.pause()
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
@@ -257,6 +288,9 @@ class TestRendering:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
+            # Switch to status grouping to see all statuses
+            await pilot.press("g")
+            await pilot.pause()
             table = app.query_one("#task-table", DataTable)
             icons = _table_cell_texts(table, "icon")
             titles = _table_cell_texts(table, "title")
@@ -264,11 +298,11 @@ class TestRendering:
             task_rows = [
                 (icon, title) for icon, title in zip(icons, titles, strict=False) if icon.strip()
             ]
-            assert any("○" in i and "Open task" in t for i, t in task_rows)
-            assert any("●" in i and "Active task" in t for i, t in task_rows)
-            assert any("⚠" in i and "Blocked task" in t for i, t in task_rows)
-            assert any("✓" in i and "Done task" in t for i, t in task_rows)
-            assert any("✗" in i and "Failed task" in t for i, t in task_rows)
+            assert any("⚪" in i and "Open task" in t for i, t in task_rows)
+            assert any("🟢" in i and "Active task" in t for i, t in task_rows)
+            assert any("🟡" in i and "Blocked task" in t for i, t in task_rows)
+            assert any("✅" in i and "Done task" in t for i, t in task_rows)
+            assert any("❌" in i and "Failed task" in t for i, t in task_rows)
 
     @pytest.mark.asyncio
     async def test_long_title_stored_in_full(self, mock_task_data: MockDict) -> None:
@@ -358,14 +392,14 @@ class TestKeyboardNavigation:
     async def test_highlighting_task_updates_detail_header(self, mock_task_data: MockDict) -> None:
         """Highlighting a task updates the detail header."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=42, title="My task", status="open"),
+            make_task(id=42, title="My task", status="open", epic_key="AUTH", epic_seq=1),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _select_first_task(pilot)
             header = app.query_one("#task-detail-header", Static)
-            assert "42" in str(header.content) or "DETAIL" in str(header.content)
+            assert "AUTH-1" in str(header.content) or "Task" in str(header.content)
 
     @pytest.mark.asyncio
     async def test_r_refreshes_task_list(self, mock_task_data: MockDict) -> None:
@@ -837,13 +871,13 @@ class TestPureFunctions:
     def test_task_label_short_title(self) -> None:
         task = make_task(title="Fix bug", status="open")
         label = _task_label(task)
-        assert "○" in label
+        assert "⚪" in label
         assert "Fix bug" in label
 
     def test_task_label_long_title_truncated(self) -> None:
         task = make_task(title="A" * 60, status="active")
         label = _task_label(task)
-        assert "●" in label
+        assert "🟢" in label
         assert "..." in label
         # Full 60-char title should NOT appear
         assert "A" * 51 not in label
@@ -942,8 +976,7 @@ class TestFilterBar:
             await pilot.pause(0.3)
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            task_titles = _task_titles(table)
             assert len(task_titles) == 1
             assert "Task A" in task_titles[0]
 
@@ -974,8 +1007,7 @@ class TestFilterBar:
             await pilot.pause(0.3)
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            task_titles = _task_titles(table)
             assert len(task_titles) == 1
             assert "Task A" in task_titles[0]
 
@@ -1090,8 +1122,7 @@ class TestFilterBar:
             await pilot.pause(0.3)
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            task_titles = _task_titles(table)
             assert len(task_titles) == 1
             assert "Authentication" in task_titles[0]
 
@@ -1138,10 +1169,10 @@ class TestStatusFilter:
             await pilot.pause()
 
             assert table.row_count < initial_count
-            titles = _table_cell_texts(table, "title")
-            assert any("READY" in t for t in titles)
-            assert not any("ACTIVE" in t for t in titles)
-            assert not any("DONE" in t for t in titles)
+            task_titles = _task_titles(table)
+            assert any("Open task" in t for t in task_titles)
+            assert not any("Active task" in t for t in task_titles)
+            assert not any("Done task" in t for t in task_titles)
 
     @pytest.mark.asyncio
     async def test_i_filters_to_active_only(self, mock_task_data: MockDict) -> None:
@@ -1158,10 +1189,10 @@ class TestStatusFilter:
             await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            assert any("ACTIVE" in t for t in titles)
-            assert not any("READY" in t for t in titles)
-            assert not any("DONE" in t for t in titles)
+            task_titles = _task_titles(table)
+            assert any("Active task" in t for t in task_titles)
+            assert not any("Open task" in t for t in task_titles)
+            assert not any("Done task" in t for t in task_titles)
 
     @pytest.mark.asyncio
     async def test_x_filters_to_blocked_only(self, mock_task_data: MockDict) -> None:
@@ -1177,9 +1208,9 @@ class TestStatusFilter:
             await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            assert any("BLOCKED" in t for t in titles)
-            assert not any("READY" in t for t in titles)
+            task_titles = _task_titles(table)
+            assert any("Blocked task" in t for t in task_titles)
+            assert not any("Open task" in t for t in task_titles)
 
     @pytest.mark.asyncio
     async def test_f_filters_to_done_and_failed(self, mock_task_data: MockDict) -> None:
@@ -1196,10 +1227,10 @@ class TestStatusFilter:
             await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            assert any("DONE" in t for t in titles)
-            assert any("FAILED" in t for t in titles)
-            assert not any("READY" in t for t in titles)
+            task_titles = _task_titles(table)
+            assert any("Done task" in t for t in task_titles)
+            assert any("Failed task" in t for t in task_titles)
+            assert not any("Open task" in t for t in task_titles)
 
     @pytest.mark.asyncio
     async def test_asterisk_clears_status_filter(self, mock_task_data: MockDict) -> None:
@@ -1287,8 +1318,7 @@ class TestStatusFilter:
             await pilot.pause(0.3)
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            task_titles = [t for t in titles if t.strip() and "READY" not in t]
+            task_titles = _task_titles(table)
             # Only "Fix auth bug" (open + matches "auth")
             assert len(task_titles) == 1
             assert "auth" in task_titles[0].lower()
@@ -1342,8 +1372,8 @@ class TestEpicGrouping:
     """Tests for the g key epic/status grouping toggle."""
 
     @pytest.mark.asyncio
-    async def test_g_toggles_to_epic_grouping(self, mock_task_data: MockDict) -> None:
-        """Pressing g switches from status grouping to epic grouping."""
+    async def test_g_toggles_to_status_grouping(self, mock_task_data: MockDict) -> None:
+        """Pressing g switches from epic grouping (default) to status grouping."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Auth task", status="open", epic_key="AUTH", parent_task_id=100),
             make_task(id=2, title="TUI task", status="open", epic_key="TUI", parent_task_id=101),
@@ -1357,22 +1387,22 @@ class TestEpicGrouping:
             await pilot.pause()
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
-            # Default: grouped by status — should have READY header
-            assert any("READY" in t for t in titles)
+            # Default: grouped by epic — should have AUTH and TUI headers
+            assert any("AUTH" in t for t in titles)
+            assert any("TUI" in t for t in titles)
 
             await pilot.press("g")
             await pilot.pause()
 
             titles = _table_cell_texts(table, "title")
-            # Now grouped by epic — should have AUTH and TUI headers
-            assert any("AUTH" in t for t in titles)
-            assert any("TUI" in t for t in titles)
-            # Should NOT have status headers
-            assert not any("READY" in t for t in titles)
+            # Now grouped by status — should have top-level READY header
+            # (In epic mode READY appears as indented sub-header "  READY",
+            # but in status mode it appears as top-level "READY (N)")
+            assert any(t.strip().startswith("READY") for t in titles)
 
     @pytest.mark.asyncio
-    async def test_g_toggles_back_to_status(self, mock_task_data: MockDict) -> None:
-        """Pressing g twice returns to status grouping."""
+    async def test_g_toggles_back_to_epic(self, mock_task_data: MockDict) -> None:
+        """Pressing g twice returns to epic grouping (default)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Auth task", status="open", epic_key="AUTH"),
         ]
@@ -1386,11 +1416,13 @@ class TestEpicGrouping:
 
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
-            assert any("READY" in t for t in titles)
+            # Back to epic grouping — UNGROUPED header visible
+            # (task has no parent_task_id, so goes to ungrouped)
+            assert any("UNGROUPED" in t for t in titles)
 
     @pytest.mark.asyncio
     async def test_epic_grouping_shows_ungrouped(self, mock_task_data: MockDict) -> None:
-        """Tasks without an epic appear under UNGROUPED."""
+        """Tasks without an epic appear under UNGROUPED (default view)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Epic task", status="open", epic_key="AUTH", parent_task_id=100),
             make_task(id=2, title="Loose task", status="open", epic_key=None),
@@ -1401,8 +1433,6 @@ class TestEpicGrouping:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            await pilot.press("g")
-            await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
@@ -1411,7 +1441,7 @@ class TestEpicGrouping:
 
     @pytest.mark.asyncio
     async def test_epic_grouping_shows_progress(self, mock_task_data: MockDict) -> None:
-        """Epic headers show done/total progress when epic info is available."""
+        """Epic headers show done/total progress in the age column."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Task", status="open", epic_key="AUTH", parent_task_id=100),
         ]
@@ -1421,16 +1451,14 @@ class TestEpicGrouping:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            await pilot.press("g")
-            await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            assert any("7/10 done" in t for t in titles)
+            ages = _table_cell_texts(table, "age")
+            assert any("7/10" in a for a in ages)
 
     @pytest.mark.asyncio
-    async def test_epic_grouping_status_bar_indicator(self, mock_task_data: MockDict) -> None:
-        """Status bar shows 'by epic' when epic grouping is active."""
+    async def test_status_grouping_status_bar_indicator(self, mock_task_data: MockDict) -> None:
+        """Status bar shows 'by status' when status grouping is active."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Task", status="open"),
         ]
@@ -1441,11 +1469,11 @@ class TestEpicGrouping:
             await pilot.pause()
 
             bar = app.query_one("#task-status-bar", Static)
-            assert "by epic" in str(bar.content)
+            assert "by status" in str(bar.content)
 
     @pytest.mark.asyncio
     async def test_epic_grouping_composes_with_filters(self, mock_task_data: MockDict) -> None:
-        """Epic grouping works together with status and text filters."""
+        """Epic grouping (default) works together with status and text filters."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Fix auth", status="open", epic_key="AUTH", parent_task_id=100),
             make_task(id=2, title="Fix deploy", status="open", epic_key="AUTH", parent_task_id=100),
@@ -1458,10 +1486,7 @@ class TestEpicGrouping:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            # Switch to epic grouping
-            await pilot.press("g")
-            await pilot.pause()
-            # Filter to open only
+            # Filter to open only (epic grouping is default)
             await pilot.press("o")
             await pilot.pause()
 
@@ -1490,8 +1515,8 @@ class TestEpicGrouping:
             assert filter_input.value == "g"
 
     @pytest.mark.asyncio
-    async def test_epic_grouping_hides_all_done_epics(self, mock_task_data: MockDict) -> None:
-        """Epics where all tasks are done/failed are hidden in epic grouping."""
+    async def test_done_epics_collapsed_at_bottom(self, mock_task_data: MockDict) -> None:
+        """Done epics appear at bottom under COMPLETED, children hidden."""
         mock_task_data["list_tasks"].return_value = [
             make_task(
                 id=1, title="Active work", status="open", epic_key="LIVE", parent_task_id=200
@@ -1501,24 +1526,33 @@ class TestEpicGrouping:
         ]
         mock_task_data["list_epics"].return_value = [
             make_epic(id=200, epic_key="LIVE"),
-            make_epic(id=201, epic_key="DEAD"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=2,
+                children_done=2,
+                children_open=0,
+            ),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            await pilot.press("g")
-            await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
+            # LIVE epic with children at top
             assert any("LIVE" in t for t in titles)
-            assert not any("DEAD" in t for t in titles)
+            # COMPLETED section with DEAD epic header
+            assert any("COMPLETED" in t for t in titles)
+            # DEAD epic header visible but children are not
+            assert any("DEAD" in t for t in titles)
+            assert not any("Old stuff" in t for t in titles)
+            assert not any("Also old" in t for t in titles)
 
     @pytest.mark.asyncio
-    async def test_epic_grouping_hides_done_tasks_in_mixed_group(
-        self, mock_task_data: MockDict
-    ) -> None:
-        """Done tasks within an epic that has open tasks are hidden."""
+    async def test_epic_grouping_hides_done_in_mixed_group(self, mock_task_data: MockDict) -> None:
+        """Done/failed children are hidden by default in active epics."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open work", status="open", epic_key="MIX", parent_task_id=300),
             make_task(
@@ -1534,13 +1568,12 @@ class TestEpicGrouping:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            await pilot.press("g")
-            await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
             assert any("MIX" in t for t in titles)
             assert any("Open work" in t for t in titles)
+            # Done/failed tasks hidden by default
             assert not any("Finished work" in t for t in titles)
             assert not any("Failed work" in t for t in titles)
 
@@ -1562,10 +1595,13 @@ class TestWontdoStatus:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
+            # Filter to finished tasks so the wontdo task is visible
+            await pilot.press("f")
+            await pilot.pause()
             table = app.query_one("#task-table", DataTable)
             icons = _table_cell_texts(table, "icon")
             task_icons = [i for i in icons if i.strip()]
-            assert any("⊘" in i for i in task_icons)
+            assert any("🚫" in i for i in task_icons)
 
     @pytest.mark.asyncio
     async def test_w_key_marks_task_wontdo(self, mock_task_data: MockDict) -> None:
@@ -1605,14 +1641,14 @@ class TestWontdoStatus:
             await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            assert any("DONE" in t for t in titles)
-            assert any("WON'T DO" in t for t in titles)
-            assert not any("READY" in t for t in titles)
+            task_titles = _task_titles(table)
+            assert any("Done task" in t for t in task_titles)
+            assert any("Wontdo task" in t for t in task_titles)
+            assert not any("Open task" in t for t in task_titles)
 
     @pytest.mark.asyncio
-    async def test_wontdo_hidden_in_epic_grouping(self, mock_task_data: MockDict) -> None:
-        """Epics where all tasks are wontdo are hidden in epic grouping."""
+    async def test_wontdo_epic_collapsed_at_bottom(self, mock_task_data: MockDict) -> None:
+        """Epics where all tasks are wontdo appear collapsed under COMPLETED."""
         mock_task_data["list_tasks"].return_value = [
             make_task(
                 id=1, title="Active work", status="open", epic_key="LIVE", parent_task_id=400
@@ -1621,18 +1657,27 @@ class TestWontdoStatus:
         ]
         mock_task_data["list_epics"].return_value = [
             make_epic(id=400, epic_key="LIVE"),
-            make_epic(id=401, epic_key="SKIP"),
+            make_epic(
+                id=401,
+                epic_key="SKIP",
+                status="done",
+                child_count=1,
+                children_done=1,
+                children_open=0,
+            ),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
-            await pilot.pause()
-            await pilot.press("g")
             await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
             assert any("LIVE" in t for t in titles)
-            assert not any("SKIP" in t for t in titles)
+            # SKIP appears as collapsed header under COMPLETED
+            assert any("COMPLETED" in t for t in titles)
+            assert any("SKIP" in t for t in titles)
+            # But children are not shown
+            assert not any("Skipped" in t for t in titles)
 
     @pytest.mark.asyncio
     async def test_w_blocked_in_filter_input(self, mock_task_data: MockDict) -> None:
@@ -1675,9 +1720,11 @@ class TestCrossGroupEpicClustering:
         async with app.run_test() as pilot:
             await pilot.pause()
             table = app.query_one("#task-table", DataTable)
-            titles = _table_cell_texts(table, "title")
-            # Should show a cross-group epic header with progress
-            assert any("AUTH" in t and "3/5 done" in t for t in titles)
+            epics = _table_cell_texts(table, "epic")
+            ages = _table_cell_texts(table, "age")
+            # Epic header row should show AUTH badge and 3/5 progress
+            assert any("AUTH" in t for t in epics)
+            assert any("3/5" in t for t in ages)
 
     @pytest.mark.asyncio
     async def test_cross_group_children_have_tree_connectors(
@@ -1730,8 +1777,8 @@ class TestCrossGroupEpicClustering:
             assert not any("done" in t.lower() for t in titles)
 
     @pytest.mark.asyncio
-    async def test_true_orphans_render_flat(self, mock_task_data: MockDict) -> None:
-        """Tasks with no parent_task_id render as flat items (no connectors)."""
+    async def test_true_orphans_render_under_ungrouped(self, mock_task_data: MockDict) -> None:
+        """Tasks with no parent_task_id render under UNGROUPED header."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Orphan A", status="open"),
             make_task(id=2, title="Orphan B", status="open"),
@@ -1740,9 +1787,12 @@ class TestCrossGroupEpicClustering:
         async with app.run_test() as pilot:
             await pilot.pause()
             table = app.query_one("#task-table", DataTable)
-            icons = _table_cell_texts(table, "icon")
-            # No tree connectors for true orphans
-            assert not any("├─" in i or "└─" in i for i in icons)
+            titles = _table_cell_texts(table, "title")
+            # Orphans should appear under UNGROUPED header
+            assert any("UNGROUPED" in t for t in titles)
+            task_titles = _task_titles(table)
+            assert any("Orphan A" in t for t in task_titles)
+            assert any("Orphan B" in t for t in task_titles)
 
 
 # ===================================================================
@@ -1925,3 +1975,126 @@ class TestUrlLinkification:
             assert "Another short line." in text
             for line in detail.lines:
                 assert len(line.text) <= 80
+
+
+# ===================================================================
+# P. Collapse / Expand
+# ===================================================================
+
+
+class TestCollapseExpand:
+    """Tests for Enter key toggling collapse/expand on epic parents."""
+
+    @pytest.mark.asyncio
+    async def test_enter_collapses_active_epic(self, mock_task_data: MockDict) -> None:
+        """Pressing Enter on an active epic hides its children."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Child task",
+                status="open",
+                epic_key="EPIC",
+                parent_task_id=100,
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="EPIC"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("Child task" in t for t in titles)
+
+            # Navigate to epic row and press Enter to collapse
+            await pilot.press("j")
+            await pilot.press("k")
+            await pilot.pause()
+            # Now press Enter to collapse
+            await pilot.press("enter")
+            await pilot.pause()
+
+            titles = _table_cell_texts(table, "title")
+            assert not any("Child task" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_enter_expands_collapsed_active_epic(
+        self,
+        mock_task_data: MockDict,
+    ) -> None:
+        """Pressing Enter twice toggles collapse then expand."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Child task",
+                status="open",
+                epic_key="EPIC",
+                parent_task_id=100,
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="EPIC"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("j")
+            await pilot.press("k")
+            await pilot.pause()
+
+            # Collapse
+            await pilot.press("enter")
+            await pilot.pause()
+            # Expand
+            await pilot.press("enter")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            assert any("Child task" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_done_epic_auto_collapsed(self, mock_task_data: MockDict) -> None:
+        """Done epics in COMPLETED section start collapsed."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Active work",
+                status="open",
+                epic_key="LIVE",
+                parent_task_id=200,
+            ),
+            make_task(
+                id=2,
+                title="Done child",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=1,
+                children_done=1,
+                children_open=0,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Enable finished filter to see COMPLETED section
+            await pilot.press("f")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            # DEAD epic header visible but children hidden
+            assert any("DEAD" in t for t in titles)
+            assert not any("Done child" in t for t in titles)
