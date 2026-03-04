@@ -81,6 +81,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
+        split-group: [1, 2, 3, 4, 5, 6]
 
     steps:
     - uses: actions/checkout@v6
@@ -111,9 +112,12 @@ jobs:
     - name: Install project
       run: poetry install --no-interaction
 
-    - name: Run tests with pytest and coverage
+    - name: Run tests (shard ${{ matrix.split-group }}/6)
       run: |
-        poetry run pytest -v --tb=short --strict-markers --strict-config --cov=emdx --cov-report=xml --cov-report=term-missing
+        poetry run pytest --splits 6 --group ${{ matrix.split-group }} \
+          --strict-markers --strict-config \
+          --cov=emdx --cov-report=xml --cov-report=term-missing \
+          --splitting-algorithm least_duration
 
     - name: Upload coverage reports
       if: matrix.python-version == '3.13'
@@ -121,3 +125,4 @@ jobs:
       with:
         file: ./coverage.xml
         fail_ci_if_error: false
+        flags: shard${{ matrix.split-group }}
