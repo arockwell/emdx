@@ -1,36 +1,95 @@
-# Release Preparation
+# Release
 
-Prepare a release for emdx version $ARGUMENTS.
+Full release pipeline: prep, PR, merge, sync, tag. One command, no babysitting.
 
-## Steps
+## Version Detection
 
-1. **Preview changes** — Run `just changelog` to see what's changed since last release
-2. **Bump version** — Run `just bump $ARGUMENTS` to update `pyproject.toml`, `emdx/__init__.py`, and `.claude-plugin/plugin.json`
-3. **Write changelog** — Write a polished, prose-style entry in `CHANGELOG.md` following the existing format:
-   - Group into `### 🚀 Major Features`, `### 🔧 Improvements`, `### 🐛 Bug Fixes` sections
+Automatically determine the next version:
+
+1. Get the current version from `pyproject.toml` (e.g., `0.29.0`)
+2. Run `just changelog` to preview changes since last release
+3. Decide the bump:
+   - **Patch** (0.29.0 → 0.29.1): Only bug fixes, docs, chores
+   - **Minor** (0.29.0 → 0.30.0): New features, improvements
+   - **Major**: Breaking changes (rare — confirm with user first)
+4. If `$ARGUMENTS` is provided, use that version instead of auto-detecting
+
+## Pipeline
+
+### Phase 1: Prep Release
+
+1. **Preview changes** — Run `just changelog`
+2. **Determine version** — Auto-detect or use `$ARGUMENTS` if provided
+3. **Bump version** — Run `just bump <version>`
+4. **Write changelog** — Polished prose entry in `CHANGELOG.md`:
+   - Group into `### 🚀 Major Features`, `### 🔧 Improvements`, `### 🐛 Bug Fixes`
    - Use `####` sub-headers for major features with PR number references
-   - Write human-readable descriptions, not mechanical commit dumps
-   - Add comparison link at the bottom: `[X.Y.Z]: https://github.com/arockwell/emdx/compare/vPREV...vX.Y.Z`
-4. **Update version badge** — Update the version badge in `README.md`: `[![Version](https://img.shields.io/badge/version-X.Y.Z-blue.svg)]`
-5. **Check for new features needing docs** — If any new commands or major features were added, check if `docs/cli-api.md` and `docs/README.md` need updates
-6. **Verify** — Run `poetry run pytest tests/ -x -q` to make sure tests pass
-7. **Branch + commit + PR**:
+   - Add comparison link: `[X.Y.Z]: https://github.com/arockwell/emdx/compare/vPREV...vX.Y.Z`
+5. **Update version badge** in `README.md`
+6. **Check for new features needing docs** — scan for new commands/flags, update `docs/cli-api.md` if needed
+7. **Run tests** — `poetry run pytest tests/ -x -q`
+
+### Phase 2: PR + Merge
+
+8. **Branch + commit + push**:
    ```bash
-   git checkout -b release/v$ARGUMENTS
+   git checkout -b release/v<version>
    git add -A
-   git commit -m "chore: release v$ARGUMENTS"
-   git push -u origin release/v$ARGUMENTS
-   gh pr create --title "chore: Release v$ARGUMENTS" --body "Release v$ARGUMENTS"
+   git commit -m "chore: Release v<version>"
+   git push -u origin release/v<version>
    ```
-9. **After PR merges — tag and push** (remind user):
+9. **Create PR**:
+   ```bash
+   gh pr create --title "chore: Release v<version>" --body "Release v<version>"
    ```
-   ⚠️  IMPORTANT: After this PR merges to main, create and push the git tag:
-   git fetch origin main && git tag v$ARGUMENTS origin/main && git push origin v$ARGUMENTS
-   ```
+10. **Watch CI and merge**:
+    ```bash
+    gh pr checks <N> --watch --fail-fast
+    # If green:
+    gh api repos/{owner}/{repo}/pulls/<N>/merge -X PUT -f merge_method=squash
+    # If failing: diagnose, fix, push, watch again (max 3 attempts)
+    ```
+11. **Verify merge**:
+    ```bash
+    gh pr view <N> --json state -q '.state'  # Must be "MERGED"
+    ```
 
-## Important
+### Phase 3: Tag
 
-- All three version files must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.claude-plugin/plugin.json` — `just bump` handles all three
-- Prefer hand-written changelog over auto-generated — match the voice and structure of existing entries
-- Always include the PR/issue number references in changelog entries
-- **Tags are NOT created by the PR** — they must be pushed manually after the release PR merges to main
+12. **Fetch, tag, push**:
+    ```bash
+    git fetch origin main
+    git tag v<version> origin/main
+    git push origin v<version>
+    ```
+13. **Verify tag exists on remote**:
+    ```bash
+    git ls-remote --tags origin v<version>
+    ```
+
+### Phase 4: Sync Local
+
+14. **Merge main into current branch**:
+    ```bash
+    git merge origin/main
+    ```
+
+## Output
+
+Print a summary when done:
+```
+Released v0.30.0
+   PR #991: merged
+   Tag v0.30.0: pushed
+   Local branch: synced with main
+```
+
+## Rules
+
+- All version files must stay in sync — `just bump` handles this
+- Hand-written changelog, not auto-generated dumps
+- **Never skip CI** — always wait for green before merging
+- If CI fails, fix and retry (max 3 attempts per failure)
+- Use `gh api` for merge if `gh pr merge` fails due to worktree issues
+- If merge conflicts arise during sync, report and stop
+- The tag MUST point to the merge commit on main, not the branch commit
