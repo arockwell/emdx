@@ -49,9 +49,20 @@ Use emdx as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plug
 $ claude --plugin-dir /path/to/emdx
 ```
 
-**Available skills:** `/emdx:bootstrap`, `/emdx:investigate`, `/emdx:prioritize`, `/emdx:research`, `/emdx:review`, `/emdx:save`, `/emdx:tasks`, `/emdx:work`
-
 Skills give Claude Code native access to your knowledge base — save research, manage tasks, and maintain session memory without leaving the conversation.
+
+| Skill | What it does | Invoke |
+|-------|-------------|--------|
+| **work** | Pick up a task, research, implement, test, mark done | `/emdx:work [task_id]` |
+| **investigate** | Deep-dive a topic: KB search + source code + gap analysis | `/emdx:investigate <topic>` |
+| **review** | Run all KB quality checks, produce prioritized fix plan | `/emdx:review [focus]` |
+| **prioritize** | Triage ready tasks by epic progress, deps, category, age | `/emdx:prioritize` |
+| **bootstrap** | Generate foundational KB docs from a new codebase | `/emdx:bootstrap [focus]` |
+| **research** | Search KB for prior art before starting new work | `/emdx:research <topic>` |
+| **save** | Persist findings, analysis, or decisions to KB | `/emdx:save [content]` |
+| **tasks** | Add tasks, plan subtasks, get briefs, track status | `/emdx:tasks [action]` |
+
+See [Skills Reference](docs/skills-reference.md) for detailed documentation.
 
 ## Save
 
