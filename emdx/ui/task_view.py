@@ -71,6 +71,7 @@ STATUS_ALIASES = {"closed": "done"}
 # Row key prefix for section headers
 HEADER_PREFIX = "header:"
 SEPARATOR_PREFIX = "sep:"
+DONE_FOLD_PREFIX = "done-fold:"
 
 
 def _format_time_ago(dt_str: str | None) -> str:
@@ -320,6 +321,7 @@ class TaskView(Widget):
         self._epic_filter: str | None = None  # Filter to specific epic key
         self._collapsed: set[int] = set()  # Explicitly collapsed parent IDs
         self._expanded: set[int] = set()  # Explicitly expanded parent IDs
+        self._done_folds_expanded: set[int] = set()  # Epic IDs with done-fold open
         self._zoomed: bool = False
         self._sidebar_visible: bool = True
         self._current_task: TaskDict | None = None
@@ -843,32 +845,67 @@ class TaskView(Widget):
             if pid is not None and pid in self._collapsed:
                 continue
 
-            # Render children flat, sorted by status order
-            filtered_kids: list[TaskDict] = []
-            status_set = set(visible_statuses)
+            # Split children into active and done groups
+            active_kids: list[TaskDict] = []
+            done_kids: list[TaskDict] = []
             for task in kids:
-                normalized = STATUS_ALIASES.get(
-                    task["status"],
-                    task["status"],
-                )
-                if normalized in status_set:
-                    filtered_kids.append(task)
-            # Sort by status order
+                normalized = STATUS_ALIASES.get(task["status"], task["status"])
+                if normalized in finished:
+                    done_kids.append(task)
+                else:
+                    active_kids.append(task)
+
+            # Sort active kids by status order
             status_rank = {s: i for i, s in enumerate(STATUS_ORDER)}
-            filtered_kids.sort(
+            active_kids.sort(
                 key=lambda t: status_rank.get(
                     STATUS_ALIASES.get(t["status"], t["status"]),
                     len(STATUS_ORDER),
                 ),
             )
-            for i, task in enumerate(filtered_kids):
-                is_last = i == len(filtered_kids) - 1
+
+            # Sort done kids by completed_at descending (most recent first)
+            done_kids.sort(
+                key=lambda t: t.get("completed_at") or t.get("updated_at") or "",
+                reverse=True,
+            )
+
+            # Determine if done-fold is expanded
+            done_fold_open = pid is not None and pid in self._done_folds_expanded
+            has_done = len(done_kids) > 0
+
+            # Render active children
+            for i, task in enumerate(active_kids):
+                is_last = i == len(active_kids) - 1 and not has_done
                 connector = "└─" if is_last else "├─"
-                self._render_task_row(
-                    table,
-                    task,
-                    tree_prefix=connector,
-                )
+                self._render_task_row(table, task, tree_prefix=connector)
+
+            # Render done children
+            if has_done:
+                if pid is None or showing_finished:
+                    # Ungrouped or explicit filter: show done kids inline
+                    for i, task in enumerate(done_kids):
+                        is_last = i == len(done_kids) - 1
+                        connector = "└─" if is_last else "├─"
+                        self._render_task_row(table, task, tree_prefix=connector)
+                else:
+                    # Epic children: collapsible done-fold
+                    arrow = "▾" if done_fold_open else "▸"
+                    fold_label = f"{len(done_kids)} completed {arrow}"
+                    is_last_row = not done_fold_open
+                    connector = "└─" if is_last_row else "├─"
+                    table.add_row(
+                        Text(f"{connector}✅", style="dim"),
+                        Text(""),
+                        Text(fold_label, style="dim italic"),
+                        Text(""),
+                        key=f"{DONE_FOLD_PREFIX}{pid}",
+                    )
+                    if done_fold_open:
+                        for i, task in enumerate(done_kids):
+                            is_last = i == len(done_kids) - 1
+                            connector = "└─" if is_last else "├─"
+                            self._render_task_row(table, task, tree_prefix=connector)
 
         # Render done epics — collapsed by default, expandable
         if done_parents and (showing_finished or not self._status_filter):
@@ -1544,7 +1581,23 @@ class TaskView(Widget):
     # Collapse/expand
 
     def _toggle_collapse(self) -> None:
-        """Toggle collapse state of the selected parent task."""
+        """Toggle collapse state of the selected parent task or done-fold."""
+        # Check if cursor is on a done-fold row
+        table = self.query_one("#task-table", DataTable)
+        try:
+            if table.cursor_row is not None and table.row_count > 0:
+                row_key = str(table.ordered_rows[table.cursor_row].key.value)
+                if row_key.startswith(DONE_FOLD_PREFIX):
+                    epic_id = int(row_key[len(DONE_FOLD_PREFIX) :])
+                    if epic_id in self._done_folds_expanded:
+                        self._done_folds_expanded.discard(epic_id)
+                    else:
+                        self._done_folds_expanded.add(epic_id)
+                    self._render_task_table()
+                    return
+        except (IndexError, AttributeError, ValueError):
+            pass
+
         task = self._get_selected_task()
         if not task:
             return
