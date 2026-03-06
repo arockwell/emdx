@@ -17,7 +17,6 @@ from rich.table import Table
 from ..services.clustering import (
     ClusterDocumentDict,
     compute_tfidf,
-    cosine_similarity,
     fetch_cluster_documents,
     find_clusters,
     require_sklearn,
@@ -73,6 +72,8 @@ def _compute_similarity_matrix(
     """
     if not documents:
         return None, []
+
+    from sklearn.metrics.pairwise import cosine_similarity
 
     result = compute_tfidf(documents, title_boost=1)
     similarity_matrix = cosine_similarity(result.matrix)

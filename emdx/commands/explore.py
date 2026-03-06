@@ -27,7 +27,6 @@ from ..database import db
 from ..services.clustering import (
     ClusterDocumentDict,
     compute_tfidf,
-    cosine_similarity,
     fetch_cluster_documents,
     find_clusters,
     require_sklearn,
@@ -682,6 +681,8 @@ def explore(
         raise typer.Exit(0)
 
     # Compute TF-IDF and similarity
+    from sklearn.metrics.pairwise import cosine_similarity
+
     tfidf_matrix, doc_ids, vectorizer = _compute_tfidf(documents)
     similarity_matrix = cosine_similarity(tfidf_matrix)
 
