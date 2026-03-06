@@ -53,7 +53,7 @@ def _blocker_summary(task_id: int) -> str:
     open_deps = [d for d in deps if d["status"] not in ("done", "closed", "wontdo", "duplicate")]
     if not open_deps:
         return ""
-    names = ", ".join(f"#{d['id']}" for d in open_deps[:3])
+    names = ", ".join(_display_id(d) for d in open_deps[:3])
     extra = f" +{len(open_deps) - 3}" if len(open_deps) > 3 else ""
     return f"{names}{extra}"
 
@@ -118,7 +118,7 @@ def add(
         epic_id = _resolve_id(epic, label="Epic")
         parent_task = tasks.get_task(epic_id)
         if not parent_task:
-            console.print(f"[red]Epic #{epic_id} not found[/red]")
+            console.print(f"[red]Epic {epic} not found[/red]")
             raise typer.Exit(1)
         parent_task_id = epic_id
         # Inherit epic_key from the parent epic if not explicitly set
@@ -143,8 +143,11 @@ def add(
     if doc:
         msg += f" [dim](doc #{doc})[/dim]"
     if depends_on:
-        dep_ids = " ".join(f"#{d}" for d in depends_on)
-        msg += f" [dim](after {dep_ids})[/dim]"
+        dep_labels: list[str] = []
+        for d in depends_on:
+            dt = tasks.get_task(d)
+            dep_labels.append(_display_id(dt) if dt else f"#{d}")
+        msg += f" [dim](after {' '.join(dep_labels)})[/dim]"
     console.print(msg)
 
 
@@ -263,10 +266,11 @@ def done(
     task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
     if not task:
+        msg = f"Task {task_id_str} not found"
         if json_output:
-            print_json({"error": f"Task #{task_id} not found"})
+            print_json({"error": msg})
         else:
-            console.print(f"[red]Task #{task_id} not found[/red]")
+            console.print(f"[red]{msg}[/red]")
         raise typer.Exit(1)
 
     if output_doc is not None:
@@ -311,10 +315,11 @@ def wontdo(
     task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
     if not task:
+        msg = f"Task {task_id_str} not found"
         if json_output:
-            print_json({"error": f"Task #{task_id} not found"})
+            print_json({"error": msg})
         else:
-            console.print(f"[red]Task #{task_id} not found[/red]")
+            console.print(f"[red]{msg}[/red]")
         raise typer.Exit(1)
 
     tasks.update_task(task_id, status="wontdo")
@@ -324,7 +329,7 @@ def wontdo(
     if json_output:
         print_json({"id": task_id, "title": task["title"], "status": "wontdo"})
     else:
-        console.print(f"[dim]⊘ Won't do:[/dim] #{task_id} {task['title']}")
+        console.print(f"[dim]⊘ Won't do:[/dim] {_display_id(task)} {task['title']}")
 
 
 @app.command()
@@ -346,10 +351,11 @@ def duplicate(
     task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
     if not task:
+        msg = f"Task {task_id_str} not found"
         if json_output:
-            print_json({"error": f"Task #{task_id} not found"})
+            print_json({"error": msg})
         else:
-            console.print(f"[red]Task #{task_id} not found[/red]")
+            console.print(f"[red]{msg}[/red]")
         raise typer.Exit(1)
 
     tasks.update_task(task_id, status="duplicate")
@@ -359,7 +365,7 @@ def duplicate(
     if json_output:
         print_json({"id": task_id, "title": task["title"], "status": "duplicate"})
     else:
-        console.print(f"[dim]◆ Duplicate:[/dim] #{task_id} {task['title']}")
+        console.print(f"[dim]◆ Duplicate:[/dim] {_display_id(task)} {task['title']}")
 
 
 @app.command()
@@ -378,21 +384,22 @@ def view(
     task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task {task_id_str} not found[/red]")
         raise typer.Exit(1)
 
     icon = ICONS.get(task["status"], "?")
-    # Header: show KEY-N with raw ID in parens for cross-reference
     display = _display_id(task)
-    label = f"{display} (#{task_id})" if display != f"#{task_id}" else display
-    console.print(f"\n[bold]{icon} {label}: {task['title']}[/bold]")
+    console.print(f"\n[bold]{icon} {display}: {task['title']}[/bold]")
 
     # Metadata line
     meta = [f"Status: {task['status']}"]
     if task.get("epic_key"):
         meta.append(f"Category: {task['epic_key']}")
-    if task.get("parent_task_id"):
-        meta.append(f"Epic: #{task['parent_task_id']}")
+    parent_task_id: int | None = task.get("parent_task_id")
+    if parent_task_id:
+        parent = tasks.get_task(parent_task_id)
+        epic_label = _display_id(parent) if parent else task.get("epic_key", "?")
+        meta.append(f"Epic: {epic_label}")
     if task.get("priority") and task["priority"] != 3:
         meta.append(f"Priority: {task['priority']}")
     console.print(f"[dim]{' | '.join(meta)}[/dim]")
@@ -435,14 +442,14 @@ def view(
         console.print("\n[bold]Blocked by:[/bold]")
         for d in deps:
             dep_icon = ICONS.get(d["status"], "?")
-            console.print(f"  {dep_icon} #{d['id']} {d['title']}")
+            console.print(f"  {dep_icon} {_display_id(d)} {d['title']}")
 
     dependents = tasks.get_dependents(task_id)
     if dependents:
         console.print("\n[bold]Blocks:[/bold]")
         for d in dependents:
             dep_icon = ICONS.get(d["status"], "?")
-            console.print(f"  {dep_icon} #{d['id']} {d['title']}")
+            console.print(f"  {dep_icon} {_display_id(d)} {d['title']}")
 
     # Work log
     log = tasks.get_task_log(task_id, limit=5)
@@ -470,7 +477,7 @@ def active(
     task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task {task_id_str} not found[/red]")
         raise typer.Exit(1)
 
     tasks.update_task(task_id, status="active")
@@ -498,7 +505,7 @@ def log(
     task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task {task_id_str} not found[/red]")
         raise typer.Exit(1)
 
     if message:
@@ -533,7 +540,7 @@ def note(
     task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task {task_id_str} not found[/red]")
         raise typer.Exit(1)
 
     tasks.log_progress(task_id, message)
@@ -818,7 +825,7 @@ def blocked(
     task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task {task_id_str} not found[/red]")
         raise typer.Exit(1)
 
     tasks.update_task(task_id, status="blocked")
@@ -955,10 +962,11 @@ def priority(
     task_id = _resolve_id(task_id_str, json_output=json_output)
     task = tasks.get_task(task_id)
     if not task:
+        msg = f"Task {task_id_str} not found"
         if json_output:
-            print_json({"error": f"Task #{task_id} not found"})
+            print_json({"error": msg})
         else:
-            console.print(f"[red]Task #{task_id} not found[/red]")
+            console.print(f"[red]{msg}[/red]")
         raise typer.Exit(1)
 
     if value is None:
@@ -998,7 +1006,7 @@ def delete(
     task_id = _resolve_id(task_id_str)
     task = tasks.get_task(task_id)
     if not task:
-        console.print(f"[red]Task #{task_id} not found[/red]")
+        console.print(f"[red]Task {task_id_str} not found[/red]")
         raise typer.Exit(1)
 
     if not force and not is_non_interactive():
@@ -1036,14 +1044,20 @@ def dep_add(
     resolved_id = _resolve_id(task_id)
     resolved_dep = _resolve_id(depends_on)
 
-    for tid in (resolved_id, resolved_dep):
-        if not tasks.get_task(tid):
-            console.print(f"[red]Task #{tid} not found[/red]")
-            raise typer.Exit(1)
+    task_a = tasks.get_task(resolved_id)
+    task_b = tasks.get_task(resolved_dep)
+    if not task_a:
+        console.print(f"[red]Task {task_id} not found[/red]")
+        raise typer.Exit(1)
+    if not task_b:
+        console.print(f"[red]Task {depends_on} not found[/red]")
+        raise typer.Exit(1)
 
     ok = tasks.add_dependency(resolved_id, resolved_dep)
     if ok:
-        console.print(f"[green]✅ #{resolved_id} now depends on #{resolved_dep}[/green]")
+        console.print(
+            f"[green]✅ {_display_id(task_a)} now depends on {_display_id(task_b)}[/green]"
+        )
     else:
         console.print("[red]Cannot add: dependency already exists or would create a cycle[/red]")
         raise typer.Exit(1)
@@ -1062,11 +1076,13 @@ def dep_rm(
     """
     resolved_id = _resolve_id(task_id)
     resolved_dep = _resolve_id(depends_on)
+    task_a = tasks.get_task(resolved_id)
+    task_b = tasks.get_task(resolved_dep)
+    label_a = _display_id(task_a) if task_a else task_id
+    label_b = _display_id(task_b) if task_b else depends_on
     ok = tasks.remove_dependency(resolved_id, resolved_dep)
     if ok:
-        console.print(
-            f"[green]✅ Removed: #{resolved_id} no longer depends on #{resolved_dep}[/green]"
-        )
+        console.print(f"[green]✅ Removed: {label_a} no longer depends on {label_b}[/green]")
     else:
         console.print("[yellow]No such dependency[/yellow]")
 
@@ -1087,20 +1103,27 @@ def dep_list(
     task_id_int = _resolve_id(task_id, json_output)
     task = tasks.get_task(task_id_int)
     if not task:
-        console.print(f"[red]Task #{task_id_int} not found[/red]")
+        console.print(f"[red]Task {task_id} not found[/red]")
         raise typer.Exit(1)
 
+    display = _display_id(task)
     deps = tasks.get_dependencies(task_id_int)
     dependents = tasks.get_dependents(task_id_int)
 
     if json_output:
 
         def _dep_summary(d: TaskDict) -> dict[str, str | int]:
-            return {"id": d["id"], "title": d["title"], "status": d["status"]}
+            return {
+                "id": d["id"],
+                "display_id": _display_id(d),
+                "title": d["title"],
+                "status": d["status"],
+            }
 
         print_json(
             {
                 "task_id": task_id_int,
+                "display_id": display,
                 "depends_on": [_dep_summary(d) for d in deps],
                 "blocks": [_dep_summary(d) for d in dependents],
             }
@@ -1108,20 +1131,20 @@ def dep_list(
         return
 
     if not deps and not dependents:
-        console.print(f"[yellow]#{task_id_int} has no dependencies[/yellow]")
+        console.print(f"[yellow]{display} has no dependencies[/yellow]")
         return
 
     if deps:
-        console.print(f"[bold]#{task_id_int} depends on:[/bold]")
+        console.print(f"[bold]{display} depends on:[/bold]")
         for d in deps:
             icon = ICONS.get(d["status"], "?")
-            console.print(f"  {icon} #{d['id']} {d['title']}")
+            console.print(f"  {icon} {_display_id(d)} {d['title']}")
 
     if dependents:
-        console.print(f"[bold]#{task_id_int} blocks:[/bold]")
+        console.print(f"[bold]{display} blocks:[/bold]")
         for d in dependents:
             icon = ICONS.get(d["status"], "?")
-            console.print(f"  {icon} #{d['id']} {d['title']}")
+            console.print(f"  {icon} {_display_id(d)} {d['title']}")
 
 
 @app.command()
@@ -1141,8 +1164,10 @@ def chain(
     task_id_int = _resolve_id(task_id, json_output)
     task = tasks.get_task(task_id_int)
     if not task:
-        console.print(f"[red]Task #{task_id_int} not found[/red]")
+        console.print(f"[red]Task {task_id} not found[/red]")
         raise typer.Exit(1)
+
+    display = _display_id(task)
 
     # Walk upward: everything this task is waiting on (transitively)
     upstream = _walk_deps(task_id_int, direction="up")
@@ -1152,7 +1177,12 @@ def chain(
     if json_output:
 
         def _task_summary(t: TaskDict) -> dict[str, str | int]:
-            return {"id": t["id"], "title": t["title"], "status": t["status"]}
+            return {
+                "id": t["id"],
+                "display_id": _display_id(t),
+                "title": t["title"],
+                "status": t["status"],
+            }
 
         print_json(
             {
@@ -1164,23 +1194,21 @@ def chain(
         return
 
     icon = ICONS.get(task["status"], "?")
-    console.print(f"\n[bold]Chain for #{task_id_int}: {task['title']}[/bold]")
+    console.print(f"\n[bold]Chain for {display}: {task['title']}[/bold]")
 
     if upstream:
         console.print("\n[bold]Upstream (must finish first):[/bold]")
         for t in upstream:
             t_icon = ICONS.get(t["status"], "?")
-            console.print(f"  {t_icon} #{t['id']} {t['title']}")
+            console.print(f"  {t_icon} {_display_id(t)} {t['title']}")
 
-    console.print(
-        f"\n  [bold cyan]{icon} #{task_id_int} {task['title']}[/bold cyan]  ← you are here"
-    )
+    console.print(f"\n  [bold cyan]{icon} {display} {task['title']}[/bold cyan]  ← you are here")
 
     if downstream:
         console.print("\n[bold]Downstream (waiting on this):[/bold]")
         for t in downstream:
             t_icon = ICONS.get(t["status"], "?")
-            console.print(f"  {t_icon} #{t['id']} {t['title']}")
+            console.print(f"  {t_icon} {_display_id(t)} {t['title']}")
 
     if not upstream and not downstream:
         console.print("\n[yellow]No dependencies in either direction[/yellow]")
