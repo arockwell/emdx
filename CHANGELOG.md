@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-03-06
+
+**Display IDs everywhere, done-fold in task TUI, and release automation.** All task references throughout the CLI now use human-readable KEY-N display IDs (e.g., `FEAT-49`) instead of raw database IDs. The task browser gains collapsible done-folds that tuck completed tasks under their epic group. New `/release` and `/ship` slash commands automate the full release pipeline.
+
+### 🚀 Major Features
+
+#### KEY-N Display IDs Everywhere (#997)
+All CLI commands — `task ready`, `task brief`, `task active`, `task done`, dependency lists, and error messages — now accept and display KEY-N identifiers instead of raw integer IDs. Internal ID resolution is transparent; users never need to know the database ID.
+
+#### Collapsible Done-Fold (#995)
+Completed tasks in the TUI task browser now collapse into a done-fold row under each epic group. Press Enter to expand/collapse. Keeps the active task list clean while preserving access to history.
+
+### 🔧 Improvements
+
+- **Release automation** — new `/release` pipeline and `/ship` slash commands for one-command releases with CI gating (#993)
+- **CI parallelization** — test suite split across 6 shards × 3 Python versions with pytest-split for faster CI (#994)
+- **Wider epic key columns** — epic display columns widened to support full 8-character keys (#996)
+
+### 🐛 Bug Fixes
+
+- **Duplicate KEY-N prefix** — task detail panes no longer show the KEY-N badge twice when the title already contains it (#998)
+
+[0.30.0]: https://github.com/arockwell/emdx/compare/v0.29.0...v0.30.0
+
 ## [0.29.0] - 2026-03-04
 
 **Epic-centered task TUI.** The task browser now groups tasks by epic (parent) instead of status, with tree connectors showing hierarchy. Done epics collapse into a COMPLETED section at the bottom. Enter key toggles collapse/expand. Emoji status icons and colored KEY-N badges replace the old `#id` references throughout the UI.
