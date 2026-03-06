@@ -7,10 +7,11 @@ import re
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
-from emdx.services.embedding_service import EmbeddingStats
+np = pytest.importorskip("numpy")
+
+from emdx.services.embedding_service import EmbeddingStats  # noqa: E402
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
