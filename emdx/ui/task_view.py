@@ -329,6 +329,8 @@ class TaskView(Widget):
         self._zoomed: bool = False
         self._sidebar_visible: bool = True
         self._current_task: TaskDict | None = None
+        self._refresh_in_progress: bool = False
+        self._data_fingerprint: str = ""  # skip no-op refreshes
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
@@ -408,6 +410,9 @@ class TaskView(Widget):
 
         self.call_after_refresh(_deferred_select_first_task)
 
+        # Auto-refresh every 1s (matches ActivityView pattern)
+        self.set_interval(1.0, self._refresh_data_tick)
+
     def on_resize(self, event: events.Resize) -> None:
         """Toggle sidebar visibility and sync title column width."""
         self._update_sidebar_visibility()
@@ -457,15 +462,28 @@ class TaskView(Widget):
         except Exception as e:
             logger.warning(f"Failed to sync title column width: {e}")
 
+    def _compute_fingerprint(self, tasks: list[TaskDict]) -> str:
+        """Fast fingerprint of task data to detect changes."""
+        # id:status:updated_at for each task, sorted by id
+        parts = sorted(f"{t['id']}:{t['status']}:{t.get('updated_at', '')}" for t in tasks)
+        return "|".join(parts)
+
     async def _load_tasks(self, *, restore_row: int | None = None) -> None:
         """Load all manual tasks from the database."""
         try:
             active_tasks = list_tasks(status=["open", "active", "blocked", "failed"], limit=500)
             done_tasks = list_tasks(status=["done", "wontdo", "duplicate"], limit=200)
-            self._tasks = active_tasks + done_tasks
+            new_tasks = active_tasks + done_tasks
         except Exception as e:
             logger.error(f"Failed to load tasks: {e}")
-            self._tasks = []
+            new_tasks = []
+
+        # Skip table rebuild if data hasn't changed (avoids scroll bounce)
+        new_fp = self._compute_fingerprint(new_tasks)
+        if restore_row is None and new_fp and new_fp == self._data_fingerprint:
+            return
+        self._data_fingerprint = new_fp
+        self._tasks = new_tasks
 
         # Load epics for reference
         try:
@@ -1610,6 +1628,22 @@ class TaskView(Widget):
     def action_cursor_up(self) -> None:
         table = self.query_one("#task-table", DataTable)
         table.action_cursor_up()
+
+    def _refresh_data_tick(self) -> None:
+        """Sync callback for set_interval — dispatches to async refresh."""
+        if self._refresh_in_progress:
+            return
+        self._refresh_in_progress = True
+        self.run_worker(self._refresh_data(), exclusive=True, group="refresh")
+
+    async def _refresh_data(self) -> None:
+        """Periodic refresh of task data."""
+        try:
+            await self._load_tasks()
+        except Exception as e:
+            logger.warning(f"Auto-refresh failed: {e}")
+        finally:
+            self._refresh_in_progress = False
 
     async def action_refresh(self) -> None:
         """Reload tasks from database."""
