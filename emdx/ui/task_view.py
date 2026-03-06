@@ -75,10 +75,12 @@ SEPARATOR_PREFIX = "sep:"
 DONE_FOLD_PREFIX = "done-fold:"
 
 
-def _format_time_ago(dt_str: str | None) -> str:
+def _format_time_ago(dt_str: str | datetime | None) -> str:
     """Format a datetime string as relative time, or absolute date if > 7 days."""
     if not dt_str:
         return ""
+    if isinstance(dt_str, datetime):
+        dt_str = dt_str.isoformat()
     try:
         if "T" in dt_str:
             dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
@@ -186,10 +188,10 @@ class TaskView(Widget):
         ("slash", "show_filter", "Filter"),
         ("escape", "clear_filter", "Clear Filter"),
         ("z", "toggle_zoom", "Zoom"),
-        ("o", "filter_open", "Open Only"),
-        ("i", "filter_active", "Active Only"),
-        ("x", "filter_blocked", "Blocked Only"),
-        ("f", "filter_finished", "Finished"),
+        ("o", "filter_open", "Toggle Open"),
+        ("i", "filter_active", "Toggle Active"),
+        ("x", "filter_blocked", "Toggle Blocked"),
+        ("f", "filter_finished", "Toggle Finished"),
         ("asterisk", "clear_all_filters", "Clear Filters"),
         ("e", "filter_epic", "Epic Filter"),
         ("g", "toggle_grouping", "Group By"),
@@ -317,7 +319,7 @@ class TaskView(Widget):
         self._epics: dict[int, EpicTaskDict] = {}  # keyed by epic task ID
         self._filter_text: str = ""
         self._debounce_timer: Timer | None = None
-        self._status_filter: set[str] | None = None  # None = show all
+        self._hidden_statuses: set[str] = set()  # statuses to hide (empty = show all)
         self._initial_select_done = False
         self._group_by: str = "epic"  # "epic" or "status"
         self._epic_filter: str | None = None  # Filter to specific epic key
@@ -698,10 +700,8 @@ class TaskView(Widget):
         Orphan tasks (no parent) go to UNGROUPED.
         """
         finished = {"done", "failed", "wontdo", "duplicate"}
-        showing_finished = bool(self._status_filter and self._status_filter & finished)
-        visible_statuses = (
-            STATUS_ORDER if showing_finished else [s for s in STATUS_ORDER if s not in finished]
-        )
+        showing_finished = not bool(self._hidden_statuses & finished)
+        visible_statuses = [s for s in STATUS_ORDER if s not in self._hidden_statuses]
 
         # Group children by parent_task_id.
         # First pass: collect all tasks and find which IDs are parents.
@@ -750,10 +750,11 @@ class TaskView(Widget):
             kids = children_by_parent.get(pid, [])
             if not kids:
                 return ""
-            return max(
+            raw = max(
                 (k.get("updated_at") or k.get("created_at") or "" for k in kids),
                 default="",
             )
+            return str(raw) if raw else ""
 
         def _sort_key(pid: int | None) -> tuple[int, int, str, str]:
             if pid is None:
@@ -771,7 +772,8 @@ class TaskView(Widget):
             max_ts = _max_child_timestamp(pid)
             inv_ts = "".join(chr(0xFFFF - ord(c)) for c in max_ts) if max_ts else "\uffff"
             # Epic creation as tiebreaker (DESC)
-            epic_created = epic.get("created_at", "") if epic else ""
+            raw_created = epic.get("created_at", "") if epic else ""
+            epic_created = str(raw_created) if raw_created else ""
             inv_created = (
                 "".join(chr(0xFFFF - ord(c)) for c in epic_created) if epic_created else "\uffff"
             )
@@ -788,7 +790,7 @@ class TaskView(Widget):
         for pid in parent_ids:
             kids = children_by_parent.get(pid, [])
             has_open = any(k["status"] not in finished for k in kids)
-            if has_open or showing_finished or pid is None:
+            if has_open or pid is None:
                 active_parents.append(pid)
             else:
                 # pid cannot be None here (handled by `pid is None` above)
@@ -905,8 +907,8 @@ class TaskView(Widget):
 
             # Render done children
             if has_done:
-                if pid is None or showing_finished:
-                    # Ungrouped or explicit filter: show done kids inline
+                if pid is None:
+                    # Ungrouped: show done kids inline
                     for i, task in enumerate(done_kids):
                         is_last = i == len(done_kids) - 1
                         connector = "└─" if is_last else "├─"
@@ -938,7 +940,7 @@ class TaskView(Widget):
                             self._render_task_row(table, task, tree_prefix=connector)
 
         # Render done epics — collapsed by default, expandable
-        if done_parents and (showing_finished or not self._status_filter):
+        if done_parents and showing_finished:
             # Auto-collapse done parents that haven't been explicitly toggled
             for pid in done_parents:
                 if pid not in self._collapsed and pid not in self._expanded:
@@ -1046,7 +1048,7 @@ class TaskView(Widget):
             parts.append(f"[dim]{counts['wontdo']} wontdo[/dim]")
 
         if not any(counts.values()):
-            if self._filter_text or self._status_filter:
+            if self._filter_text or self._hidden_statuses:
                 parts.append("[yellow]no matches[/yellow]")
             else:
                 parts.append("[dim]no tasks[/dim]")
@@ -1057,9 +1059,9 @@ class TaskView(Widget):
         if self._group_by == "status":
             mode_parts.append("[magenta]by status[/magenta]")
 
-        if self._status_filter:
-            labels = [STATUS_LABELS.get(s, s) for s in sorted(self._status_filter)]
-            mode_parts.append(f"[magenta]{'+'.join(labels)}[/magenta]")
+        if self._hidden_statuses:
+            labels = [STATUS_LABELS.get(s, s) for s in sorted(self._hidden_statuses)]
+            mode_parts.append(f"[magenta]hiding: {'+'.join(labels)}[/magenta]")
 
         if self._epic_filter:
             mode_parts.append(f"[cyan]epic: {self._epic_filter}[/cyan]")
@@ -1090,7 +1092,7 @@ class TaskView(Widget):
 
     def _task_passes_filters(self, task: TaskDict) -> bool:
         """Check if a task passes text, status, and epic filters."""
-        if self._status_filter and task["status"] not in self._status_filter:
+        if task["status"] in self._hidden_statuses:
             return False
         if self._epic_filter and task.get("epic_key") != self._epic_filter:
             return False
@@ -1178,32 +1180,34 @@ class TaskView(Widget):
     # ------------------------------------------------------------------
 
     def _toggle_status_filter(self, statuses: set[str]) -> None:
-        """Toggle a status filter on/off."""
-        if self._status_filter == statuses:
-            self._status_filter = None
+        """Toggle visibility of specific statuses."""
+        if statuses <= self._hidden_statuses:
+            # Already hidden — show them
+            self._hidden_statuses -= statuses
         else:
-            self._status_filter = statuses
+            # Currently visible — hide them
+            self._hidden_statuses |= statuses
         self._apply_filter()
 
     def action_filter_open(self) -> None:
-        """Show only open/ready tasks."""
+        """Toggle visibility of open/ready tasks."""
         self._toggle_status_filter({"open"})
 
     def action_filter_active(self) -> None:
-        """Show only active tasks."""
+        """Toggle visibility of active tasks."""
         self._toggle_status_filter({"active"})
 
     def action_filter_blocked(self) -> None:
-        """Show only blocked tasks."""
+        """Toggle visibility of blocked tasks."""
         self._toggle_status_filter({"blocked"})
 
     def action_filter_finished(self) -> None:
-        """Show only finished tasks (done/failed/wontdo/duplicate)."""
+        """Toggle visibility of finished tasks (done/failed/wontdo/duplicate)."""
         self._toggle_status_filter({"done", "failed", "wontdo", "duplicate"})
 
     def action_clear_all_filters(self) -> None:
         """Clear all status and epic filters."""
-        self._status_filter = None
+        self._hidden_statuses = set()
         self._epic_filter = None
         self._apply_filter()
 
