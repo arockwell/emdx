@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-03-06
+
+**Task TUI overhaul: smarter sorting, toggle filters, and live refresh.** Epics sort by most recent child activity instead of alphabetically. Status filters flip from exclusive ("show only done") to additive toggles ("hide done"). A context-sensitive footer replaces the cramped help bar, showing only relevant keybindings for the current selection. The task view now auto-refreshes every second with fingerprint-based change detection to avoid scroll bounce.
+
+### 🚀 Major Features
+
+#### Task TUI Sorting, Filtering & Discoverability (#1001)
+Six improvements shipped under the FEAT-55 epic:
+- **Epic sort by activity** — epics with recently-updated or in-progress children float to the top
+- **Oldest-first queue discipline** — children within an epic sort oldest-first so longest-waiting tasks surface
+- **Toggle filter model** — `o/i/x/f` now toggle hide/show of statuses; multiple combine additively (`o` then `x` hides both open and blocked)
+- **Context-sensitive footer** — dynamic 1-line footer shows relevant keybindings for the highlighted row type (task, epic header, done-fold)
+- **Discoverable keybindings** — 9 hidden `on_key` handlers moved to proper BINDINGS so they appear in the help modal
+- **Done-fold recency hint** — collapsed fold rows show "N completed (latest: 2h ago) ▸"
+
+#### Auto-Refresh with Fingerprint Skip (#1002)
+Task view polls every 1 second matching the document browser's pattern. A fingerprint (`id:status:updated_at` per task) skips table rebuilds when nothing changed, preventing scroll bounce during idle refresh.
+
+### 🐛 Bug Fixes
+
+- **datetime crash** — SQLite `datetime` objects in timestamp fields no longer crash the string inversion sort or silently suppress recency hints in `_format_time_ago`
+
+[0.31.0]: https://github.com/arockwell/emdx/compare/v0.30.0...v0.31.0
+
 ## [0.30.0] - 2026-03-06
 
 **Display IDs everywhere, done-fold in task TUI, and release automation.** All task references throughout the CLI now use human-readable KEY-N display IDs (e.g., `FEAT-49`) instead of raw database IDs. The task browser gains collapsible done-folds that tuck completed tasks under their epic group. New `/release` and `/ship` slash commands automate the full release pipeline.
