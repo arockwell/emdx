@@ -15,6 +15,7 @@ from rich.console import Console as RichConsole
 from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.timer import Timer
 from textual.widget import Widget
@@ -74,10 +75,12 @@ SEPARATOR_PREFIX = "sep:"
 DONE_FOLD_PREFIX = "done-fold:"
 
 
-def _format_time_ago(dt_str: str | None) -> str:
+def _format_time_ago(dt_str: str | datetime | None) -> str:
     """Format a datetime string as relative time, or absolute date if > 7 days."""
     if not dt_str:
         return ""
+    if isinstance(dt_str, datetime):
+        dt_str = dt_str.isoformat()
     try:
         if "T" in dt_str:
             dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
@@ -185,6 +188,15 @@ class TaskView(Widget):
         ("slash", "show_filter", "Filter"),
         ("escape", "clear_filter", "Clear Filter"),
         ("z", "toggle_zoom", "Zoom"),
+        ("o", "filter_open", "Toggle Open"),
+        ("i", "filter_active", "Toggle Active"),
+        ("x", "filter_blocked", "Toggle Blocked"),
+        ("f", "filter_finished", "Toggle Finished"),
+        ("asterisk", "clear_all_filters", "Clear Filters"),
+        ("e", "filter_epic", "Epic Filter"),
+        ("g", "toggle_grouping", "Group By"),
+        ("O", "open_urls", "Open URLs"),
+        Binding("enter", "toggle_collapse", "Expand/Collapse", show=True),
     ]
 
     DEFAULT_CSS = """
@@ -299,14 +311,6 @@ class TaskView(Widget):
     }
     """
 
-    # Status filter key mapping: key -> set of statuses to show
-    STATUS_FILTERS: dict[str, set[str]] = {
-        "o": {"open"},
-        "i": {"active"},
-        "x": {"blocked"},
-        "f": {"done", "failed", "wontdo", "duplicate"},
-    }
-
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._tasks: list[TaskDict] = []
@@ -315,7 +319,7 @@ class TaskView(Widget):
         self._epics: dict[int, EpicTaskDict] = {}  # keyed by epic task ID
         self._filter_text: str = ""
         self._debounce_timer: Timer | None = None
-        self._status_filter: set[str] | None = None  # None = show all
+        self._hidden_statuses: set[str] = set()  # statuses to hide (empty = show all)
         self._initial_select_done = False
         self._group_by: str = "epic"  # "epic" or "status"
         self._epic_filter: str | None = None  # Filter to specific epic key
@@ -696,10 +700,8 @@ class TaskView(Widget):
         Orphan tasks (no parent) go to UNGROUPED.
         """
         finished = {"done", "failed", "wontdo", "duplicate"}
-        showing_finished = bool(self._status_filter and self._status_filter & finished)
-        visible_statuses = (
-            STATUS_ORDER if showing_finished else [s for s in STATUS_ORDER if s not in finished]
-        )
+        showing_finished = not bool(self._hidden_statuses & finished)
+        visible_statuses = [s for s in STATUS_ORDER if s not in self._hidden_statuses]
 
         # Group children by parent_task_id.
         # First pass: collect all tasks and find which IDs are parents.
@@ -741,21 +743,41 @@ class TaskView(Widget):
                 parent_ids.append(eid)
                 seen.add(eid)
 
-        # Sort: active epics first (alphabetically by title),
-        # then done, then ungrouped (None) last
-        def _sort_key(pid: int | None) -> tuple[int, str]:
+        # Sort: active epics first, then done, then ungrouped last.
+        # Within each bucket: epics with in-progress children first,
+        # then by most recent child activity (DESC), then epic age.
+        def _max_child_timestamp(pid: int | None) -> str:
+            kids = children_by_parent.get(pid, [])
+            if not kids:
+                return ""
+            raw = max(
+                (k.get("updated_at") or k.get("created_at") or "" for k in kids),
+                default="",
+            )
+            return str(raw) if raw else ""
+
+        def _sort_key(pid: int | None) -> tuple[int, int, str, str]:
             if pid is None:
-                return (2, "")
+                return (2, 0, "", "")
             epic = epic_task_by_id.get(pid) or self._epics.get(pid)
-            title = epic.get("title", "") if epic else ""
             kids = children_by_parent.get(pid, [])
             has_open = any(k["status"] not in finished for k in kids)
-            if has_open:
-                return (0, title.lower())
             epic_status = epic.get("status", "done") if epic else "done"
-            if epic_status not in finished:
-                return (0, title.lower())
-            return (1, title.lower())
+            # Bucket: 0=active, 1=done, 2=ungrouped
+            bucket = 0 if (has_open or epic_status not in finished) else 1
+            # Epics with active/in-progress children float to top
+            has_active = any(k["status"] == "active" for k in kids)
+            active_rank = 0 if has_active else 1
+            # Most recent child activity (invert for DESC sort)
+            max_ts = _max_child_timestamp(pid)
+            inv_ts = "".join(chr(0xFFFF - ord(c)) for c in max_ts) if max_ts else "\uffff"
+            # Epic creation as tiebreaker (DESC)
+            raw_created = epic.get("created_at", "") if epic else ""
+            epic_created = str(raw_created) if raw_created else ""
+            inv_created = (
+                "".join(chr(0xFFFF - ord(c)) for c in epic_created) if epic_created else "\uffff"
+            )
+            return (bucket, active_rank, inv_ts, inv_created)
 
         parent_ids.sort(key=_sort_key)
         # Ensure None (ungrouped) is in the list
@@ -768,7 +790,7 @@ class TaskView(Widget):
         for pid in parent_ids:
             kids = children_by_parent.get(pid, [])
             has_open = any(k["status"] not in finished for k in kids)
-            if has_open or showing_finished or pid is None:
+            if has_open or pid is None:
                 active_parents.append(pid)
             else:
                 # pid cannot be None here (handled by `pid is None` above)
@@ -855,12 +877,15 @@ class TaskView(Widget):
                 else:
                     active_kids.append(task)
 
-            # Sort active kids by status order
+            # Sort active kids by status order, then oldest-first (queue)
             status_rank = {s: i for i, s in enumerate(STATUS_ORDER)}
             active_kids.sort(
-                key=lambda t: status_rank.get(
-                    STATUS_ALIASES.get(t["status"], t["status"]),
-                    len(STATUS_ORDER),
+                key=lambda t: (
+                    status_rank.get(
+                        STATUS_ALIASES.get(t["status"], t["status"]),
+                        len(STATUS_ORDER),
+                    ),
+                    t.get("created_at") or "",
                 ),
             )
 
@@ -882,8 +907,8 @@ class TaskView(Widget):
 
             # Render done children
             if has_done:
-                if pid is None or showing_finished:
-                    # Ungrouped or explicit filter: show done kids inline
+                if pid is None:
+                    # Ungrouped: show done kids inline
                     for i, task in enumerate(done_kids):
                         is_last = i == len(done_kids) - 1
                         connector = "└─" if is_last else "├─"
@@ -891,7 +916,14 @@ class TaskView(Widget):
                 else:
                     # Epic children: collapsible done-fold
                     arrow = "▾" if done_fold_open else "▸"
-                    fold_label = f"{len(done_kids)} completed {arrow}"
+                    latest_ts = (
+                        done_kids[0].get("completed_at") or done_kids[0].get("updated_at") or ""
+                    )
+                    recency = _format_time_ago(latest_ts)
+                    if recency:
+                        fold_label = f"{len(done_kids)} completed (latest: {recency}) {arrow}"
+                    else:
+                        fold_label = f"{len(done_kids)} completed {arrow}"
                     is_last_row = not done_fold_open
                     connector = "└─" if is_last_row else "├─"
                     table.add_row(
@@ -908,7 +940,7 @@ class TaskView(Widget):
                             self._render_task_row(table, task, tree_prefix=connector)
 
         # Render done epics — collapsed by default, expandable
-        if done_parents and (showing_finished or not self._status_filter):
+        if done_parents and showing_finished:
             # Auto-collapse done parents that haven't been explicitly toggled
             for pid in done_parents:
                 if pid not in self._collapsed and pid not in self._expanded:
@@ -948,9 +980,25 @@ class TaskView(Widget):
                         "",
                         key=f"{HEADER_PREFIX}epic:{pid}",
                     )
-                # Show children if expanded
-                if pid not in self._collapsed:
-                    kids = children_by_parent.get(pid, [])
+                # Show fold summary or expanded children
+                kids = children_by_parent.get(pid, [])
+                if pid in self._collapsed:
+                    # Collapsed: show fold summary with recency hint
+                    if kids:
+                        latest = kids[0].get("completed_at") or kids[0].get("updated_at") or ""
+                        recency = _format_time_ago(latest)
+                        if recency:
+                            fold_label = f"{len(kids)} completed (latest: {recency}) ▸"
+                        else:
+                            fold_label = f"{len(kids)} completed ▸"
+                        table.add_row(
+                            Text(""),
+                            Text(""),
+                            Text(f"  {fold_label}", style="dim"),
+                            Text(""),
+                            key=f"{DONE_FOLD_PREFIX}epic:{pid}",
+                        )
+                else:
                     for i, task in enumerate(kids):
                         is_last = i == len(kids) - 1
                         connector = "└─" if is_last else "├─"
@@ -1000,7 +1048,7 @@ class TaskView(Widget):
             parts.append(f"[dim]{counts['wontdo']} wontdo[/dim]")
 
         if not any(counts.values()):
-            if self._filter_text or self._status_filter:
+            if self._filter_text or self._hidden_statuses:
                 parts.append("[yellow]no matches[/yellow]")
             else:
                 parts.append("[dim]no tasks[/dim]")
@@ -1011,9 +1059,9 @@ class TaskView(Widget):
         if self._group_by == "status":
             mode_parts.append("[magenta]by status[/magenta]")
 
-        if self._status_filter:
-            labels = [STATUS_LABELS.get(s, s) for s in sorted(self._status_filter)]
-            mode_parts.append(f"[magenta]{'+'.join(labels)}[/magenta]")
+        if self._hidden_statuses:
+            labels = [STATUS_LABELS.get(s, s) for s in sorted(self._hidden_statuses)]
+            mode_parts.append(f"[magenta]hiding: {'+'.join(labels)}[/magenta]")
 
         if self._epic_filter:
             mode_parts.append(f"[cyan]epic: {self._epic_filter}[/cyan]")
@@ -1044,7 +1092,7 @@ class TaskView(Widget):
 
     def _task_passes_filters(self, task: TaskDict) -> bool:
         """Check if a task passes text, status, and epic filters."""
-        if self._status_filter and task["status"] not in self._status_filter:
+        if task["status"] in self._hidden_statuses:
             return False
         if self._epic_filter and task.get("epic_key") != self._epic_filter:
             return False
@@ -1082,7 +1130,11 @@ class TaskView(Widget):
         table.focus()
 
     def on_key(self, event: events.Key) -> None:
-        """Block vim keys when filter input has focus; handle status filter keys."""
+        """Block vim/action keys when filter input has focus.
+
+        Also handles ``enter`` for collapse/expand since DataTable
+        consumes it before BINDINGS can dispatch.
+        """
         try:
             filter_input = self.query_one("#task-filter-input", Input)
             if filter_input.has_focus:
@@ -1111,50 +1163,77 @@ class TaskView(Widget):
                 if event.key in vim_keys:
                     return
         except Exception as e:
-            logger.warning(f"Failed to check focused widget for vim key passthrough: {e}")
+            logger.warning(
+                "Failed to check focused widget for vim key passthrough: %s",
+                e,
+            )
 
-        # Status filter keys (only when filter input is not focused)
-        if event.key in self.STATUS_FILTERS:
-            new_filter = self.STATUS_FILTERS[event.key]
-            # Toggle: pressing same key again clears the filter
-            if self._status_filter == new_filter:
-                self._status_filter = None
-            else:
-                self._status_filter = new_filter
-            self._apply_filter()
-            event.prevent_default()
-            event.stop()
-        elif event.key == "asterisk":
-            self._status_filter = None
-            self._epic_filter = None
-            self._apply_filter()
-            event.prevent_default()
-            event.stop()
-        elif event.key == "e":
-            # Toggle epic filter to current task's epic
-            task = self._get_selected_task()
-            epic_key = task.get("epic_key") if task else None
-            if epic_key and self._epic_filter != epic_key:
-                self._epic_filter = epic_key
-            else:
-                self._epic_filter = None
-            self._apply_filter()
-            event.prevent_default()
-            event.stop()
-        elif event.key == "g":
-            self._group_by = "epic" if self._group_by == "status" else "status"
-            self._render_task_table()
-            self._update_status_bar()
-            event.prevent_default()
-            event.stop()
-        elif event.key == "O":
-            self._open_task_urls()
-            event.prevent_default()
-            event.stop()
-        elif event.key == "enter":
+        # Enter must be handled here because DataTable consumes it
+        # before BINDINGS can dispatch.
+        if event.key == "enter":
             self._toggle_collapse()
             event.prevent_default()
             event.stop()
+
+    # ------------------------------------------------------------------
+    # Status / epic / grouping filter actions
+    # ------------------------------------------------------------------
+
+    def _toggle_status_filter(self, statuses: set[str]) -> None:
+        """Toggle visibility of specific statuses."""
+        if statuses <= self._hidden_statuses:
+            # Already hidden — show them
+            self._hidden_statuses -= statuses
+        else:
+            # Currently visible — hide them
+            self._hidden_statuses |= statuses
+        self._apply_filter()
+
+    def action_filter_open(self) -> None:
+        """Toggle visibility of open/ready tasks."""
+        self._toggle_status_filter({"open"})
+
+    def action_filter_active(self) -> None:
+        """Toggle visibility of active tasks."""
+        self._toggle_status_filter({"active"})
+
+    def action_filter_blocked(self) -> None:
+        """Toggle visibility of blocked tasks."""
+        self._toggle_status_filter({"blocked"})
+
+    def action_filter_finished(self) -> None:
+        """Toggle visibility of finished tasks (done/failed/wontdo/duplicate)."""
+        self._toggle_status_filter({"done", "failed", "wontdo", "duplicate"})
+
+    def action_clear_all_filters(self) -> None:
+        """Clear all status and epic filters."""
+        self._hidden_statuses = set()
+        self._epic_filter = None
+        self._apply_filter()
+
+    def action_filter_epic(self) -> None:
+        """Toggle epic filter to the current task's epic."""
+        task = self._get_selected_task()
+        epic_key = task.get("epic_key") if task else None
+        if epic_key and self._epic_filter != epic_key:
+            self._epic_filter = epic_key
+        else:
+            self._epic_filter = None
+        self._apply_filter()
+
+    def action_toggle_grouping(self) -> None:
+        """Toggle between epic and status grouping."""
+        self._group_by = "epic" if self._group_by == "status" else "status"
+        self._render_task_table()
+        self._update_status_bar()
+
+    def action_open_urls(self) -> None:
+        """Open first URL found in the selected task."""
+        self._open_task_urls()
+
+    def action_toggle_collapse(self) -> None:
+        """Toggle collapse state of the selected parent task."""
+        self._toggle_collapse()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Handle filter input changes with debouncing."""
@@ -1592,11 +1671,24 @@ class TaskView(Widget):
             if table.cursor_row is not None and table.row_count > 0:
                 row_key = str(table.ordered_rows[table.cursor_row].key.value)
                 if row_key.startswith(DONE_FOLD_PREFIX):
-                    epic_id = int(row_key[len(DONE_FOLD_PREFIX) :])
-                    if epic_id in self._done_folds_expanded:
-                        self._done_folds_expanded.discard(epic_id)
+                    suffix = row_key[len(DONE_FOLD_PREFIX) :]
+                    # "done-fold:epic:N" = done-epics section fold
+                    if suffix.startswith("epic:"):
+                        epic_id = int(suffix[len("epic:") :])
+                        # Toggle in _collapsed (controls done-epic expand)
+                        if epic_id in self._collapsed:
+                            self._collapsed.discard(epic_id)
+                            self._expanded.add(epic_id)
+                        else:
+                            self._collapsed.add(epic_id)
+                            self._expanded.discard(epic_id)
                     else:
-                        self._done_folds_expanded.add(epic_id)
+                        # "done-fold:N" = active-epic done children fold
+                        epic_id = int(suffix)
+                        if epic_id in self._done_folds_expanded:
+                            self._done_folds_expanded.discard(epic_id)
+                        else:
+                            self._done_folds_expanded.add(epic_id)
                     self._render_task_table()
                     return
         except (IndexError, AttributeError, ValueError):
