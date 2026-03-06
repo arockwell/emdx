@@ -75,7 +75,7 @@ def list_cmd(
         return
 
     table = Table()
-    table.add_column("Key", width=9)
+    table.add_column("Key", width=13)
     table.add_column("Epic")
     table.add_column("Status", width=8)
     table.add_column("Open", justify="right", width=5)

@@ -290,8 +290,8 @@ def _task_label(task: ReadyTask | InProgressTask) -> str:
         label = f"{epic_key}-{epic_seq}"
     else:
         label = f"#{task['id']}"
-    # Pad to 8 chars for alignment
-    return f"{label:<8}"
+    # Pad to 13 chars for alignment (supports 8-char keys like SECURITY-999)
+    return f"{label:<13}"
 
 
 def _format_epic_line(epic: EpicInfo) -> str:
@@ -311,7 +311,7 @@ def _format_epic_line(epic: EpicInfo) -> str:
         progress = "     no tasks"
 
     name = epic["title"][:30]
-    return f"  {cat:<5}{name:<32}{progress}"
+    return f"  {cat:<10}{name:<32}{progress}"
 
 
 def _format_epic_brief(epic: EpicInfo) -> str:
