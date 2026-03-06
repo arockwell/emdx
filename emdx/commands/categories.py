@@ -50,7 +50,7 @@ def list_cmd() -> None:
         return
 
     table = Table()
-    table.add_column("Cat", width=6)
+    table.add_column("Cat", width=10)
     table.add_column("Name", min_width=15)
     table.add_column("Open", justify="right", width=5)
     table.add_column("Done", justify="right", width=5)
