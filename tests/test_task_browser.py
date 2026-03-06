@@ -1629,6 +1629,119 @@ class TestEpicGrouping:
             old_idx = next(i for i, t in enumerate(titles) if "Old finish" in t)
             assert finished_idx < old_idx
 
+    @pytest.mark.asyncio
+    async def test_epics_sorted_by_recent_child_activity(self, mock_task_data: MockDict) -> None:
+        """Epics with more recently updated children appear first."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Old child",
+                status="open",
+                epic_key="STALE",
+                parent_task_id=500,
+                updated_at="2025-01-01T00:00:00",
+            ),
+            make_task(
+                id=2,
+                title="Recent child",
+                status="open",
+                epic_key="FRESH",
+                parent_task_id=501,
+                updated_at="2025-06-15T12:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=500, epic_key="STALE"),
+            make_epic(id=501, epic_key="FRESH"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            fresh_idx = next(i for i, t in enumerate(titles) if "FRESH" in t)
+            stale_idx = next(i for i, t in enumerate(titles) if "STALE" in t)
+            assert fresh_idx < stale_idx, "Epic with recently-updated child should appear first"
+
+    @pytest.mark.asyncio
+    async def test_epics_with_active_children_float_to_top(self, mock_task_data: MockDict) -> None:
+        """Epics with in-progress children appear before those without."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Idle child",
+                status="open",
+                epic_key="IDLE",
+                parent_task_id=600,
+                updated_at="2025-06-15T12:00:00",
+            ),
+            make_task(
+                id=2,
+                title="Active child",
+                status="active",
+                epic_key="BUSY",
+                parent_task_id=601,
+                updated_at="2025-01-01T00:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=600, epic_key="IDLE"),
+            make_epic(id=601, epic_key="BUSY"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            busy_idx = next(i for i, t in enumerate(titles) if "BUSY" in t)
+            idle_idx = next(i for i, t in enumerate(titles) if "IDLE" in t)
+            assert busy_idx < idle_idx, "Epic with active child should float above idle epic"
+
+    @pytest.mark.asyncio
+    async def test_children_sorted_oldest_first(self, mock_task_data: MockDict) -> None:
+        """Tasks within an epic are sorted oldest-first (queue discipline)."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Newest task",
+                status="open",
+                epic_key="Q",
+                parent_task_id=700,
+                created_at="2025-03-01T00:00:00",
+            ),
+            make_task(
+                id=2,
+                title="Middle task",
+                status="open",
+                epic_key="Q",
+                parent_task_id=700,
+                created_at="2025-02-01T00:00:00",
+            ),
+            make_task(
+                id=3,
+                title="Oldest task",
+                status="open",
+                epic_key="Q",
+                parent_task_id=700,
+                created_at="2025-01-01T00:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=700, epic_key="Q"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            task_titles = _task_titles(table)
+            q_tasks = [t for t in task_titles if t in {"Oldest task", "Middle task", "Newest task"}]
+            assert q_tasks == ["Oldest task", "Middle task", "Newest task"], (
+                f"Expected oldest-first queue order, got {q_tasks}"
+            )
+
 
 # ===================================================================
 # K. Won't Do Status
@@ -2150,3 +2263,209 @@ class TestCollapseExpand:
             # DEAD epic header visible but children hidden
             assert any("DEAD" in t for t in titles)
             assert not any("Done child" in t for t in titles)
+
+
+# ===================================================================
+# N. Help Modal Shows Filter Keybindings (FEAT-58)
+# ===================================================================
+
+
+class TestHelpModalFilterKeys:
+    """Verify that pressing ? shows the new filter keybindings."""
+
+    @pytest.mark.asyncio
+    async def test_help_modal_shows_filter_keys(self, mock_task_data: MockDict) -> None:
+        """Pressing ? opens help modal containing the new filter bindings."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        class HelpApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = HelpApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("question_mark")
+            await pilot.pause()
+
+            from emdx.ui.modals import KeybindingsHelpScreen
+
+            screen = app.screen
+            assert isinstance(screen, KeybindingsHelpScreen)
+
+            help_rows = screen.query(".help-row")
+            help_text = " ".join(str(row.content) for row in help_rows)
+
+            assert "Open Only" in help_text
+            assert "Active Only" in help_text
+            assert "Blocked Only" in help_text
+            assert "Finished" in help_text
+            assert "Clear Filters" in help_text
+            assert "Epic Filter" in help_text
+            assert "Group By" in help_text
+            assert "Open URLs" in help_text
+            assert "Expand/Collapse" in help_text
+
+    @pytest.mark.asyncio
+    async def test_help_bar_includes_filter_keys(self, mock_task_data: MockDict) -> None:
+        """Help bar text includes the new filter key hints."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        class HelpBarApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = HelpBarApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-help-bar", Static)
+            content = str(bar.content)
+            assert "Open" in content
+            assert "Blocked" in content
+            assert "Finished" in content
+            assert "Clear" in content
+            assert "Epic" in content
+            assert "Group" in content
+
+
+# ===================================================================
+# O. Done-Fold Recency Hint (FEAT-61)
+# ===================================================================
+
+
+class TestDoneFoldRecency:
+    """Tests for the recency hint on collapsed done-fold rows."""
+
+    @pytest.mark.asyncio
+    async def test_done_fold_shows_recency_hint(self, mock_task_data: MockDict) -> None:
+        """Collapsed done epic shows fold row with 'latest:' recency hint."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Active work",
+                status="open",
+                epic_key="LIVE",
+                parent_task_id=200,
+            ),
+            make_task(
+                id=2,
+                title="Done child",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at="2025-01-01T12:00:00",
+            ),
+            make_task(
+                id=3,
+                title="Also done",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at="2025-01-02T12:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=2,
+                children_done=2,
+                children_open=0,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            fold_rows = [t for t in titles if "completed" in t and "▸" in t]
+            assert len(fold_rows) >= 1, f"No fold row found in: {titles}"
+            assert "latest:" in fold_rows[0]
+
+    @pytest.mark.asyncio
+    async def test_done_fold_without_completed_at(self, mock_task_data: MockDict) -> None:
+        """Fold row falls back to updated_at when completed_at is missing."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Active work",
+                status="open",
+                epic_key="LIVE",
+                parent_task_id=200,
+            ),
+            make_task(
+                id=2,
+                title="Done child",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at=None,
+                updated_at="2025-01-01T12:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=1,
+                children_done=1,
+                children_open=0,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            fold_rows = [t for t in titles if "completed" in t and "▸" in t]
+            assert len(fold_rows) >= 1
+            assert "latest:" in fold_rows[0]
+
+    @pytest.mark.asyncio
+    async def test_done_fold_no_dates(self, mock_task_data: MockDict) -> None:
+        """Fold row without any dates shows count but no 'latest:' hint."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Active work",
+                status="open",
+                epic_key="LIVE",
+                parent_task_id=200,
+            ),
+            make_task(
+                id=2,
+                title="Done child",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at=None,
+                updated_at=None,
+                created_at=None,
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=1,
+                children_done=1,
+                children_open=0,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            fold_rows = [t for t in titles if "completed" in t and "▸" in t]
+            assert len(fold_rows) >= 1
+            assert "latest:" not in fold_rows[0]

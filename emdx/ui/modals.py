@@ -193,6 +193,8 @@ class HelpMixin:
         "left": "←",
         "right": "→",
         "space": "Space",
+        "asterisk": "*",
+        "slash": "/",
     }
 
     def get_help_bindings(self) -> list[tuple[str, str, str]]:
@@ -240,13 +242,14 @@ class HelpMixin:
         category_order = [
             "Navigation",
             "Actions",
+            "Filters",
             "Editing",
             "Tags",
             "Search",
             "View",
             "Other",
             "General",
-        ]  # noqa: E501
+        ]
 
         def sort_key(item: tuple[str, str, str]) -> tuple[int, str]:
             cat = item[0]

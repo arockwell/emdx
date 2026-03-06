@@ -24,6 +24,15 @@ class TaskBrowser(HelpMixin, Widget):
         "mark_wontdo": "Actions",
         "mark_duplicate": "Actions",
         "mark_open": "Actions",
+        "filter_open": "Filters",
+        "filter_active": "Filters",
+        "filter_blocked": "Filters",
+        "filter_finished": "Filters",
+        "clear_all_filters": "Filters",
+        "filter_epic": "Filters",
+        "toggle_grouping": "View",
+        "open_urls": "Actions",
+        "toggle_collapse": "Navigation",
     }
 
     BINDINGS = [
@@ -41,7 +50,7 @@ class TaskBrowser(HelpMixin, Widget):
     }
 
     #task-help-bar {
-        height: 1;
+        height: 2;
         background: $surface;
         padding: 0 1;
     }
@@ -61,7 +70,11 @@ class TaskBrowser(HelpMixin, Widget):
             "[dim]b[/dim] Blocked  [dim]w[/dim] Won't do  "
             "[dim]p[/dim] Dup  [dim]u[/dim] Reopen  "
             "[dim]/[/dim] Filter  "
-            "[dim]?[/dim] Help",
+            "[dim]?[/dim] Help\n"
+            "[dim]o[/dim] Open  [dim]i[/dim] Active  "
+            "[dim]x[/dim] Blocked  [dim]f[/dim] Finished  "
+            "[dim]*[/dim] Clear  [dim]e[/dim] Epic  "
+            "[dim]g[/dim] Group",
             id="task-help-bar",
         )
 
@@ -100,6 +113,7 @@ class TaskBrowser(HelpMixin, Widget):
         category_order = [
             "Navigation",
             "Actions",
+            "Filters",
             "View",
             "Other",
             "General",
