@@ -1552,7 +1552,7 @@ class TestEpicGrouping:
 
     @pytest.mark.asyncio
     async def test_epic_grouping_hides_done_in_mixed_group(self, mock_task_data: MockDict) -> None:
-        """Done/failed children are hidden by default in active epics."""
+        """Done/failed children are hidden behind a fold in active epics."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open work", status="open", epic_key="MIX", parent_task_id=300),
             make_task(
@@ -1573,9 +1573,61 @@ class TestEpicGrouping:
             titles = _table_cell_texts(table, "title")
             assert any("MIX" in t for t in titles)
             assert any("Open work" in t for t in titles)
-            # Done/failed tasks hidden by default
+            # Done/failed tasks hidden behind fold by default
             assert not any("Finished work" in t for t in titles)
             assert not any("Failed work" in t for t in titles)
+            # Fold row shows count
+            assert any("2 completed" in t for t in titles)
+
+    @pytest.mark.asyncio
+    async def test_done_fold_expands_on_enter(self, mock_task_data: MockDict) -> None:
+        """Pressing Enter on the done-fold row reveals completed tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open work", status="open", epic_key="MIX", parent_task_id=300),
+            make_task(
+                id=2,
+                title="Finished work",
+                status="done",
+                epic_key="MIX",
+                parent_task_id=300,
+                completed_at="2026-03-05 12:00:00",
+            ),
+            make_task(
+                id=3,
+                title="Old finish",
+                status="done",
+                epic_key="MIX",
+                parent_task_id=300,
+                completed_at="2026-03-01 12:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=300, epic_key="MIX"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            # Navigate to the done-fold row
+            for row_idx, row in enumerate(table.ordered_rows):
+                if str(row.key.value).startswith("done-fold:"):
+                    table.move_cursor(row=row_idx)
+                    break
+            await pilot.pause()
+
+            # Press Enter to expand
+            await pilot.press("enter")
+            await pilot.pause()
+
+            titles = _table_cell_texts(table, "title")
+            # Both done tasks now visible
+            assert any("Finished work" in t for t in titles)
+            assert any("Old finish" in t for t in titles)
+            # Most recently completed appears first (check order)
+            finished_idx = next(i for i, t in enumerate(titles) if "Finished work" in t)
+            old_idx = next(i for i, t in enumerate(titles) if "Old finish" in t)
+            assert finished_idx < old_idx
 
 
 # ===================================================================
