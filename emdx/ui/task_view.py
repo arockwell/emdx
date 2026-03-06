@@ -367,7 +367,7 @@ class TaskView(Widget):
         """Load tasks on mount."""
         table = self.query_one("#task-table", DataTable)
         table.add_column("icon", key="icon", width=5)
-        table.add_column("epic", key="epic", width=7)
+        table.add_column("epic", key="epic", width=13)
         table.add_column("title", key="title", width=60)
         table.add_column("age", key="age", width=4)
         # Disable auto-width on title so it doesn't shrink to content
@@ -433,8 +433,8 @@ class TaskView(Widget):
             table = self.query_one("#task-table", DataTable)
         except Exception:
             return
-        # icon(3) + epic(7) + age(4) + borders/padding(~4)
-        overhead = 3 + 7 + 4 + 4
+        # icon(3) + epic(13) + age(4) + borders/padding(~4)
+        overhead = 3 + 13 + 4 + 4
         # In sidebar-visible mode, the list section is 70% of width
         if self._sidebar_visible:
             avail = int(self.size.width * 0.7)

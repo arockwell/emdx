@@ -126,3 +126,18 @@ jobs:
         file: ./coverage.xml
         fail_ci_if_error: false
         flags: shard${{ matrix.split-group }}
+
+  # Rollup job: single stable check name for branch protection
+  tests-pass:
+    if: always()
+    needs: [lint, type-check, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" || \
+                "${{ needs.type-check.result }}" != "success" || \
+                "${{ needs.test.result }}" != "success" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi

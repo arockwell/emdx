@@ -79,7 +79,7 @@ class TestTaskLabel:
 
     def test_label_is_padded(self):
         label = _task_label(_make_task(id=1))
-        assert len(label) == 8
+        assert len(label) == 13
 
 
 class TestFormatEpicLine:
