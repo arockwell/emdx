@@ -769,6 +769,19 @@ LLM_ENTITY_TYPES = frozenset(
     }
 )
 
+# Valid relationship types for LLM-extracted relationships
+VALID_RELATIONSHIP_TYPES = frozenset(
+    {
+        "uses",
+        "extends",
+        "implements",
+        "depends_on",
+        "related_to",
+        "part_of",
+        "created_by",
+    }
+)
+
 # Model shorthand → full model ID mapping
 _MODEL_MAP: dict[str, str] = {
     "haiku": "claude-haiku-4-5-20250315",
@@ -931,6 +944,8 @@ def _parse_llm_response(raw: str) -> LLMExtractionResult:
         source = str(r.get("source", "")).strip()
         target = str(r.get("target", "")).strip()
         rel_type = str(r.get("relationship_type", "related_to"))
+        if rel_type not in VALID_RELATIONSHIP_TYPES:
+            rel_type = "related_to"
         confidence = float(r.get("confidence", 0.8))
 
         if not source or not target:

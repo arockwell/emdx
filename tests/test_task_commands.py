@@ -286,6 +286,48 @@ class TestTaskDone:
         assert result.exit_code != 0
 
 
+class TestTaskDuplicate:
+    """Tests for task duplicate command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_duplicate_marks_status(self, mock_tasks: Any) -> None:
+        mock_tasks.resolve_task_id.return_value = 1
+        mock_tasks.get_task.return_value = {"id": 1, "title": "Test task"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["duplicate", "1"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Duplicate" in out
+        assert "#1" in out
+        assert "Test task" in out
+        mock_tasks.update_task.assert_called_once_with(1, status="duplicate")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_duplicate_with_reason(self, mock_tasks: Any) -> None:
+        mock_tasks.resolve_task_id.return_value = 2
+        mock_tasks.get_task.return_value = {"id": 2, "title": "Bug fix"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["duplicate", "2", "--note", "Duplicate of #55"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Duplicate" in out
+        assert "#2" in out
+        mock_tasks.log_progress.assert_called_once_with(2, "Duplicate: Duplicate of #55")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_duplicate_sets_completed_at(self, mock_tasks: Any) -> None:
+        """Verify duplicate calls update_task with status='duplicate'.
+
+        The model layer sets completed_at when status is 'duplicate'.
+        """
+        mock_tasks.resolve_task_id.return_value = 3
+        mock_tasks.get_task.return_value = {"id": 3, "title": "Feature"}
+        mock_tasks.update_task.return_value = True
+        result = runner.invoke(app, ["duplicate", "3"])
+        assert result.exit_code == 0
+        mock_tasks.update_task.assert_called_once_with(3, status="duplicate")
+
+
 class TestTaskList:
     """Tests for task list command."""
 
@@ -663,8 +705,7 @@ class TestTaskView:
     @patch("emdx.models.documents.get_document")
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_epic_label(self, mock_tasks, mock_get_doc):
-        mock_tasks.resolve_task_id.return_value = 10
-        mock_tasks.get_task.return_value = {
+        task_data = {
             "id": 10,
             "title": "SEC-1: Harden auth",
             "status": "active",
@@ -677,6 +718,20 @@ class TestTaskView:
             "priority": 1,
             "created_at": "2026-01-15",
         }
+        parent_data = {
+            "id": 500,
+            "title": "Security epic",
+            "status": "open",
+            "description": "",
+            "epic_key": "SEC",
+            "epic_seq": 49,
+            "parent_task_id": None,
+            "source_doc_id": None,
+            "priority": 3,
+            "created_at": "2026-01-01",
+        }
+        mock_tasks.resolve_task_id.return_value = 10
+        mock_tasks.get_task.side_effect = lambda tid: task_data if tid == 10 else parent_data
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
         mock_tasks.get_task_log.return_value = []
@@ -686,7 +741,7 @@ class TestTaskView:
         out = _out(result)
         assert "SEC-1" in out
         assert "Category: SEC" in out
-        assert "Epic: #500" in out
+        assert "Epic: SEC-49" in out
         assert "Source:" in out
         assert "#99" in out
         assert "Security audit report" in out
@@ -1068,12 +1123,9 @@ class TestTaskAddWithAfter:
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_single_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 10
-        mock_tasks.get_task.return_value = {
-            "id": 10,
-            "title": "Deploy",
-            "epic_key": None,
-            "epic_seq": None,
-        }
+        task_10 = {"id": 10, "title": "Deploy", "epic_key": None, "epic_seq": None}
+        task_5 = {"id": 5, "title": "Build", "epic_key": None, "epic_seq": None}
+        mock_tasks.get_task.side_effect = lambda tid: task_10 if tid == 10 else task_5
         result = runner.invoke(app, ["add", "Deploy", "--after", "5"])
         assert result.exit_code == 0
         out = _out(result)
@@ -1091,12 +1143,12 @@ class TestTaskAddWithAfter:
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_multiple_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 20
-        mock_tasks.get_task.return_value = {
-            "id": 20,
-            "title": "Release",
-            "epic_key": None,
-            "epic_seq": None,
+        tasks_by_id = {
+            20: {"id": 20, "title": "Release", "epic_key": None, "epic_seq": None},
+            10: {"id": 10, "title": "Build", "epic_key": None, "epic_seq": None},
+            11: {"id": 11, "title": "Test", "epic_key": None, "epic_seq": None},
         }
+        mock_tasks.get_task.side_effect = lambda tid: tasks_by_id.get(tid)
         result = runner.invoke(app, ["add", "Release", "--after", "10", "--after", "11"])
         assert result.exit_code == 0
         out = _out(result)
@@ -1119,7 +1171,11 @@ class TestTaskDepAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_dep_add_success(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
-        mock_tasks.get_task.return_value = {"id": 5, "title": "Task"}
+        tasks_by_id = {
+            5: {"id": 5, "title": "Task A", "epic_key": None, "epic_seq": None},
+            3: {"id": 3, "title": "Task B", "epic_key": None, "epic_seq": None},
+        }
+        mock_tasks.get_task.side_effect = lambda tid: tasks_by_id.get(tid)
         mock_tasks.add_dependency.return_value = True
         result = runner.invoke(app, ["dep", "add", "5", "3"])
         assert result.exit_code == 0
@@ -1131,7 +1187,12 @@ class TestTaskDepAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_dep_add_cycle(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
-        mock_tasks.get_task.return_value = {"id": 1, "title": "Task"}
+        mock_tasks.get_task.side_effect = lambda tid: {
+            "id": tid,
+            "title": "Task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         mock_tasks.add_dependency.return_value = False
         result = runner.invoke(app, ["dep", "add", "5", "3"])
         assert result.exit_code == 1
@@ -1156,6 +1217,12 @@ class TestTaskDepRm:
     @patch("emdx.commands.tasks.tasks")
     def test_dep_rm_success(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
+        mock_tasks.get_task.side_effect = lambda tid: {
+            "id": tid,
+            "title": "Task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         mock_tasks.remove_dependency.return_value = True
         result = runner.invoke(app, ["dep", "rm", "5", "3"])
         assert result.exit_code == 0
@@ -1167,6 +1234,12 @@ class TestTaskDepRm:
     @patch("emdx.commands.tasks.tasks")
     def test_dep_rm_not_found(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
+        mock_tasks.get_task.side_effect = lambda tid: {
+            "id": tid,
+            "title": "Task",
+            "epic_key": None,
+            "epic_seq": None,
+        }
         mock_tasks.remove_dependency.return_value = False
         result = runner.invoke(app, ["dep", "rm", "5", "3"])
         assert result.exit_code == 0

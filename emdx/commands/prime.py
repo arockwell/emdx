@@ -290,8 +290,8 @@ def _task_label(task: ReadyTask | InProgressTask) -> str:
         label = f"{epic_key}-{epic_seq}"
     else:
         label = f"#{task['id']}"
-    # Pad to 8 chars for alignment
-    return f"{label:<8}"
+    # Pad to 13 chars for alignment (supports 8-char keys like SECURITY-999)
+    return f"{label:<13}"
 
 
 def _format_epic_line(epic: EpicInfo) -> str:
@@ -311,7 +311,7 @@ def _format_epic_line(epic: EpicInfo) -> str:
         progress = "     no tasks"
 
     name = epic["title"][:30]
-    return f"  {cat:<5}{name:<32}{progress}"
+    return f"  {cat:<10}{name:<32}{progress}"
 
 
 def _format_epic_brief(epic: EpicInfo) -> str:
@@ -335,7 +335,8 @@ def _get_active_epics() -> list[EpicInfo]:
         cursor.execute("""
             SELECT t.id, t.title, t.status, t.epic_key,
                 COUNT(c.id) as child_count,
-                COUNT(CASE WHEN c.status = 'done' THEN 1 END) as children_done
+                COUNT(CASE WHEN c.status IN ('done', 'duplicate')
+                    THEN 1 END) as children_done
             FROM tasks t
             LEFT JOIN tasks c ON c.parent_task_id = t.id AND c.type != 'epic'
             WHERE t.type = 'epic' AND t.status IN ('open', 'active')
@@ -368,7 +369,8 @@ def _get_ready_tasks() -> list[ReadyTask]:
             AND NOT EXISTS (
                 SELECT 1 FROM task_deps td
                 JOIN tasks blocker ON td.depends_on = blocker.id
-                WHERE td.task_id = t.id AND blocker.status NOT IN ('done', 'wontdo')
+                WHERE td.task_id = t.id
+                AND blocker.status NOT IN ('done', 'wontdo', 'duplicate')
             )
             ORDER BY t.priority ASC, t.created_at ASC
             LIMIT 20

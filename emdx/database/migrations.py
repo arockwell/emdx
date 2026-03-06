@@ -3107,6 +3107,20 @@ def migration_20260302_140000_restore_output_doc_id(
     conn.commit()
 
 
+def migration_20260302_160000_add_wiki_quality_index(
+    conn: sqlite3.Connection,
+) -> None:
+    """Add index on wiki_articles.quality_score.
+
+    Queries that sort or filter by quality_score currently do full table scans.
+    This index speeds up score-based ordering and filtering.
+    """
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_wiki_articles_quality ON wiki_articles(quality_score)"
+    )
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("0", "Create documents table", migration_000_create_documents_table),
@@ -3187,6 +3201,11 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
         "20260302_140000",
         "Restore output_doc_id column on tasks table",
         migration_20260302_140000_restore_output_doc_id,
+    ),
+    (
+        "20260302_160000",
+        "Add index on wiki_articles.quality_score",
+        migration_20260302_160000_add_wiki_quality_index,
     ),
 ]
 

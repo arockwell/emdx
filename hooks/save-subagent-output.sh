@@ -6,6 +6,7 @@
 #   agent_id, session_id, agent_transcript_path
 #
 # Saves substantive output (200+ chars) with agent-type tags.
+# If EMDX_TASK_ID is set, links the saved doc to that task.
 set -uo pipefail
 # Note: -e intentionally omitted — the Python heredoc's exit code must not
 # cause bash to report a non-zero exit, which Claude Code interprets as an
@@ -43,6 +44,11 @@ msg = data.get("last_assistant_message", "")
 if not msg or len(msg) < 200:
     sys.exit(0)
 
+# Only save output from substantive agent types
+allowed_types = {"explore", "plan", "general-purpose"}
+if agent_type.lower() not in allowed_types:
+    sys.exit(0)
+
 # Check emdx is available
 if subprocess.run(["which", "emdx"], capture_output=True).returncode != 0:
     sys.exit(0)
@@ -71,9 +77,16 @@ if re.search(r"https://github\.com/[^/]+/[^/]+/pull/\d+", msg):
 tag_str = ",".join(tags)
 
 # --- Save to KB ---
+cmd = ["emdx", "save", "--title", title, "--tags", tag_str]
+
+# Link to task if EMDX_TASK_ID is set
+task_id = os.environ.get("EMDX_TASK_ID", "")
+if task_id:
+    cmd.extend(["--task", task_id])
+
 try:
     subprocess.run(
-        ["emdx", "save", "--title", title, "--tags", tag_str],
+        cmd,
         input=msg,
         text=True,
         capture_output=True,

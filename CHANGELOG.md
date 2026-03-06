@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-03-04
+
+**Epic-centered task TUI.** The task browser now groups tasks by epic (parent) instead of status, with tree connectors showing hierarchy. Done epics collapse into a COMPLETED section at the bottom. Enter key toggles collapse/expand. Emoji status icons and colored KEY-N badges replace the old `#id` references throughout the UI.
+
+### 🚀 Major Features
+
+#### Epic-Based Task Grouping (#990)
+Task TUI default view groups children under their parent epic with tree connectors (`├─`/`└─`). Active epics with open children appear at the top; done epics collapse into a COMPLETED section at the bottom, expandable with Enter. Two-pass parent detection correctly groups `emdx task plan` subtasks under their parent. UNGROUPED section catches orphan tasks.
+
+### 🔧 Improvements
+
+- **Emoji status icons** — replaced subtle Unicode markers with emoji (⚪🟢🟡✅❌🚫🔁) for instant visual status recognition (#990)
+- **Colored KEY-N badges** — task identifiers like `FEAT-49` are now colored by status; titles remain white for readability (#990)
+- **Legacy status normalization** — `STATUS_ALIASES` maps old statuses like `closed` to `done` so legacy tasks render correctly (#990)
+- **No more `#id` references** — all task references in detail panes, dependency lists, and notifications now use KEY-N badges instead of raw database IDs (#990)
+- **README skills table** — replaced flat skills list with a structured table showing each skill's purpose and invocation; CLAUDE.md also restructured for skills-first organization (#989)
+
+[0.29.0]: https://github.com/arockwell/emdx/compare/v0.28.1...v0.29.0
+
+## [0.28.1] - 2026-03-02
+
+**Duplicate task status and post-release quality sweep.** Adds a new "duplicate" terminal status for task management, plus docs fixes, TypedDict improvements, and 12 regression tests from a comprehensive v0.28 sanity audit.
+
+### Added
+
+- **Duplicate task status** — new terminal status alongside done/wontdo/failed for marking tasks as duplicates. CLI: `emdx task duplicate <id>` with optional `--note`. TUI: `p` keybinding. Duplicate tasks unblock dependents and count toward epic completion (#987)
+- **12 regression tests** — `test_v028_regressions.py` covering maintain --auto --dry-run, briefing --json, find --no-tags, history --json, wiki generate --dry-run, and wiki view (#986)
+
+### Fixed
+
+- **Docs accuracy** — removed stale Q&A Mode reference from architecture.md, documented knowledge graph panel (`g` key) in cli-api.md, added wiki quality/stale command examples, clarified save-output hook agent type filtering (#986)
+- **TypedDict for wiki quality** — replaced `dict[str, object]` with `WikiQualityResult` and `LLMQualityAssessmentResult` TypedDicts in wiki quality service (#986)
+- **Entity relationship validation** — added `VALID_RELATIONSHIP_TYPES` frozenset; invalid LLM-extracted types now fall back to `"related_to"` (#986)
+- **Removed `float(str(...))` antipattern** — simplified composite score comparison in wiki quality service (#986)
+- **DB index on quality_score** — new migration `20260302_160000` adds index on `wiki_articles.quality_score` for faster sorted queries (#986)
+- **Unified save-output hooks** — plugin `hooks/save-subagent-output.sh` now has agent type whitelist and `EMDX_TASK_ID` linkage, matching `.claude/hooks/save-output.sh` (#986)
+
+[0.28.1]: https://github.com/arockwell/emdx/compare/v0.28.0...v0.28.1
+
 ## [0.28.0] - 2026-03-02
 
 **Wiki intelligence, knowledge graph, and agent orchestration.** This release adds LLM-powered entity extraction with relationship mapping, a knowledge graph panel in the TUI browser, wiki quality scoring across four dimensions, incremental wiki regeneration that auto-flags stale articles, and cross-project auto-linking. Agent orchestration improvements cut startup time from 871ms to 88ms via lazy-loading, and `prime` now shows in-progress work before ready tasks. Two consistency audits (16 bug fixes across 54 files) and a documentation overhaul round out the release.

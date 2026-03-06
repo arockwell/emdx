@@ -820,6 +820,60 @@ emdx wiki export ./wiki-site
 emdx wiki export ./wiki-site --build
 ```
 
+### **emdx wiki quality**
+
+Score wiki article quality across multiple dimensions (coverage, freshness, coherence, source density). Each dimension is 0.0-1.0 and a weighted composite is computed. Results are sorted worst-first so you can prioritize improvements.
+
+```bash
+# Score all articles (sorted worst-first)
+emdx wiki quality
+
+# Score a single article by topic ID
+emdx wiki quality --topic 5
+
+# Show only articles scoring below a threshold
+emdx wiki quality --threshold 0.5
+
+# Deep LLM-based assessment for a single article
+emdx wiki quality --llm --topic 5
+
+# Use a specific model for LLM assessment
+emdx wiki quality --llm --topic 5 --model claude-sonnet-4-5-20250929
+
+# Machine-readable output
+emdx wiki quality --json
+```
+
+**Options:**
+- `--topic, -t INTEGER` - Score a single topic by ID
+- `--threshold FLOAT` - Only show articles scoring below this value (0.0-1.0)
+- `--llm` - Run LLM-based deep quality assessment (requires `--topic`)
+- `--model TEXT` - LLM model override for `--llm` assessment
+- `--json` - Output as JSON
+
+### **emdx wiki stale**
+
+Check which wiki articles are stale due to source document changes or topic membership changes. Optionally regenerate stale articles in one pass.
+
+```bash
+# Report stale articles
+emdx wiki stale
+
+# Machine-readable output
+emdx wiki stale --json
+
+# Regenerate all stale articles
+emdx wiki stale --regenerate
+
+# Regenerate with a specific model
+emdx wiki stale --regenerate --model claude-sonnet-4-5-20250929
+```
+
+**Options:**
+- `--regenerate` - Regenerate stale articles after reporting
+- `--model, -m TEXT` - Model override for regeneration (used with `--regenerate`)
+- `--json` - Output as JSON
+
 ## 📊 **Information Commands**
 
 ### **emdx trash**
@@ -990,10 +1044,21 @@ emdx gui --theme emdx-dark
 
 *Activity View:*
 - `j/k` - Navigate up/down
-- `Enter` - Open fullscreen preview
-- `/` - Filter
+- `Enter` / `f` - Open fullscreen preview
+- `w` - Cycle document type filter (user / wiki / all)
+- `z` - Cycle zoom (normal / content full-screen / list full-screen)
+- `g` - Toggle knowledge graph panel (see below)
+- `c` - Toggle copy mode (raw markdown vs rendered)
 - `r` - Refresh
 - `?` - Help
+
+*Knowledge Graph Panel (Activity View, toggle with `g`):*
+
+Shows relationship data for the selected document in a collapsible bottom panel. Data loads lazily when the panel is first opened and caches per document to avoid redundant queries.
+
+- **Linked Documents** - Related documents from the auto-link graph, with similarity scores and link type. Document IDs are clickable to navigate.
+- **Entities** - Named entities extracted from the document (person, technology, project, etc.), grouped by type.
+- **Wiki Topics** - Active wiki topics the document belongs to, with relevance percentages.
 
 *Task Browser:*
 - `j/k` - Navigate up/down
@@ -1003,11 +1068,12 @@ emdx gui --theme emdx-dark
 - `o` - Filter: open tasks
 - `i` - Filter: active tasks
 - `x` - Filter: blocked tasks
-- `f` - Filter: done/failed/wontdo
+- `f` - Filter: done/failed/wontdo/duplicate
 - `*` - Show all (clear status filter)
 - `d` - Mark done
 - `a` - Mark active
 - `w` - Mark won't do
+- `p` - Mark duplicate
 - `r` - Refresh
 - `?` - Help
 
@@ -1302,6 +1368,10 @@ emdx task blocked 42 --reason "Waiting on API key"
 emdx task wontdo 42
 emdx task wontdo TOOL-12
 emdx task wontdo 42 --note "Superseded by #55"
+
+# Mark task as duplicate
+emdx task duplicate 42
+emdx task duplicate 42 --note "Same as FEAT-10"
 ```
 
 **`active` Options:**
@@ -1318,6 +1388,9 @@ emdx task wontdo 42 --note "Superseded by #55"
 **`wontdo` Options:**
 - `--note, -n TEXT` - Reason for closing (logged to task work log)
 - `--json` - Output as JSON
+
+**`duplicate` Options:**
+- `--note, -n TEXT` - Reason/reference for the duplicate (logged to task work log)
 
 ### Setting Priority
 
