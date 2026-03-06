@@ -1281,8 +1281,9 @@ class TaskView(Widget):
         header_label = f"{icon} {badge}" if badge else f"{icon} Task"
         header.update(header_label)
 
-        # Title
-        detail_log.write(f"[bold]{task['title']}[/bold]")
+        # Title (strip KEY-N prefix since badge already shows it)
+        title = _strip_epic_prefix(task["title"], task.get("epic_key"), task.get("epic_seq"))
+        detail_log.write(f"[bold]{title}[/bold]")
         detail_log.write("")
 
         if self._sidebar_visible:
@@ -1418,8 +1419,9 @@ class TaskView(Widget):
         epic_header = f"{icon} {badge}" if badge else f"{icon} Epic"
         header.update(epic_header)
 
-        # Title
-        detail_log.write(f"[bold]{task['title']}[/bold]")
+        # Title (strip KEY-N prefix since badge already shows it)
+        title = _strip_epic_prefix(task["title"], task.get("epic_key"), task.get("epic_seq"))
+        detail_log.write(f"[bold]{title}[/bold]")
         detail_log.write("")
 
         # Progress summary from cached epic data
@@ -1457,7 +1459,9 @@ class TaskView(Widget):
                 for child in epic_view["children"]:
                     c_icon = STATUS_ICONS.get(child["status"], "?")
                     c_color = STATUS_COLORS.get(child["status"], "")
-                    c_title = child["title"][:55]
+                    c_title = _strip_epic_prefix(
+                        child["title"], child.get("epic_key"), child.get("epic_seq")
+                    )[:55]
                     seq = child.get("epic_seq")
                     prefix = f"{epic_key}-{seq}" if epic_key and seq else ""
                     if c_color:
