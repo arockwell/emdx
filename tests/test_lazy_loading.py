@@ -255,13 +255,19 @@ class TestCLIIntegration:
 
     def test_lazy_help_text_in_output(self) -> None:
         """Test that lazy commands show their pre-defined help text."""
+        import importlib
+
+        import emdx.main
+
+        importlib.reload(emdx.main)
         from emdx.main import app
 
         result = runner.invoke(app, ["--help"])
 
         assert result.exit_code == 0
-        # Check that our lazy help text appears (not the actual module help)
-        assert "Explore what your knowledge base knows" in result.output
+        # Check that lazy commands appear in help
+        assert "maintain" in result.output
+        assert "labs" in result.output
 
     def test_core_commands_still_work(self) -> None:
         """Test that core (eager) commands still work."""

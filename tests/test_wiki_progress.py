@@ -83,14 +83,14 @@ class TestWikiProgressEmpty:
 
     def test_progress_empty_db(self, clean_wiki_db: Any) -> None:
         """Empty database shows 0/0 with 0% progress."""
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "0/0 generated" in output
 
     def test_progress_empty_json(self, clean_wiki_db: Any) -> None:
         """Empty database JSON output has correct structure."""
-        result = runner.invoke(app, ["maintain", "wiki", "progress", "--json"])
+        result = runner.invoke(app, ["labs", "wiki", "progress", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["total_topics"] == 0
@@ -112,7 +112,7 @@ class TestWikiProgressWithData:
         _create_article(1, 1, 101)
         _create_article(2, 2, 102)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "2/2 generated" in output
@@ -126,7 +126,7 @@ class TestWikiProgressWithData:
         _create_topic(3, "Topic C")
         _create_article(1, 1, 101, cost_usd=0.25)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "1/3 generated" in output
@@ -140,7 +140,7 @@ class TestWikiProgressWithData:
         _create_topic(3, "Topic C", status="skipped")
         _create_article(1, 1, 101)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "1/3 generated" in output
@@ -154,7 +154,7 @@ class TestWikiProgressWithData:
         _create_topic(3, "Topic C")
         _create_article(1, 1, 101, cost_usd=0.50, input_tokens=5000, output_tokens=2000)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "$0.50" in output
@@ -166,7 +166,7 @@ class TestWikiProgressWithData:
         _create_topic(1, "Topic A")
         _create_article(1, 1, 101, cost_usd=0.25)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "Est. remaining" not in output
@@ -178,7 +178,7 @@ class TestWikiProgressWithData:
         _create_topic(3, "Topic C", status="skipped")
         _create_article(1, 1, 101, cost_usd=0.30, input_tokens=3000, output_tokens=1500)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress", "--json"])
+        result = runner.invoke(app, ["labs", "wiki", "progress", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
 
@@ -198,7 +198,7 @@ class TestWikiProgressWithData:
         _create_topic(1, "Topic A")
         _create_article(1, 1, 101, input_tokens=10000, output_tokens=5000)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "10,000 in" in output
@@ -210,7 +210,7 @@ class TestWikiProgressWithData:
         _create_topic(2, "Topic B")
         _create_article(1, 1, 101)
 
-        result = runner.invoke(app, ["maintain", "wiki", "progress"])
+        result = runner.invoke(app, ["labs", "wiki", "progress"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         # Progress bar uses block chars
@@ -222,6 +222,6 @@ class TestWikiProgressHelp:
 
     def test_help(self) -> None:
         """Help text shows expected content."""
-        result = runner.invoke(app, ["maintain", "wiki", "progress", "--help"])
+        result = runner.invoke(app, ["labs", "wiki", "progress", "--help"])
         assert result.exit_code == 0
         assert "progress" in result.output.lower()

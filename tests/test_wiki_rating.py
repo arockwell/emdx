@@ -92,7 +92,7 @@ class TestWikiRateCommand:
             conn.commit()
 
     def test_rate_with_numeric_value(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "50", "4"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "50", "4"])
         assert result.exit_code == 0
         assert "4/5" in result.output
 
@@ -104,7 +104,7 @@ class TestWikiRateCommand:
             assert row[1] is not None
 
     def test_rate_thumbs_up(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "50", "--up"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "50", "--up"])
         assert result.exit_code == 0
         assert "4/5" in result.output
 
@@ -113,7 +113,7 @@ class TestWikiRateCommand:
             assert row[0] == 4
 
     def test_rate_thumbs_down(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "50", "--down"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "50", "--down"])
         assert result.exit_code == 0
         assert "2/5" in result.output
 
@@ -122,25 +122,25 @@ class TestWikiRateCommand:
             assert row[0] == 2
 
     def test_rate_rejects_both_up_and_down(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "50", "--up", "--down"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "50", "--up", "--down"])
         assert result.exit_code == 1
         assert "Cannot use both" in result.output
 
     def test_rate_rejects_out_of_range(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "50", "6"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "50", "6"])
         assert result.exit_code == 1
         assert "between 1 and 5" in result.output
 
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "50", "0"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "50", "0"])
         assert result.exit_code == 1
 
     def test_rate_requires_value_or_flag(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "50"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "50"])
         assert result.exit_code == 1
         assert "Provide a rating" in result.output
 
     def test_rate_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rate", "999", "3"])
+        result = runner.invoke(app, ["labs", "wiki", "rate", "999", "3"])
         assert result.exit_code == 1
         assert "No wiki article" in result.output
 
@@ -162,12 +162,12 @@ class TestWikiListShowsRating:
             conn.commit()
 
     def test_list_shows_rating_column(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "list"])
+        result = runner.invoke(app, ["labs", "wiki", "list"])
         assert result.exit_code == 0
         assert "Rating" in result.output
 
     def test_list_shows_stars_for_rated(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "list"])
+        result = runner.invoke(app, ["labs", "wiki", "list"])
         assert result.exit_code == 0
         # 5 filled stars for rating=5
         assert "\u2605\u2605\u2605\u2605\u2605" in result.output
@@ -176,6 +176,6 @@ class TestWikiListShowsRating:
         with db.get_connection() as conn:
             conn.execute("UPDATE wiki_articles SET rating = NULL WHERE topic_id = 60")
             conn.commit()
-        result = runner.invoke(app, ["maintain", "wiki", "list"])
+        result = runner.invoke(app, ["labs", "wiki", "list"])
         assert result.exit_code == 0
         assert "-" in result.output

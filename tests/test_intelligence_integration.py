@@ -159,7 +159,7 @@ class TestIntelligenceLifecycle:
             )
 
         # Step 3: Run drift analysis
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert result.exit_code == 0
         out = _strip_ansi(result.stdout)
         assert "Lifecycle Epic" in out
@@ -170,7 +170,7 @@ class TestIntelligenceLifecycle:
         _seed_docs(8)
 
         # Drift should find no issues (no stale epics)
-        drift_result = runner.invoke(app, ["maintain", "drift"])
+        drift_result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert drift_result.exit_code == 0
         assert "No drift detected" in drift_result.stdout
 
@@ -211,7 +211,7 @@ class TestEmptyKB:
 
     def test_drift_empty(self) -> None:
         """maintain drift with no tasks shows 'No drift detected'."""
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert result.exit_code == 0
         assert "No drift detected" in result.stdout
 
@@ -241,13 +241,13 @@ class TestEmptyKB:
         mock_has_tool.return_value = True
         mock_git_repo.return_value = True
 
-        result = runner.invoke(app, ["maintain", "code-drift"])
+        result = runner.invoke(app, ["labs", "maintain", "code-drift"])
         assert result.exit_code == 0
         assert "No documents to check" in _strip_ansi(result.stdout)
 
     def test_drift_json_empty(self) -> None:
         """maintain drift --json with empty KB returns valid empty JSON."""
-        result = runner.invoke(app, ["maintain", "drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["stale_epics"] == []
@@ -266,7 +266,7 @@ class TestJsonOutput:
 
     def test_drift_json_structure(self) -> None:
         """maintain drift --json has all expected keys."""
-        result = runner.invoke(app, ["maintain", "drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert "stale_epics" in data
@@ -286,7 +286,7 @@ class TestJsonOutput:
                 days_ago=45,
             )
 
-        result = runner.invoke(app, ["maintain", "drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert len(data["stale_epics"]) == 1
@@ -358,7 +358,7 @@ class TestJsonOutput:
         mock_git_repo.return_value = False
         mock_search.return_value = False
 
-        result = runner.invoke(app, ["maintain", "code-drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "code-drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert "total_docs_scanned" in data
@@ -418,11 +418,11 @@ class TestFlagCombinations:
             )
 
         # Default 30 days -- not stale
-        result_30 = runner.invoke(app, ["maintain", "drift"])
+        result_30 = runner.invoke(app, ["labs", "maintain", "drift"])
         assert "No drift detected" in result_30.stdout
 
         # 7 days threshold -- stale
-        result_7 = runner.invoke(app, ["maintain", "drift", "--days", "7"])
+        result_7 = runner.invoke(app, ["labs", "maintain", "drift", "--days", "7"])
         assert "Semi-Stale" in result_7.stdout
 
 
@@ -572,8 +572,8 @@ class TestWanderFallback:
         self,
         mock_embed_cls: MagicMock,
     ) -> None:
-        """--wander without sentence-transformers exits with error."""
-        result = runner.invoke(app, ["find", "--wander", "test"])
+        """labs wander without sentence-transformers exits with error."""
+        result = runner.invoke(app, ["labs", "wander", "test"])
         assert result.exit_code != 0
 
     @patch("emdx.services.embedding_service.EmbeddingService", autospec=True)
@@ -581,7 +581,7 @@ class TestWanderFallback:
         self,
         mock_embed_cls: Any,
     ) -> None:
-        """--wander with <10 indexed docs shows helpful message."""
+        """labs wander with <10 indexed docs shows helpful message."""
         from emdx.services.embedding_service import EmbeddingStats
 
         mock_service = MagicMock()
@@ -594,7 +594,7 @@ class TestWanderFallback:
         )
         mock_embed_cls.return_value = mock_service
 
-        result = runner.invoke(app, ["find", "--wander"])
+        result = runner.invoke(app, ["labs", "wander"])
         assert result.exit_code == 0
         out = _strip_ansi(result.stdout)
         assert "Serendipity works better" in out
@@ -605,7 +605,7 @@ class TestWanderFallback:
         self,
         mock_embed_cls: Any,
     ) -> None:
-        """--wander --json with too few docs returns JSON error object."""
+        """labs wander --json with too few docs returns JSON error object."""
         from emdx.services.embedding_service import EmbeddingStats
 
         mock_service = MagicMock()
@@ -618,7 +618,7 @@ class TestWanderFallback:
         )
         mock_embed_cls.return_value = mock_service
 
-        result = runner.invoke(app, ["find", "--wander", "--json"])
+        result = runner.invoke(app, ["labs", "wander", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert "error" in data
@@ -694,7 +694,7 @@ class TestCodeDriftIntegration:
         mock_git_repo.return_value = False
         mock_search.return_value = False
 
-        result = runner.invoke(app, ["maintain", "code-drift"])
+        result = runner.invoke(app, ["labs", "maintain", "code-drift"])
         assert result.exit_code == 0
         out = _strip_ansi(result.stdout)
         assert "OldModule" in out
@@ -719,7 +719,7 @@ class TestCodeDriftIntegration:
         mock_git_repo.return_value = True
         mock_search.return_value = True
 
-        result = runner.invoke(app, ["maintain", "code-drift"])
+        result = runner.invoke(app, ["labs", "maintain", "code-drift"])
         assert result.exit_code == 0
         out = _strip_ansi(result.stdout)
         assert "All code references look current" in out
@@ -743,7 +743,7 @@ class TestCodeDriftIntegration:
         mock_git_repo.return_value = False
         mock_search.return_value = False
 
-        result = runner.invoke(app, ["maintain", "code-drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "code-drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["total_docs_scanned"] == 1
@@ -892,7 +892,7 @@ class TestDriftComplex:
                 days_ago=20,
             )
 
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert result.exit_code == 0
         out = result.stdout
         assert "Abandoned active task" in out
@@ -909,7 +909,7 @@ class TestDriftComplex:
                     days_ago=45,
                 )
 
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert result.exit_code == 0
         out = result.stdout
         assert "Burst Epic" in out
@@ -935,7 +935,7 @@ class TestDriftComplex:
                 source_doc_id=doc_id,
             )
 
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert result.exit_code == 0
         out = result.stdout
         assert "Stale Source Doc" in out
@@ -960,7 +960,7 @@ class TestDriftComplex:
                 days_ago=20,
             )
 
-        result = runner.invoke(app, ["maintain", "drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert len(data["stale_epics"]) >= 1
@@ -1019,13 +1019,13 @@ class TestHelpText:
 
     def test_drift_help(self) -> None:
         """maintain drift --help shows usage."""
-        result = runner.invoke(app, ["maintain", "drift", "--help"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--help"])
         assert result.exit_code == 0
         assert "--days" in _strip_ansi(result.stdout)
 
     def test_code_drift_help(self) -> None:
         """maintain code-drift --help shows usage."""
-        result = runner.invoke(app, ["maintain", "code-drift", "--help"])
+        result = runner.invoke(app, ["labs", "maintain", "code-drift", "--help"])
         assert result.exit_code == 0
         out = _strip_ansi(result.stdout)
         assert "--json" in out

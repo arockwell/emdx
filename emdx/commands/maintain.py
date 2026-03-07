@@ -672,14 +672,7 @@ def maintain_callback(
     )
 
 
-app.command(name="drift")(drift)
 app.command(name="freshness")(freshness)
-app.command(name="gaps")(gaps)
-
-# Register code-drift as a direct subcommand of maintain
-from emdx.commands.code_drift import code_drift_command  # noqa: E402
-
-app.command(name="code-drift")(code_drift_command)
 
 
 def backup_command(
@@ -818,43 +811,21 @@ def backup_command(
 
 app.command(name="backup")(backup_command)
 
-# Register compact as a subcommand of maintain
-from emdx.commands.compact import app as compact_app  # noqa: E402
-
-app.add_typer(compact_app, name="compact", help="Compact related documents via AI synthesis")
-
-# Register index/link/entity commands from maintain_index as direct subcommands
+# Register index/link commands from maintain_index as direct subcommands
 from emdx.commands.maintain_index import (  # noqa: E402
     create_links,
-    entities_command,
     index_embeddings,
     remove_link,
-    wikify_command,
 )
 
 app.command(name="index")(index_embeddings)
 app.command(name="link")(create_links)
 app.command(name="unlink")(remove_link)
-app.command(name="wikify")(wikify_command)
-app.command(name="entities")(entities_command)
-
-# Register wiki as a subcommand group
-from emdx.commands.wiki import wiki_app  # noqa: E402
-
-app.add_typer(wiki_app, name="wiki", help="Auto-wiki generation")
 
 # Register stale as a subcommand group of maintain
 from emdx.commands.stale import app as stale_app  # noqa: E402
 
 app.add_typer(stale_app, name="stale", help="Knowledge decay and staleness tracking")
-
-# Register contradictions command
-app.command(name="contradictions")(contradictions)
-
-# Register cloud-backup as a subcommand group
-from emdx.commands.backup import app as cloud_backup_app  # noqa: E402
-
-app.add_typer(cloud_backup_app, name="cloud-backup", help="Cloud backup operations")
 
 if __name__ == "__main__":
     app()

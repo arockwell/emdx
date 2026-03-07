@@ -481,7 +481,7 @@ class TestWikiExportCli:
             _setup_full_article(conn, 1, "auth", "Auth", "# Auth")
 
         out = str(tmp_path / "wiki-site")
-        result = runner.invoke(app, ["maintain", "wiki", "export", out])
+        result = runner.invoke(app, ["labs", "wiki", "export", out])
         assert result.exit_code == 0
         assert "Articles:     1" in result.output
         assert "mkdocs.yml:   yes" in result.output
@@ -489,7 +489,7 @@ class TestWikiExportCli:
     def test_export_command_custom_name(self, clean_wiki_db: Any, tmp_path: Path) -> None:
         """CLI export with custom site name."""
         out = str(tmp_path / "wiki-site")
-        result = runner.invoke(app, ["maintain", "wiki", "export", out, "-n", "Test Wiki"])
+        result = runner.invoke(app, ["labs", "wiki", "export", out, "-n", "Test Wiki"])
         assert result.exit_code == 0
         config = yaml.safe_load((tmp_path / "wiki-site" / "mkdocs.yml").read_text())
         assert config["site_name"] == "Test Wiki"
@@ -498,7 +498,7 @@ class TestWikiExportCli:
         """Help text shows expected content."""
         import re
 
-        result = runner.invoke(app, ["maintain", "wiki", "export", "--help"])
+        result = runner.invoke(app, ["labs", "wiki", "export", "--help"])
         assert result.exit_code == 0
         # Strip ANSI escape codes before checking content
         clean = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
@@ -513,7 +513,7 @@ class TestWikiExportCli:
             _setup_full_article(conn, 2, "database", "Database", "# Database")
 
         out = str(tmp_path / "wiki-site")
-        result = runner.invoke(app, ["maintain", "wiki", "export", out, "--topic", "1"])
+        result = runner.invoke(app, ["labs", "wiki", "export", out, "--topic", "1"])
         assert result.exit_code == 0
         assert "Articles:     1" in result.output
         assert "mkdocs.yml:   no" in result.output
@@ -524,6 +524,6 @@ class TestWikiExportCli:
         """--build fails gracefully when mkdocs is not installed."""
         out = str(tmp_path / "wiki-site")
         with patch("shutil.which", return_value=None):
-            result = runner.invoke(app, ["maintain", "wiki", "export", out, "--build"])
+            result = runner.invoke(app, ["labs", "wiki", "export", out, "--build"])
         assert result.exit_code == 1
         assert "mkdocs not found" in result.output

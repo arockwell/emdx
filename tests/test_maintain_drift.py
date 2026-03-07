@@ -404,7 +404,7 @@ class TestDriftCLI:
         """Drift command shows help."""
         import re
 
-        result = runner.invoke(app, ["maintain", "drift", "--help"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--help"])
         assert result.exit_code == 0
         plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
         assert "drift" in plain.lower()
@@ -412,7 +412,7 @@ class TestDriftCLI:
 
     def test_drift_no_results(self) -> None:
         """No drift shows friendly message."""
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert result.exit_code == 0
         assert "No drift detected" in result.output
 
@@ -427,7 +427,7 @@ class TestDriftCLI:
                 days_ago=45,
             )
 
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert result.exit_code == 0
         assert "Forgotten Epic" in result.output
         assert "Stale Epics" in result.output
@@ -444,16 +444,16 @@ class TestDriftCLI:
             )
 
         # Default 30 days -- not stale
-        result = runner.invoke(app, ["maintain", "drift"])
+        result = runner.invoke(app, ["labs", "maintain", "drift"])
         assert "No drift detected" in result.output
 
         # 7 days threshold -- stale
-        result = runner.invoke(app, ["maintain", "drift", "--days", "7"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--days", "7"])
         assert "Semi-Stale Epic" in result.output
 
     def test_drift_json_output(self) -> None:
         """JSON output produces valid JSON."""
-        result = runner.invoke(app, ["maintain", "drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "stale_epics" in data
@@ -472,7 +472,7 @@ class TestDriftCLI:
                 days_ago=45,
             )
 
-        result = runner.invoke(app, ["maintain", "drift", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "drift", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert len(data["stale_epics"]) == 1

@@ -45,7 +45,7 @@ class TestWikiSkipCommand:
             conn.commit()
 
     def test_skip_sets_status_to_skipped(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "skip", "70"])
+        result = runner.invoke(app, ["labs", "wiki", "skip", "70"])
         assert result.exit_code == 0
         assert "Skipped" in result.output
         assert "Test Topic" in result.output
@@ -59,12 +59,12 @@ class TestWikiSkipCommand:
             assert _get_topic_status(conn, 70) == "skipped"
 
     def test_skip_shows_previous_status(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "skip", "70"])
+        result = runner.invoke(app, ["labs", "wiki", "skip", "70"])
         assert result.exit_code == 0
         assert "was: active" in result.output
 
     def test_skip_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "skip", "999"])
+        result = runner.invoke(app, ["labs", "wiki", "skip", "999"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
@@ -82,7 +82,7 @@ class TestWikiUnskipCommand:
             conn.commit()
 
     def test_unskip_sets_status_to_active(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "unskip", "71"])
+        result = runner.invoke(app, ["labs", "wiki", "unskip", "71"])
         assert result.exit_code == 0
         assert "Unskipped" in result.output
 
@@ -90,7 +90,7 @@ class TestWikiUnskipCommand:
             assert _get_topic_status(conn, 71) == "active"
 
     def test_unskip_shows_previous_status(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "unskip", "71"])
+        result = runner.invoke(app, ["labs", "wiki", "unskip", "71"])
         assert result.exit_code == 0
         assert "was: skipped" in result.output
 
@@ -108,7 +108,7 @@ class TestWikiPinCommand:
             conn.commit()
 
     def test_pin_sets_status_to_pinned(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "pin", "72"])
+        result = runner.invoke(app, ["labs", "wiki", "pin", "72"])
         assert result.exit_code == 0
         assert "Pinned" in result.output
 
@@ -116,12 +116,12 @@ class TestWikiPinCommand:
             assert _get_topic_status(conn, 72) == "pinned"
 
     def test_pin_shows_previous_status(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "pin", "72"])
+        result = runner.invoke(app, ["labs", "wiki", "pin", "72"])
         assert result.exit_code == 0
         assert "was: active" in result.output
 
     def test_pin_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "pin", "999"])
+        result = runner.invoke(app, ["labs", "wiki", "pin", "999"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
@@ -139,7 +139,7 @@ class TestWikiUnpinCommand:
             conn.commit()
 
     def test_unpin_sets_status_to_active(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "unpin", "73"])
+        result = runner.invoke(app, ["labs", "wiki", "unpin", "73"])
         assert result.exit_code == 0
         assert "Unpinned" in result.output
 
@@ -147,7 +147,7 @@ class TestWikiUnpinCommand:
             assert _get_topic_status(conn, 73) == "active"
 
     def test_unpin_shows_previous_status(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "unpin", "73"])
+        result = runner.invoke(app, ["labs", "wiki", "unpin", "73"])
         assert result.exit_code == 0
         assert "was: pinned" in result.output
 
@@ -265,7 +265,7 @@ class TestWikiStatusShowsStyledStatus:
     @patch("emdx.services.wiki_entity_service.get_entity_index_stats")
     def test_status_shows_skipped_and_pinned(self, mock_stats: MagicMock) -> None:
         mock_stats.return_value = MagicMock(tier_a_count=0, tier_b_count=0, tier_c_count=0)
-        result = runner.invoke(app, ["maintain", "wiki", "status"])
+        result = runner.invoke(app, ["labs", "wiki", "status"])
         assert result.exit_code == 0
         assert "skipped" in result.output
         assert "pinned" in result.output

@@ -85,7 +85,7 @@ class TestWikiModelCommand:
             conn.commit()
 
     def test_set_model_override(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "model", "70", "claude-opus-4-5-20250514"])
+        result = runner.invoke(app, ["labs", "wiki", "model", "70", "claude-opus-4-5-20250514"])
         assert result.exit_code == 0
         assert "claude-opus-4-5-20250514" in result.output
         assert "Set model override" in result.output
@@ -102,7 +102,7 @@ class TestWikiModelCommand:
             )
             conn.commit()
 
-        result = runner.invoke(app, ["maintain", "wiki", "model", "70", "--clear"])
+        result = runner.invoke(app, ["labs", "wiki", "model", "70", "--clear"])
         assert result.exit_code == 0
         assert "Cleared model override" in result.output
 
@@ -111,17 +111,17 @@ class TestWikiModelCommand:
             assert row[0] is None
 
     def test_model_requires_name_or_clear(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "model", "70"])
+        result = runner.invoke(app, ["labs", "wiki", "model", "70"])
         assert result.exit_code == 1
         assert "Provide a model name or use --clear" in result.output
 
     def test_model_rejects_both_name_and_clear(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "model", "70", "some-model", "--clear"])
+        result = runner.invoke(app, ["labs", "wiki", "model", "70", "some-model", "--clear"])
         assert result.exit_code == 1
         assert "Cannot use both" in result.output
 
     def test_model_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "model", "999", "some-model"])
+        result = runner.invoke(app, ["labs", "wiki", "model", "999", "some-model"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
