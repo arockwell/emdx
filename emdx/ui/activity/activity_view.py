@@ -611,8 +611,8 @@ class ActivityView(HelpMixin, Widget):
             try:
                 doc = doc_db.get_document(item.doc_id)
                 if doc:
-                    content = doc.get("content", "")
-                    title = doc.get("title", "Untitled")
+                    content = doc.content
+                    title = doc.title or "Untitled"
                     self._render_markdown_preview(content, title, metadata_preamble=preamble)
                     show_markdown()
                     header.update(f"📄 #{item.doc_id}")
@@ -904,8 +904,8 @@ class ActivityView(HelpMixin, Widget):
                 self._show_notification("Document not found", is_error=True)
                 return
 
-            title = doc.get("title", "Untitled")
-            content = doc.get("content", "")
+            title = doc.title or "Untitled"
+            content = doc.content
 
             from emdx.utils.git import get_git_project
 
@@ -948,8 +948,8 @@ class ActivityView(HelpMixin, Widget):
         if HAS_DOCS and doc_db:
             doc = doc_db.get_document(doc_id)
             if doc:
-                content = doc.get("content", "")
-                title = doc.get("title", "Untitled")
+                content = doc.content
+                title = doc.title or "Untitled"
                 self._render_markdown_preview(content, title)
                 header = self.query_one("#preview-header", Static)
                 header.update(f"📄 #{doc_id}")

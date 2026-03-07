@@ -1,10 +1,10 @@
 """Category operations for task epic numbering."""
 
 import re
-from typing import cast
 
 from emdx.database import db
-from emdx.models.types import CategoryDict, CategoryRenameResultDict, CategoryWithStatsDict
+from emdx.models.category import Category
+from emdx.models.types import CategoryRenameResultDict
 
 
 def create_category(key: str, name: str, description: str = "") -> str:
@@ -25,16 +25,16 @@ def create_category(key: str, name: str, description: str = "") -> str:
     return key
 
 
-def get_category(key: str) -> CategoryDict | None:
+def get_category(key: str) -> Category | None:
     """Get category by key."""
     key = key.upper()
     with db.get_connection() as conn:
         cursor = conn.execute("SELECT * FROM categories WHERE key = ?", (key,))
         row = cursor.fetchone()
-        return cast(CategoryDict, dict(row)) if row else None
+        return Category.from_row(row) if row else None
 
 
-def list_categories() -> list[CategoryWithStatsDict]:
+def list_categories() -> list[Category]:
     """List categories with task count breakdowns."""
     with db.get_connection() as conn:
         cursor = conn.execute("""
@@ -52,7 +52,7 @@ def list_categories() -> list[CategoryWithStatsDict]:
             GROUP BY c.key
             ORDER BY c.key
         """)
-        return [cast(CategoryWithStatsDict, dict(row)) for row in cursor.fetchall()]
+        return [Category.from_row(row) for row in cursor.fetchall()]
 
 
 def ensure_category(key: str) -> str:
@@ -228,8 +228,8 @@ def rename_category(
     # Create target category if it doesn't exist
     new_cat = get_category(new_key)
     if not new_cat:
-        cat_name = name or old_cat["name"]
-        create_category(new_key, cat_name, old_cat["description"])
+        cat_name = name or old_cat.name
+        create_category(new_key, cat_name, old_cat.description)
     elif name:
         # Update name if explicitly provided
         with db.get_connection() as conn:

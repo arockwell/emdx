@@ -649,11 +649,7 @@ def _find_list_all(
     if json_output:
         json_docs = []
         for doc in docs:
-            d: dict[str, Any] = dict(doc)
-            if d["created_at"]:
-                d["created_at"] = d["created_at"].isoformat()
-            if d.get("accessed_at"):
-                d["accessed_at"] = d["accessed_at"].isoformat()
+            d = doc.to_dict()
             json_docs.append(d)
         print(json.dumps(json_docs, indent=2))
         return
@@ -705,11 +701,7 @@ def _find_recent(
     if json_output:
         json_docs = []
         for doc in docs:
-            d: dict[str, Any] = dict(doc)
-            if d.get("created_at"):
-                d["created_at"] = d["created_at"].isoformat()
-            if d.get("accessed_at"):
-                d["accessed_at"] = d["accessed_at"].isoformat()
+            d = doc.to_dict()
             json_docs.append(d)
         print(json.dumps(json_docs, indent=2))
         return
@@ -884,7 +876,7 @@ def _find_keyword_search(
 
             # Combine: only show documents that match both criteria
             results: list[dict[str, Any]] = [
-                dict(doc) for doc in search_results if doc.id in tag_doc_ids
+                doc.to_dict() for doc in search_results if doc.id in tag_doc_ids
             ][:limit]
 
             if not results:
@@ -918,7 +910,7 @@ def _find_keyword_search(
         effective_query = search_query if search_query else "*"
 
         results = [
-            dict(r)
+            r.to_dict()
             for r in search_documents(
                 effective_query,
                 project=project,
@@ -1675,7 +1667,7 @@ def delete(
         if failed:
             console.print(f"\n[red]Failed to delete {len(failed)} document(s):[/red]")
             for doc in failed:
-                console.print(f"  [dim]• #{doc['id']}: {doc['title']}[/dim]")
+                console.print(f"  [dim]• #{doc.id}: {doc.title}[/dim]")
 
     except typer.Abort:
         console.print("[yellow]Deletion cancelled[/yellow]")

@@ -130,10 +130,10 @@ class TestFromRow:
         assert doc.created_at is now
 
 
-# ── Dict compatibility ────────────────────────────────────────────────
+# ── Attribute access ──────────────────────────────────────────────────
 
 
-class TestDictCompat:
+class TestAttributeAccess:
     @pytest.fixture()
     def doc(self) -> Document:
         return Document(
@@ -144,46 +144,22 @@ class TestDictCompat:
             access_count=5,
         )
 
-    def test_getitem(self, doc: Document) -> None:
-        assert doc["id"] == 42
-        assert doc["title"] == "My Doc"
-        assert doc["content"] == "body"
-        assert doc["project"] == "emdx"
+    def test_attribute_access(self, doc: Document) -> None:
+        assert doc.id == 42
+        assert doc.title == "My Doc"
+        assert doc.content == "body"
+        assert doc.project == "emdx"
 
-    def test_getitem_raises_keyerror(self, doc: Document) -> None:
-        with pytest.raises(KeyError, match="nonexistent"):
-            doc["nonexistent"]
+    def test_attribute_error_for_nonexistent(self, doc: Document) -> None:
+        with pytest.raises(AttributeError):
+            doc.nonexistent  # type: ignore[attr-defined]  # noqa: B018
 
-    def test_get_with_default(self, doc: Document) -> None:
-        assert doc.get("title") == "My Doc"
-        assert doc.get("nonexistent") is None
-        assert doc.get("nonexistent", "fallback") == "fallback"
-
-    def test_contains(self, doc: Document) -> None:
-        assert "title" in doc
-        assert "id" in doc
-        assert "nonexistent" not in doc
-        assert 42 not in doc  # type: ignore[operator]  # non-string
-
-    def test_keys(self, doc: Document) -> None:
-        k = doc.keys()
-        assert "id" in k
-        assert "title" in k
-        assert "content" in k
-        assert "doc_type" in k
-        assert len(k) == 15  # all fields
-
-    def test_items(self, doc: Document) -> None:
-        pairs = dict(doc.items())
-        assert pairs["id"] == 42
-        assert pairs["title"] == "My Doc"
-        assert pairs["project"] == "emdx"
-        assert pairs["access_count"] == 5
-
-    def test_values(self, doc: Document) -> None:
-        vals = list(doc.values())
-        assert 42 in vals
-        assert "My Doc" in vals
+    def test_to_dict_preserves_all_fields(self, doc: Document) -> None:
+        d = doc.to_dict()
+        assert d["id"] == 42
+        assert d["title"] == "My Doc"
+        assert d["project"] == "emdx"
+        assert d["access_count"] == 5
 
 
 # ── Serialization ─────────────────────────────────────────────────────
@@ -252,36 +228,25 @@ class TestSearchHit:
         assert hit.snippet == "...match..."
         assert hit.rank == -2.5
 
-    def test_bracket_access_document_fields(self) -> None:
+    def test_attribute_access_document_fields(self) -> None:
         doc = Document(id=1, title="T")
         hit = SearchHit(doc=doc, snippet="snip", rank=-1.0)
-        assert hit["id"] == 1
-        assert hit["title"] == "T"
-        assert hit["snippet"] == "snip"
-        assert hit["rank"] == -1.0
+        assert hit.id == 1
+        assert hit.title == "T"
+        assert hit.snippet == "snip"
+        assert hit.rank == -1.0
 
-    def test_get_fallthrough(self) -> None:
+    def test_getattr_fallthrough(self) -> None:
         doc = Document(id=1, title="T", project="p")
         hit = SearchHit(doc=doc)
-        assert hit.get("project") == "p"
-        assert hit.get("snippet") is None
-        assert hit.get("nonexistent", "fb") == "fb"
+        assert hit.project == "p"
+        assert hit.snippet is None
 
-    def test_contains(self) -> None:
+    def test_getattr_error_for_nonexistent(self) -> None:
         doc = Document(id=1, title="T")
         hit = SearchHit(doc=doc)
-        assert "title" in hit
-        assert "snippet" in hit
-        assert "rank" in hit
-        assert "nonexistent" not in hit
-
-    def test_keys_includes_search_fields(self) -> None:
-        doc = Document(id=1, title="T")
-        hit = SearchHit(doc=doc)
-        k = hit.keys()
-        assert "snippet" in k
-        assert "rank" in k
-        assert "id" in k
+        with pytest.raises(AttributeError):
+            hit.nonexistent  # type: ignore[attr-defined]  # noqa: B018
 
     def test_to_dict(self) -> None:
         doc = Document(id=1, title="T", project="p")
@@ -312,12 +277,6 @@ class TestEdgeCases:
             "deleted_at",
             "archived_at",
         }
-
-    def test_field_names_cached(self) -> None:
-        """_field_names should be cached after first call."""
-        names1 = Document._field_names()
-        names2 = Document._field_names()
-        assert names1 is names2
 
     def test_slots_prevent_arbitrary_attrs(self) -> None:
         doc = Document(id=1, title="T")

@@ -432,19 +432,19 @@ def _briefing_save(hours: int, model: str | None) -> None:
     )
 
     if tasks:
-        done = [t for t in tasks if t["status"] == "done"]
-        active_tasks = [t for t in tasks if t["status"] == "active"]
-        blocked = [t for t in tasks if t["status"] == "blocked"]
+        done = [t for t in tasks if t.status == "done"]
+        active_tasks = [t for t in tasks if t.status == "active"]
+        blocked = [t for t in tasks if t.status == "blocked"]
         task_lines = []
         if done:
             task_lines.append("## Completed Tasks")
-            task_lines.extend(f"- {t['title']}" for t in done[:10])
+            task_lines.extend(f"- {t.title}" for t in done[:10])
         if active_tasks:
             task_lines.append("## In-Progress Tasks")
-            task_lines.extend(f"- {t['title']}" for t in active_tasks[:5])
+            task_lines.extend(f"- {t.title}" for t in active_tasks[:5])
         if blocked:
             task_lines.append("## Blocked Tasks")
-            task_lines.extend(f"- {t['title']}" for t in blocked[:5])
+            task_lines.extend(f"- {t.title}" for t in blocked[:5])
         if task_lines:
             sections.append("\n".join(task_lines))
 

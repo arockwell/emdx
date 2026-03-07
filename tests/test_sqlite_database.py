@@ -85,9 +85,9 @@ class TestSQLiteDatabase:
 
             doc = db.get_document(doc_id)
             assert doc is not None
-            assert doc["title"] == "Test Document"
-            assert doc["content"] == "Test content"
-            assert doc["project"] == "test-project"
+            assert doc.title == "Test Document"
+            assert doc.content == "Test content"
+            assert doc.project == "test-project"
 
     def test_save_document_with_tags(self):
         """Test saving document with tags."""
@@ -108,7 +108,7 @@ class TestSQLiteDatabase:
             # Verify document exists
             doc = db.get_document(doc_id)
             assert doc is not None
-            assert doc["title"] == "Tagged Document"
+            assert doc.title == "Tagged Document"
 
     def test_search_documents_basic(self):
         """Test basic document search."""
@@ -124,7 +124,7 @@ class TestSQLiteDatabase:
             # Search for Python
             results = db.search_documents("Python")
             assert len(results) >= 1
-            assert any("Python" in doc["title"] for doc in results)
+            assert any("Python" in doc.title for doc in results)
 
     def test_search_documents_empty_query(self):
         """Test search with empty query."""

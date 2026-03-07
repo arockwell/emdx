@@ -749,31 +749,35 @@ class TestTaskView:
     @patch("emdx.models.documents.get_document")
     @patch("emdx.commands.tasks.tasks")
     def test_view_shows_epic_label(self, mock_tasks, mock_get_doc):
-        task_data = {
-            "id": 10,
-            "title": "SEC-1: Harden auth",
-            "status": "active",
-            "description": "",
-            "epic_key": "SEC",
-            "epic_seq": 1,
-            "parent_task_id": 500,
-            "source_doc_id": 99,
-            "output_doc_id": None,
-            "priority": 1,
-            "created_at": "2026-01-15",
-        }
-        parent_data = {
-            "id": 500,
-            "title": "Security epic",
-            "status": "open",
-            "description": "",
-            "epic_key": "SEC",
-            "epic_seq": 49,
-            "parent_task_id": None,
-            "source_doc_id": None,
-            "priority": 3,
-            "created_at": "2026-01-01",
-        }
+        task_data = Task.from_row(
+            {
+                "id": 10,
+                "title": "SEC-1: Harden auth",
+                "status": "active",
+                "description": "",
+                "epic_key": "SEC",
+                "epic_seq": 1,
+                "parent_task_id": 500,
+                "source_doc_id": 99,
+                "output_doc_id": None,
+                "priority": 1,
+                "created_at": "2026-01-15",
+            }
+        )
+        parent_data = Task.from_row(
+            {
+                "id": 500,
+                "title": "Security epic",
+                "status": "open",
+                "description": "",
+                "epic_key": "SEC",
+                "epic_seq": 49,
+                "parent_task_id": None,
+                "source_doc_id": None,
+                "priority": 3,
+                "created_at": "2026-01-01",
+            }
+        )
         mock_tasks.resolve_task_id.return_value = 10
         mock_tasks.get_task.side_effect = lambda tid: task_data if tid == 10 else parent_data
         mock_tasks.get_dependencies.return_value = []
@@ -1217,8 +1221,8 @@ class TestTaskAddWithAfter:
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_single_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 10
-        task_10 = {"id": 10, "title": "Deploy", "epic_key": None, "epic_seq": None}
-        task_5 = {"id": 5, "title": "Build", "epic_key": None, "epic_seq": None}
+        task_10 = Task.from_row({"id": 10, "title": "Deploy", "epic_key": None, "epic_seq": None})
+        task_5 = Task.from_row({"id": 5, "title": "Build", "epic_key": None, "epic_seq": None})
         mock_tasks.get_task.side_effect = lambda tid: task_10 if tid == 10 else task_5
         result = runner.invoke(app, ["add", "Deploy", "--after", "5"])
         assert result.exit_code == 0
@@ -1238,9 +1242,9 @@ class TestTaskAddWithAfter:
     def test_add_with_multiple_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 20
         tasks_by_id = {
-            20: {"id": 20, "title": "Release", "epic_key": None, "epic_seq": None},
-            10: {"id": 10, "title": "Build", "epic_key": None, "epic_seq": None},
-            11: {"id": 11, "title": "Test", "epic_key": None, "epic_seq": None},
+            20: Task.from_row({"id": 20, "title": "Release", "epic_key": None, "epic_seq": None}),
+            10: Task.from_row({"id": 10, "title": "Build", "epic_key": None, "epic_seq": None}),
+            11: Task.from_row({"id": 11, "title": "Test", "epic_key": None, "epic_seq": None}),
         }
         mock_tasks.get_task.side_effect = lambda tid: tasks_by_id.get(tid)
         result = runner.invoke(app, ["add", "Release", "--after", "10", "--after", "11"])
@@ -1266,8 +1270,8 @@ class TestTaskDepAdd:
     def test_dep_add_success(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
         tasks_by_id = {
-            5: {"id": 5, "title": "Task A", "epic_key": None, "epic_seq": None},
-            3: {"id": 3, "title": "Task B", "epic_key": None, "epic_seq": None},
+            5: Task.from_row({"id": 5, "title": "Task A", "epic_key": None, "epic_seq": None}),
+            3: Task.from_row({"id": 3, "title": "Task B", "epic_key": None, "epic_seq": None}),
         }
         mock_tasks.get_task.side_effect = lambda tid: tasks_by_id.get(tid)
         mock_tasks.add_dependency.return_value = True
@@ -1281,12 +1285,14 @@ class TestTaskDepAdd:
     @patch("emdx.commands.tasks.tasks")
     def test_dep_add_cycle(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
-        mock_tasks.get_task.side_effect = lambda tid: {
-            "id": tid,
-            "title": "Task",
-            "epic_key": None,
-            "epic_seq": None,
-        }
+        mock_tasks.get_task.side_effect = lambda tid: Task.from_row(
+            {
+                "id": tid,
+                "title": "Task",
+                "epic_key": None,
+                "epic_seq": None,
+            }
+        )
         mock_tasks.add_dependency.return_value = False
         result = runner.invoke(app, ["dep", "add", "5", "3"])
         assert result.exit_code == 1
@@ -1311,12 +1317,14 @@ class TestTaskDepRm:
     @patch("emdx.commands.tasks.tasks")
     def test_dep_rm_success(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
-        mock_tasks.get_task.side_effect = lambda tid: {
-            "id": tid,
-            "title": "Task",
-            "epic_key": None,
-            "epic_seq": None,
-        }
+        mock_tasks.get_task.side_effect = lambda tid: Task.from_row(
+            {
+                "id": tid,
+                "title": "Task",
+                "epic_key": None,
+                "epic_seq": None,
+            }
+        )
         mock_tasks.remove_dependency.return_value = True
         result = runner.invoke(app, ["dep", "rm", "5", "3"])
         assert result.exit_code == 0
@@ -1328,12 +1336,14 @@ class TestTaskDepRm:
     @patch("emdx.commands.tasks.tasks")
     def test_dep_rm_not_found(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
-        mock_tasks.get_task.side_effect = lambda tid: {
-            "id": tid,
-            "title": "Task",
-            "epic_key": None,
-            "epic_seq": None,
-        }
+        mock_tasks.get_task.side_effect = lambda tid: Task.from_row(
+            {
+                "id": tid,
+                "title": "Task",
+                "epic_key": None,
+                "epic_seq": None,
+            }
+        )
         mock_tasks.remove_dependency.return_value = False
         result = runner.invoke(app, ["dep", "rm", "5", "3"])
         assert result.exit_code == 0
@@ -1415,11 +1425,11 @@ class TestTaskChain:
         )
         # Walk up: task 5 depends on 3
         mock_tasks.get_dependencies.side_effect = lambda tid: (
-            [{"id": 3, "title": "First", "status": "done"}] if tid == 5 else []
+            [Task.from_row({"id": 3, "title": "First", "status": "done"})] if tid == 5 else []
         )
         # Walk down: task 8 depends on 5
         mock_tasks.get_dependents.side_effect = lambda tid: (
-            [{"id": 8, "title": "Last", "status": "open"}] if tid == 5 else []
+            [Task.from_row({"id": 8, "title": "Last", "status": "open"})] if tid == 5 else []
         )
         result = runner.invoke(app, ["chain", "5"])
         assert result.exit_code == 0
@@ -1469,10 +1479,10 @@ class TestTaskChain:
             }
         )
         mock_tasks.get_dependencies.side_effect = lambda tid: (
-            [{"id": 3, "title": "Up", "status": "done"}] if tid == 5 else []
+            [Task.from_row({"id": 3, "title": "Up", "status": "done"})] if tid == 5 else []
         )
         mock_tasks.get_dependents.side_effect = lambda tid: (
-            [{"id": 8, "title": "Down", "status": "open"}] if tid == 5 else []
+            [Task.from_row({"id": 8, "title": "Down", "status": "open"})] if tid == 5 else []
         )
         result = runner.invoke(app, ["chain", "5", "--json"])
         assert result.exit_code == 0

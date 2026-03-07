@@ -230,9 +230,9 @@ def wiki_search(
     if json_output:
         output = [
             {
-                "id": r["id"],
-                "title": r["title"],
-                "snippet": (r.get("snippet") or "").replace("<b>", "").replace("</b>", ""),
+                "id": r.id,
+                "title": r.title,
+                "snippet": (r.snippet or "").replace("<b>", "").replace("</b>", ""),
             }
             for r in results
         ]
@@ -244,11 +244,9 @@ def wiki_search(
     )
     for i, r in enumerate(results, 1):
         console.print(
-            f"[bold cyan]#{r['id']}[/bold cyan] "
-            f"[bold]{r['title']}[/bold] "
-            f"[magenta]\\[wiki][/magenta]"
+            f"[bold cyan]#{r.id}[/bold cyan] [bold]{r.title}[/bold] [magenta]\\[wiki][/magenta]"
         )
-        raw_snippet = r.get("snippet")
+        raw_snippet = r.snippet
         if snippets and raw_snippet:
             snippet = raw_snippet.replace("<b>", "[bold yellow]").replace("</b>", "[/bold yellow]")
             console.print(f"[dim]...{snippet}...[/dim]")

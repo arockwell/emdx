@@ -77,16 +77,16 @@ class ActivityDataLoader:
         for doc in docs:
             try:
                 doc_id = doc.id
-                created = doc.get("created_at")
-                title = doc.get("title", "")
-                doc_type = doc.get("doc_type", "user") or "user"
+                created = doc.created_at
+                title = doc.title
+                doc_type = doc.doc_type or "user"
 
                 # Apply doc_type filter
                 if doc_type_filter != "all" and doc_type != doc_type_filter:
                     continue
 
                 # Compute word count from content
-                content = doc.get("content", "")
+                content = doc.content
                 word_count = len(content.split()) if content else 0
 
                 item = DocumentItem(
@@ -96,20 +96,20 @@ class ActivityDataLoader:
                     timestamp=parse_datetime(created) or datetime.now(),
                     doc_id=doc_id,
                     doc_type=doc_type,
-                    project=doc.get("project", "") or "",
+                    project=doc.project or "",
                     tags=doc_tags.get(doc_id),
-                    access_count=doc.get("access_count", 0) or 0,
+                    access_count=doc.access_count or 0,
                     word_count=word_count,
-                    updated_at=parse_datetime(doc.get("updated_at")),
-                    accessed_at=parse_datetime(doc.get("accessed_at")),
-                    parent_id=doc.get("parent_id"),
+                    updated_at=parse_datetime(doc.updated_at),
+                    accessed_at=parse_datetime(doc.accessed_at),
+                    parent_id=doc.parent_id,
                 )
 
                 items.append(item)
 
             except Exception as e:
                 logger.error(
-                    f"Error loading document {doc.get('id', '?')}: {e}",
+                    f"Error loading document {doc.id}: {e}",
                     exc_info=True,
                 )
 

@@ -116,7 +116,7 @@ class TaskBrowser(HelpMixin, Widget):
         elif self.task_view:
             # Check if this is an epic/group parent task
             task = self.task_view._row_key_to_task.get(row_key)
-            if task and task.get("type") in ("epic", "group"):
+            if task and task.type in ("epic", "group"):
                 bar.update(_EPIC_HEADER_FOOTER)
             else:
                 bar.update(_TASK_FOOTER)

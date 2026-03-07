@@ -55,14 +55,14 @@ def _serialize(obj: Any) -> Any:
 def _find_recent(params: dict[str, Any]) -> list[dict[str, Any]]:
     limit = params.get("limit", 20)
     rows = get_recent_documents(limit=limit)
-    return [dict(r) for r in rows]
+    return [r.to_dict() for r in rows]
 
 
 def _find_search(params: dict[str, Any]) -> list[dict[str, Any]]:
     query = params["query"]
     limit = params.get("limit", 10)
     rows = search_documents(query, limit=limit)
-    return [dict(r) for r in rows]
+    return [r.to_dict() for r in rows]
 
 
 def _find_by_tags(params: dict[str, Any]) -> list[dict[str, Any]]:
@@ -80,7 +80,7 @@ def _view_document(params: dict[str, Any]) -> dict[str, Any] | None:
     row = get_document(doc_id)
     if row is None:
         return None
-    result = dict(row)
+    result = row.to_dict()
     # Get tags for the document
     from emdx.models.tags import get_document_tags
 
@@ -127,14 +127,14 @@ def _task_list(params: dict[str, Any]) -> list[dict[str, Any]]:
     limit = params.get("limit", 200)
     status_list = [status] if status else None
     rows = list_tasks(status=status_list, epic_key=epic_key, limit=limit)
-    return [dict(r) for r in rows]
+    return [r.to_dict() for r in rows]
 
 
 def _task_log(params: dict[str, Any]) -> list[dict[str, Any]]:
     task_id = params["id"]
     limit = params.get("limit", 50)
     rows = get_task_log(task_id, limit=limit)
-    return [dict(r) for r in rows]
+    return [r.to_dict() for r in rows]
 
 
 def _task_update(params: dict[str, Any]) -> dict[str, Any]:
@@ -155,7 +155,7 @@ def _task_log_progress(params: dict[str, Any]) -> dict[str, Any]:
 def _status(params: dict[str, Any]) -> dict[str, Any]:
     tasks = list_tasks(limit=20)
     return {
-        "tasks": [dict(t) for t in tasks],
+        "tasks": [t.to_dict() for t in tasks],
     }
 
 

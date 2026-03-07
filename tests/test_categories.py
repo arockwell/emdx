@@ -24,15 +24,15 @@ class TestCreateCategory:
         assert key == "TEST"
         cat = categories.get_category("TEST")
         assert cat is not None
-        assert cat["name"] == "Test Category"
-        assert cat["description"] == "A test"
+        assert cat.name == "Test Category"
+        assert cat.description == "A test"
 
     def test_create_category_uppercase(self):
         key = categories.create_category("low", "Lowercase Input")
         assert key == "LOW"
         cat = categories.get_category("low")
         assert cat is not None
-        assert cat["key"] == "LOW"
+        assert cat.key == "LOW"
 
     def test_create_category_validation_too_short(self):
         with pytest.raises(ValueError, match="2-8 uppercase letters"):
@@ -59,7 +59,7 @@ class TestEnsureCategory:
         assert key == "NEWCAT"
         cat = categories.get_category("NEWCAT")
         assert cat is not None
-        assert cat["name"] == "NEWCAT"  # auto-name is the key
+        assert cat.name == "NEWCAT"  # auto-name is the key
 
     def test_ensure_category_idempotent(self):
         categories.ensure_category("IDEM")
@@ -78,11 +78,11 @@ class TestListCategories:
         tasks.create_task("LCNT-2: Second task", epic_key="LCNT", status="done")
 
         cats = categories.list_categories()
-        lcnt = next((c for c in cats if c["key"] == "LCNT"), None)
+        lcnt = next((c for c in cats if c.key == "LCNT"), None)
         assert lcnt is not None
-        assert lcnt["open_count"] >= 1
-        assert lcnt["done_count"] >= 1
-        assert lcnt["total_count"] >= 2
+        assert lcnt.open_count >= 1
+        assert lcnt.done_count >= 1
+        assert lcnt.total_count >= 2
 
 
 class TestDeleteCategory:
@@ -103,8 +103,8 @@ class TestDeleteCategory:
         # Task still exists but epic_key is cleared
         task = tasks.get_task(t1)
         assert task is not None
-        assert task["epic_key"] is None
-        assert task["epic_seq"] is None
+        assert task.epic_key is None
+        assert task.epic_seq is None
 
     def test_delete_category_refuses_open_tasks(self):
         categories.create_category("DREF", "Has Open Tasks")
@@ -119,7 +119,7 @@ class TestDeleteCategory:
         assert result["tasks_cleared"] == 1
         assert categories.get_category("DFRC") is None
         task = tasks.get_task(t1)
-        assert task["epic_key"] is None
+        assert task.epic_key is None
 
     def test_delete_category_clears_epics(self):
         categories.create_category("DEPC", "With Epics")
@@ -129,7 +129,7 @@ class TestDeleteCategory:
         assert result["epics_cleared"] == 1
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        assert epic["epic_key"] is None
+        assert epic.epic_key is None
 
     def test_delete_category_not_found(self):
         with pytest.raises(ValueError, match="not found"):
@@ -156,12 +156,12 @@ class TestAdoptCategory:
 
         # Verify tasks now have epic_key/epic_seq
         task1 = tasks.get_task(t1)
-        assert task1["epic_key"] == "ADPT"
-        assert task1["epic_seq"] == 1
+        assert task1.epic_key == "ADPT"
+        assert task1.epic_seq == 1
 
         task2 = tasks.get_task(t2)
-        assert task2["epic_key"] == "ADPT"
-        assert task2["epic_seq"] == 2
+        assert task2.epic_key == "ADPT"
+        assert task2.epic_seq == 2
 
     def test_adopt_skips_already_adopted(self):
         # Create a task that already has epic_key
@@ -175,7 +175,7 @@ class TestAdoptCategory:
         categories.ensure_category("ANME")
         categories.adopt_category("ANME", name="Adopted Name")
         cat = categories.get_category("ANME")
-        assert cat["name"] == "Adopted Name"
+        assert cat.name == "Adopted Name"
 
 
 class TestRenameCategory:
@@ -195,16 +195,16 @@ class TestRenameCategory:
         assert categories.get_category("RNOLD") is None
         new_cat = categories.get_category("RNNEW")
         assert new_cat is not None
-        assert new_cat["name"] == "Old Name"  # inherited
+        assert new_cat.name == "Old Name"  # inherited
 
         # Tasks moved and retitled
         task1 = tasks.get_task(t1)
-        assert task1["epic_key"] == "RNNEW"
-        assert "RNNEW-" in task1["title"]
+        assert task1.epic_key == "RNNEW"
+        assert "RNNEW-" in task1.title
 
         task2 = tasks.get_task(t2)
-        assert task2["epic_key"] == "RNNEW"
-        assert "RNNEW-" in task2["title"]
+        assert task2.epic_key == "RNNEW"
+        assert "RNNEW-" in task2.title
 
     def test_rename_merge_renumbers(self):
         """Merge into existing category — renumbers to avoid seq conflicts."""
@@ -218,13 +218,13 @@ class TestRenameCategory:
         assert result["tasks_moved"] == 1
 
         task_old = tasks.get_task(t_old)
-        assert task_old["epic_key"] == "MRNEW"
-        assert task_old["epic_seq"] == 2  # after existing seq 1
+        assert task_old.epic_key == "MRNEW"
+        assert task_old.epic_seq == 2  # after existing seq 1
 
         # Original target task unchanged
         task_new = tasks.get_task(t_new)
-        assert task_new["epic_key"] == "MRNEW"
-        assert task_new["epic_seq"] == 1
+        assert task_new.epic_key == "MRNEW"
+        assert task_new.epic_seq == 1
 
     def test_rename_with_name_override(self):
         """--name overrides the target category name."""
@@ -233,7 +233,7 @@ class TestRenameCategory:
 
         categories.rename_category("NMOLD", "NMNEW", name="Better Name")
         cat = categories.get_category("NMNEW")
-        assert cat["name"] == "Better Name"
+        assert cat.name == "Better Name"
 
     def test_rename_moves_epics(self):
         """Epics are moved along with regular tasks."""
@@ -246,7 +246,7 @@ class TestRenameCategory:
         assert result["tasks_moved"] == 1
 
         epic = tasks.get_task(epic_id)
-        assert epic["epic_key"] == "EPNEW"
+        assert epic.epic_key == "EPNEW"
 
     def test_rename_same_key_raises(self):
         categories.create_category("SAME", "Same")

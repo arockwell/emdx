@@ -184,7 +184,7 @@ def _make_list_tasks_side_effect(
     ) -> list[Task]:
         all_tasks: list[Task] = mock.return_value
         if status is not None:
-            return [t for t in all_tasks if t["status"] in status]
+            return [t for t in all_tasks if t.status in status]
         return list(all_tasks)
 
     return _side_effect
@@ -210,7 +210,7 @@ def mock_task_data() -> Generator[MockDict, None, None]:
         def _count_side_effect() -> dict[str, int]:
             counts: dict[str, int] = {}
             for t in m_list.return_value:
-                s = t["status"]
+                s = t.status
                 counts[s] = counts.get(s, 0) + 1
             return counts
 
