@@ -154,10 +154,12 @@ def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -
 
 def _task_badge(task: Task) -> str:
     """Return the KEY-N badge for a task, or empty string if unavailable."""
-    if task.epic_key and task.epic_seq:
-        return f"{task.epic_key}-{task.epic_seq}"
-    if task.epic_key:
-        return task.epic_key
+    epic_key = task.get("epic_key")
+    epic_seq = task.get("epic_seq")
+    if epic_key and epic_seq:
+        return f"{epic_key}-{epic_seq}"
+    if epic_key:
+        return str(epic_key)
     return ""
 
 
