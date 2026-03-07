@@ -48,7 +48,7 @@ class TestSaveDocument:
 
         doc_id = save_document("Proj Doc", "Content", project="my-project")
         doc = get_document(doc_id)
-        assert doc["project"] == "my-project"
+        assert doc.project == "my-project"
 
     def test_save_with_parent_id(self):
         from emdx.database.documents import get_document, save_document
@@ -56,7 +56,7 @@ class TestSaveDocument:
         parent_id = save_document("Parent", "Parent content")
         child_id = save_document("Child", "Child content", parent_id=parent_id)
         child = get_document(child_id)
-        assert child["parent_id"] == parent_id
+        assert child.parent_id == parent_id
 
     def test_save_with_tags(self):
         from emdx.database.connection import db_connection
@@ -81,8 +81,8 @@ class TestSaveDocument:
         doc_id = save_document("Title Only", "")
         doc = get_document(doc_id)
         assert doc is not None
-        assert doc["title"] == "Title Only"
-        assert doc["content"] == ""
+        assert doc.title == "Title Only"
+        assert doc.content == ""
 
     def test_save_special_characters_in_title(self):
         from emdx.database.documents import get_document, save_document
@@ -90,7 +90,7 @@ class TestSaveDocument:
         title = 'Test\'s "special" <chars> & more: 日本語'
         doc_id = save_document(title, "Content")
         doc = get_document(doc_id)
-        assert doc["title"] == title
+        assert doc.title == title
 
     def test_save_special_characters_in_content(self):
         from emdx.database.documents import get_document, save_document
@@ -98,7 +98,7 @@ class TestSaveDocument:
         content = "Line 1\nLine 2\n\tTabbed\n```python\nprint('hello')\n```"
         doc_id = save_document("Code Doc", content)
         doc = get_document(doc_id)
-        assert doc["content"] == content
+        assert doc.content == content
 
     def test_save_very_long_content(self):
         from emdx.database.documents import get_document, save_document
@@ -106,7 +106,7 @@ class TestSaveDocument:
         long_content = "x" * 100_000
         doc_id = save_document("Long Doc", long_content)
         doc = get_document(doc_id)
-        assert len(doc["content"]) == 100_000
+        assert len(doc.content) == 100_000
 
 
 class TestGetDocument:
@@ -118,9 +118,9 @@ class TestGetDocument:
         doc_id = save_document("Test Doc", "Content here")
         doc = get_document(doc_id)
         assert doc is not None
-        assert doc["id"] == doc_id
-        assert doc["title"] == "Test Doc"
-        assert doc["content"] == "Content here"
+        assert doc.id == doc_id
+        assert doc.title == "Test Doc"
+        assert doc.content == "Content here"
 
     def test_get_by_string_id(self):
         from emdx.database.documents import get_document, save_document
@@ -128,7 +128,7 @@ class TestGetDocument:
         doc_id = save_document("String ID", "Content")
         doc = get_document(str(doc_id))
         assert doc is not None
-        assert doc["id"] == doc_id
+        assert doc.id == doc_id
 
     def test_get_by_title(self):
         from emdx.database.documents import get_document, save_document
@@ -136,7 +136,7 @@ class TestGetDocument:
         save_document("Unique Title XYZ", "Some content")
         doc = get_document("Unique Title XYZ")
         assert doc is not None
-        assert doc["title"] == "Unique Title XYZ"
+        assert doc.title == "Unique Title XYZ"
 
     def test_get_by_title_case_insensitive(self):
         from emdx.database.documents import get_document, save_document
@@ -144,7 +144,7 @@ class TestGetDocument:
         save_document("Case Test Doc", "Content")
         doc = get_document("case test doc")
         assert doc is not None
-        assert doc["title"] == "Case Test Doc"
+        assert doc.title == "Case Test Doc"
 
     def test_get_nonexistent_returns_none(self):
         from emdx.database.documents import get_document
@@ -164,10 +164,10 @@ class TestGetDocument:
         doc_id = save_document("Access Test", "Content")
         # First access
         doc1 = get_document(doc_id)
-        count1 = doc1["access_count"]
+        count1 = doc1.access_count
         # Second access
         doc2 = get_document(doc_id)
-        count2 = doc2["access_count"]
+        count2 = doc2.access_count
         assert count2 == count1 + 1
 
     def test_get_updates_accessed_at(self):
@@ -178,7 +178,7 @@ class TestGetDocument:
         time.sleep(0.001)  # Minimal delay to ensure different timestamps
         doc2 = get_document(doc_id)
         # accessed_at should be updated (or at least not earlier)
-        assert doc2["accessed_at"] >= doc1["accessed_at"]
+        assert doc2.accessed_at >= doc1.accessed_at
 
     def test_get_returns_all_fields(self):
         from emdx.database.documents import get_document, save_document
@@ -198,7 +198,7 @@ class TestGetDocument:
             "is_deleted",
             "deleted_at",
         ]:
-            assert field in doc, f"Missing field: {field}"
+            assert hasattr(doc, field), f"Missing field: {field}"
 
 
 class TestUpdateDocument:
@@ -212,8 +212,8 @@ class TestUpdateDocument:
         assert result is True
 
         doc = get_document(doc_id)
-        assert doc["title"] == "Updated"
-        assert doc["content"] == "Updated content"
+        assert doc.title == "Updated"
+        assert doc.content == "Updated content"
 
     def test_update_nonexistent_returns_false(self):
         from emdx.database.documents import update_document
@@ -229,7 +229,7 @@ class TestUpdateDocument:
         time.sleep(0.001)  # Minimal delay to ensure different timestamps
         update_document(doc_id, "Timestamp Test v2", "New Content")
         doc_after = get_document(doc_id)
-        assert doc_after["updated_at"] >= doc_before["updated_at"]
+        assert doc_after.updated_at >= doc_before.updated_at
 
 
 class TestDeleteDocument:
@@ -333,7 +333,7 @@ class TestRestoreDocument:
         assert result is True
         doc = get_document(doc_id)
         assert doc is not None
-        assert doc["title"] == "Restorable"
+        assert doc.title == "Restorable"
 
     def test_restore_by_title(self):
         from emdx.database.documents import (
@@ -361,8 +361,8 @@ class TestRestoreDocument:
         delete_document(doc_id)
         restore_document(doc_id)
         doc = get_document(doc_id)
-        assert doc["deleted_at"] is None
-        assert doc["is_deleted"] == 0
+        assert doc.deleted_at is None
+        assert doc.is_deleted is False
 
     def test_restore_non_deleted_returns_false(self):
         from emdx.database.documents import restore_document, save_document
@@ -393,7 +393,7 @@ class TestListDocuments:
         save_document("Child", "Content", parent_id=parent)
 
         docs = list_documents()
-        titles = [d["title"] for d in docs]
+        titles = [d.title for d in docs]
         assert "Top 1" in titles
         assert "Top 2" in titles
         assert "Parent" in titles
@@ -407,7 +407,7 @@ class TestListDocuments:
         save_document("Top", "Content")
 
         docs = list_documents(parent_id=-1)
-        titles = [d["title"] for d in docs]
+        titles = [d.title for d in docs]
         assert "Parent" in titles
         assert "Child" in titles
         assert "Top" in titles
@@ -421,7 +421,7 @@ class TestListDocuments:
         save_document("Unrelated", "Content")
 
         docs = list_documents(parent_id=parent)
-        titles = [d["title"] for d in docs]
+        titles = [d.title for d in docs]
         assert len(docs) == 2
         assert "Child A" in titles
         assert "Child B" in titles
@@ -434,7 +434,7 @@ class TestListDocuments:
 
         docs = list_documents(project="alpha", parent_id=-1)
         assert len(docs) == 1
-        assert docs[0]["title"] == "Proj A"
+        assert docs[0].title == "Proj A"
 
     def test_list_excludes_deleted(self):
         from emdx.database.documents import delete_document, list_documents, save_document
@@ -444,7 +444,7 @@ class TestListDocuments:
         delete_document(doc_id)
 
         docs = list_documents(parent_id=-1)
-        titles = [d["title"] for d in docs]
+        titles = [d.title for d in docs]
         assert "Visible" in titles
         assert "Deleted" not in titles
 
@@ -475,7 +475,7 @@ class TestListDocuments:
         save_document("Third", "Content")
 
         docs = list_documents(parent_id=-1)
-        ids = [d["id"] for d in docs]
+        ids = [d.id for d in docs]
         assert ids == sorted(ids, reverse=True)
 
 
@@ -522,7 +522,7 @@ class TestGetRecentDocuments:
 
         docs = get_recent_documents(limit=10)
         # id1 was accessed most recently
-        assert docs[0]["id"] == id1
+        assert docs[0].id == id1
 
     def test_recent_respects_limit(self):
         from emdx.database.documents import get_recent_documents, save_document
@@ -540,7 +540,7 @@ class TestGetRecentDocuments:
         delete_document(doc_id)
 
         docs = get_recent_documents()
-        titles = [d["title"] for d in docs]
+        titles = [d.title for d in docs]
         assert "Deleted Recent" not in titles
         assert "Visible Recent" in titles
 
@@ -555,7 +555,7 @@ class TestListDeletedDocuments:
         delete_document(doc_id)
         deleted = list_deleted_documents()
         assert len(deleted) == 1
-        assert deleted[0]["title"] == "Trashed"
+        assert deleted[0].title == "Trashed"
 
     def test_excludes_non_deleted(self):
         from emdx.database.documents import list_deleted_documents, save_document
@@ -747,8 +747,8 @@ class TestSetParent:
         assert result is True
 
         doc = get_document(child)
-        assert doc["parent_id"] == parent
-        assert doc["relationship"] == "supersedes"
+        assert doc.parent_id == parent
+        assert doc.relationship == "supersedes"
 
     def test_set_parent_custom_relationship(self):
         from emdx.database.documents import get_document, save_document, set_parent
@@ -758,7 +758,7 @@ class TestSetParent:
         set_parent(child, parent, relationship="exploration")
 
         doc = get_document(child)
-        assert doc["relationship"] == "exploration"
+        assert doc.relationship == "exploration"
 
     def test_set_parent_nonexistent_child(self):
         from emdx.database.documents import save_document, set_parent
@@ -780,7 +780,7 @@ class TestGetChildren:
 
         children = get_children(parent)
         assert len(children) == 2
-        titles = {c["title"] for c in children}
+        titles = {c.title for c in children}
         assert titles == {"Child 1", "Child 2"}
 
 
@@ -862,21 +862,21 @@ class TestEdgeCases:
 
         doc_id = save_document("", "Some content")
         doc = get_document(doc_id)
-        assert doc["title"] == ""
+        assert doc.title == ""
 
     def test_save_empty_content(self):
         from emdx.database.documents import get_document, save_document
 
         doc_id = save_document("Empty Content", "")
         doc = get_document(doc_id)
-        assert doc["content"] == ""
+        assert doc.content == ""
 
     def test_save_none_project(self):
         from emdx.database.documents import get_document, save_document
 
         doc_id = save_document("No Project", "Content", project=None)
         doc = get_document(doc_id)
-        assert doc["project"] is None
+        assert doc.project is None
 
     def test_multiple_docs_same_title(self):
         from emdx.database.documents import get_document, save_document
@@ -895,7 +895,7 @@ class TestEdgeCases:
         content = "Unicode: \u2603 \U0001f600 \u00e9\u00e8\u00ea \u4e16\u754c \ud55c\uad6d\uc5b4"
         doc_id = save_document("Unicode Test", content)
         doc = get_document(doc_id)
-        assert doc["content"] == content
+        assert doc.content == content
 
     def test_newlines_in_title(self):
         from emdx.database.documents import get_document, save_document
@@ -903,7 +903,7 @@ class TestEdgeCases:
         title = "Line1\nLine2\nLine3"
         doc_id = save_document(title, "Content")
         doc = get_document(doc_id)
-        assert doc["title"] == title
+        assert doc.title == title
 
     def test_sql_injection_in_title(self):
         from emdx.database.documents import get_document, save_document
@@ -911,7 +911,7 @@ class TestEdgeCases:
         title = "'; DROP TABLE documents; --"
         doc_id = save_document(title, "Content")
         doc = get_document(doc_id)
-        assert doc["title"] == title
+        assert doc.title == title
 
     def test_rapid_saves(self):
         from emdx.database.documents import count_documents, save_document

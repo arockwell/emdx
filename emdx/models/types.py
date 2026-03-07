@@ -12,20 +12,6 @@ TaskStatus = Literal["open", "active", "blocked", "done", "failed", "wontdo", "d
 TaskRef: TypeAlias = str
 
 
-class CategoryDict(TypedDict):
-    key: str
-    name: str
-    description: str
-    created_at: str | None
-
-
-class CategoryWithStatsDict(CategoryDict):
-    open_count: int
-    done_count: int
-    epic_count: int
-    total_count: int
-
-
 class CategoryRenameResultDict(TypedDict):
     tasks_moved: int
     epics_moved: int

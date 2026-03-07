@@ -59,12 +59,12 @@ def list_cmd() -> None:
 
     for c in cats:
         table.add_row(
-            c["key"],
-            c["name"],
-            str(c["open_count"]),
-            str(c["done_count"]),
-            str(c["epic_count"]),
-            str(c["total_count"]),
+            c.key,
+            c.name,
+            str(c.open_count),
+            str(c.done_count),
+            str(c.epic_count),
+            str(c.total_count),
         )
 
     console.print(table)

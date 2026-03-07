@@ -46,7 +46,7 @@ def create(
     try:
         epic_id = tasks.create_epic(name, cat, description or "")
         epic = tasks.get_task(epic_id)
-        seq = epic["epic_seq"] if epic else None
+        seq = epic.epic_seq if epic else None
         key_label = f"{cat.upper()}-{seq}" if seq else f"#{epic_id}"
         id_suffix = f" (#{epic_id})" if seq else ""
         console.print(f"[green]Created epic {key_label}{id_suffix}: {name}[/green]")
@@ -83,16 +83,16 @@ def list_cmd(
     table.add_column("Total", justify="right", width=6)
 
     for e in epics:
-        epic_key = e.get("epic_key") or ""
-        epic_seq = e.get("epic_seq")
-        key_label = f"{epic_key}-{epic_seq}" if epic_key and epic_seq else str(e["id"])
+        epic_key = e.epic_key or ""
+        epic_seq = e.epic_seq
+        key_label = f"{epic_key}-{epic_seq}" if epic_key and epic_seq else str(e.id)
         table.add_row(
             key_label,
-            e["title"][:40],
-            e["status"],
-            str(e["children_open"]),
-            str(e["children_done"]),
-            str(e["child_count"]),
+            e.title[:40],
+            e.status,
+            str(e.children_open),
+            str(e.children_done),
+            str(e.child_count),
         )
 
     console.print(table)
@@ -114,23 +114,21 @@ def view(
         console.print(f"[red]Epic #{epic_id} not found[/red]")
         raise typer.Exit(1)
 
-    cat_label = f" ({epic['epic_key']})" if epic.get("epic_key") else ""
-    console.print(
-        f"\n[bold]Epic #{epic['id']}: {epic['title']}{cat_label}[/bold] — {epic['status']}"
-    )
-    if epic.get("description"):
-        console.print(f"[dim]{epic['description']}[/dim]")
-    console.print(f"[dim]Created: {epic.get('created_at', 'unknown')}[/dim]\n")
+    cat_label = f" ({epic.epic_key})" if epic.epic_key else ""
+    console.print(f"\n[bold]Epic #{epic.id}: {epic.title}{cat_label}[/bold] — {epic.status}")
+    if epic.description:
+        console.print(f"[dim]{epic.description}[/dim]")
+    console.print(f"[dim]Created: {epic.created_at or 'unknown'}[/dim]\n")
 
-    children = epic.get("children", [])
+    children = epic.children
     if children:
         console.print("[bold]Tasks:[/bold]")
         done_count = 0
         for c in children:
-            icon = ICONS.get(c["status"], "?")
-            seq_label = f"{c['epic_key']}-{c['epic_seq']}" if c.get("epic_seq") else f"#{c['id']}"
-            console.print(f"  {icon}  {seq_label}  {c['title']}")
-            if c["status"] == "done":
+            icon = ICONS.get(c.status, "?")
+            seq_label = f"{c.epic_key}-{c.epic_seq}" if c.epic_seq else f"#{c.id}"
+            console.print(f"  {icon}  {seq_label}  {c.title}")
+            if c.status == "done":
                 done_count += 1
         console.print(f"\n[dim]Progress: {done_count}/{len(children)} done[/dim]")
     else:
@@ -181,7 +179,7 @@ def done(
         raise typer.Exit(1)
 
     tasks.update_task(epic_id, status="done")
-    console.print(f"[green]✓ Done:[/green] Epic #{epic_id} {epic['title']}")
+    console.print(f"[green]✓ Done:[/green] Epic #{epic_id} {epic.title}")
 
 
 @app.command()
@@ -201,7 +199,7 @@ def active(
         raise typer.Exit(1)
 
     tasks.update_task(epic_id, status="active")
-    console.print(f"[green]● Active:[/green] Epic #{epic_id} {epic['title']}")
+    console.print(f"[green]● Active:[/green] Epic #{epic_id} {epic.title}")
 
 
 TASK_ID_HELP = "Task ID (e.g. 42 or TOOL-12)"
@@ -239,7 +237,7 @@ def attach(
 
     epic_task = tasks.get_task(epic_id)
     epic_label = f"#{epic_id}"
-    if epic_task and epic_task.get("epic_key") and epic_task.get("epic_seq"):
-        epic_label = f"{epic_task['epic_key']}-{epic_task['epic_seq']}"
+    if epic_task and epic_task.epic_key and epic_task.epic_seq:
+        epic_label = f"{epic_task.epic_key}-{epic_task.epic_seq}"
 
     console.print(f"[green]✅ Attached {count} task(s) to epic {epic_label}[/green]")

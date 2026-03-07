@@ -5,14 +5,13 @@ TypedDict projections (DocumentRow, DocumentListItem, RecentDocumentItem,
 etc.) with a proper dataclass that supports:
 
 - Factory construction from sqlite3.Row with datetime parsing
-- Backward-compatible bracket access (doc["title"]) for incremental migration
+- Attribute access (doc.title, doc.id)
 - Serialization to dict for JSON output
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
 from dataclasses import asdict, dataclass, fields
 from datetime import datetime
 from typing import Any
@@ -30,8 +29,7 @@ class Document:
     """Core document domain object.
 
     Constructed via ``Document.from_row()`` at the database boundary.
-    Supports ``doc["field"]`` and ``doc.get("field")`` for backward
-    compatibility with code that previously used TypedDict dicts.
+    Access fields via attributes: ``doc.title``, ``doc.id``.
     """
 
     id: int
@@ -49,53 +47,6 @@ class Document:
     archived_at: datetime | None = None
     stage: str | None = None
     doc_type: str = "user"
-
-    # ── Dict-compatibility layer ──────────────────────────────────────
-
-    def __getitem__(self, key: str) -> Any:
-        """Allow ``doc["title"]`` access for backward compatibility."""
-        try:
-            return getattr(self, key)
-        except AttributeError:
-            raise KeyError(key) from None
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Allow ``doc.get("title", "Untitled")`` for backward compatibility."""
-        return getattr(self, key, default)
-
-    def __contains__(self, key: object) -> bool:
-        """Allow ``"title" in doc`` checks."""
-        if not isinstance(key, str):
-            return False
-        return key in self._field_names()
-
-    def keys(self) -> list[str]:
-        """Return field names, for code that iterates dict keys."""
-        return list(self._field_names())
-
-    def items(self) -> Iterator[tuple[str, Any]]:
-        """Yield (field_name, value) pairs, for dict-like iteration."""
-        for name in self._field_names():
-            yield name, getattr(self, name)
-
-    def values(self) -> Iterator[Any]:
-        """Yield field values, for dict-like iteration."""
-        for name in self._field_names():
-            yield getattr(self, name)
-
-    @classmethod
-    def _field_names(cls) -> frozenset[str]:
-        """Cached set of field names for this dataclass."""
-        # Use the class-level cache if available.
-        cache_attr = "_cached_field_names"
-        cached: frozenset[str] | None = cls.__dict__.get(cache_attr)
-        if cached is not None:
-            return cached
-        names = frozenset(f.name for f in fields(cls))
-        # slots=True means we can't set arbitrary class attrs, so we
-        # store on the class __dict__ via type.__setattr__.
-        type.__setattr__(cls, cache_attr, names)
-        return names
 
     # ── Factory methods ───────────────────────────────────────────────
 
@@ -131,7 +82,7 @@ class Document:
     @classmethod
     def _from_dict(cls, raw: dict[str, Any]) -> Document:
         """Internal: build a Document from a raw dict, parsing datetimes."""
-        known = cls._field_names()
+        known = frozenset(f.name for f in fields(cls))
         kwargs: dict[str, Any] = {}
         for key, value in raw.items():
             if key not in known:

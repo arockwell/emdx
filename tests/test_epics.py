@@ -26,9 +26,9 @@ class TestCreateEpic:
         epic_id = tasks.create_epic("Test Epic", "TEPC")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        assert epic["type"] == "epic"
-        assert epic["epic_key"] == "TEPC"
-        assert epic["epic_seq"] == 1  # epics get KEY-N like regular tasks
+        assert epic.type == "epic"
+        assert epic.epic_key == "TEPC"
+        assert epic.epic_seq == 1  # epics get KEY-N like regular tasks
 
     def test_create_epic_auto_creates_category(self) -> None:
         tasks.create_epic("Auto Cat Epic", "ACAT")
@@ -58,10 +58,10 @@ class TestTaskInEpic:
         )
         task = tasks.get_task(task_id)
         assert task is not None
-        assert task["parent_task_id"] == epic_id
-        assert task["epic_key"] == "TPIC"
-        assert task["epic_seq"] == 2  # epic took seq 1
-        assert task["title"].startswith("TPIC-2: ")
+        assert task.parent_task_id == epic_id
+        assert task.epic_key == "TPIC"
+        assert task.epic_seq == 2  # epic took seq 1
+        assert task.title.startswith("TPIC-2: ")
 
     def test_epic_auto_numbers(self) -> None:
         categories.ensure_category("ENUM")
@@ -72,13 +72,13 @@ class TestTaskInEpic:
         task1, task2, task3 = tasks.get_task(t1), tasks.get_task(t2), tasks.get_task(t3)
         assert task1 is not None and task2 is not None and task3 is not None
 
-        assert task1["epic_seq"] == 1
-        assert task2["epic_seq"] == 2
-        assert task3["epic_seq"] == 3
+        assert task1.epic_seq == 1
+        assert task2.epic_seq == 2
+        assert task3.epic_seq == 3
 
-        assert task1["title"] == "ENUM-1: First"
-        assert task2["title"] == "ENUM-2: Second"
-        assert task3["title"] == "ENUM-3: Third"
+        assert task1.title == "ENUM-1: First"
+        assert task2.title == "ENUM-2: Second"
+        assert task3.title == "ENUM-3: Third"
 
     def test_numbering_spans_epics(self) -> None:
         """Numbering is category-scoped, so it continues across epics."""
@@ -93,10 +93,10 @@ class TestTaskInEpic:
         epic_b_task = tasks.get_task(epic_b)
         task5 = tasks.get_task(t5)
         assert epic_a_task is not None and epic_b_task is not None and task5 is not None
-        assert epic_a_task["epic_seq"] == 1
-        assert epic_b_task["epic_seq"] == 4
-        assert task5["epic_seq"] == 5  # continues from epic_b's seq 4
-        assert task5["title"] == "SPAN-5: Task in B"
+        assert epic_a_task.epic_seq == 1
+        assert epic_b_task.epic_seq == 4
+        assert task5.epic_seq == 5  # continues from epic_b's seq 4
+        assert task5.title == "SPAN-5: Task in B"
 
 
 class TestEpicDone:
@@ -107,7 +107,7 @@ class TestEpicDone:
         tasks.update_task(epic_id, status="done")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        assert epic["status"] == "done"
+        assert epic.status == "done"
 
 
 class TestDeleteEpic:
@@ -127,7 +127,7 @@ class TestDeleteEpic:
         # Child still exists but parent_task_id is cleared
         child = tasks.get_task(t1)
         assert child is not None
-        assert child["parent_task_id"] is None
+        assert child.parent_task_id is None
 
     def test_delete_epic_refuses_open_children(self) -> None:
         epic_id = tasks.create_epic("Open Children Epic", "DOCH")
@@ -143,7 +143,7 @@ class TestDeleteEpic:
         assert tasks.get_task(epic_id) is None
         child = tasks.get_task(t1)
         assert child is not None
-        assert child["parent_task_id"] is None
+        assert child.parent_task_id is None
 
     def test_delete_epic_not_found(self) -> None:
         with pytest.raises(ValueError, match="not found"):
@@ -163,7 +163,7 @@ class TestListEpics:
         tasks.create_epic("Other Epic", "OTHR")
 
         result = tasks.list_epics(category_key="FILT")
-        keys = [e["epic_key"] for e in result]
+        keys = [e.epic_key for e in result]
         assert "FILT" in keys
         assert "OTHR" not in keys
 
@@ -175,8 +175,8 @@ class TestListEpics:
         open_epics = tasks.list_epics(status=["open"])
         done_epics = tasks.list_epics(status=["done"])
 
-        open_ids = [e["id"] for e in open_epics]
-        done_ids = [e["id"] for e in done_epics]
+        open_ids = [e.id for e in open_epics]
+        done_ids = [e.id for e in done_epics]
         assert e1 in open_ids
         assert e2 in done_ids
 
@@ -191,8 +191,8 @@ class TestEpicView:
 
         view = tasks.get_epic_view(epic_id)
         assert view is not None
-        assert view["title"] == "View Epic"
-        assert len(view["children"]) == 2
+        assert view.title == "View Epic"
+        assert len(view.children) == 2
 
     def test_epic_view_not_found(self) -> None:
         result = tasks.get_epic_view(999999)
@@ -236,7 +236,7 @@ class TestEpicsCLI:
         assert "Done" in _out(result)
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        assert epic["status"] == "done"
+        assert epic.status == "done"
 
     def test_active_command(self) -> None:
         epic_id = tasks.create_epic("Active CLI Epic", "EACL")
@@ -245,7 +245,7 @@ class TestEpicsCLI:
         assert "Active" in _out(result)
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        assert epic["status"] == "active"
+        assert epic.status == "active"
 
     def test_view_not_found(self) -> None:
         result = runner.invoke(epics_app, ["view", "999999"])
@@ -334,7 +334,7 @@ class TestEpicCommandsAcceptCategoryKeys:
         epic_id = tasks.create_epic("Key View Epic", "KVIW")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        key = f"KVIW-{epic['epic_seq']}"
+        key = f"KVIW-{epic.epic_seq}"
         result = runner.invoke(epics_app, ["view", key])
         assert result.exit_code == 0
         assert "Key View Epic" in _out(result)
@@ -343,7 +343,7 @@ class TestEpicCommandsAcceptCategoryKeys:
         epic_id = tasks.create_epic("Key Done Epic", "KDNE")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        key = f"KDNE-{epic['epic_seq']}"
+        key = f"KDNE-{epic.epic_seq}"
         result = runner.invoke(epics_app, ["done", key])
         assert result.exit_code == 0
         assert "Done" in _out(result)
@@ -352,7 +352,7 @@ class TestEpicCommandsAcceptCategoryKeys:
         epic_id = tasks.create_epic("Key Active Epic", "KACT")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        key = f"KACT-{epic['epic_seq']}"
+        key = f"KACT-{epic.epic_seq}"
         result = runner.invoke(epics_app, ["active", key])
         assert result.exit_code == 0
         assert "Active" in _out(result)
@@ -362,7 +362,7 @@ class TestEpicCommandsAcceptCategoryKeys:
         tasks.update_task(epic_id, status="done")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        key = f"KDEL-{epic['epic_seq']}"
+        key = f"KDEL-{epic.epic_seq}"
         result = runner.invoke(epics_app, ["delete", key])
         assert result.exit_code == 0
         assert "Deleted" in _out(result)
@@ -375,7 +375,7 @@ class TestTaskAddWithEpicKey:
         epic_id = tasks.create_epic("Key Add Epic", "KADD")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        key = f"KADD-{epic['epic_seq']}"
+        key = f"KADD-{epic.epic_seq}"
         result = runner.invoke(tasks_app, ["add", "Keyed task", "--epic", key])
         assert result.exit_code == 0
 
@@ -388,7 +388,7 @@ class TestTaskListWithEpicKey:
         tasks.create_task("Key list child", parent_task_id=epic_id, epic_key="KLST")
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        key = f"KLST-{epic['epic_seq']}"
+        key = f"KLST-{epic.epic_seq}"
         result = runner.invoke(tasks_app, ["list", "--epic", key])
         assert result.exit_code == 0
 
@@ -407,12 +407,12 @@ class TestAttachToEpic:
         task1 = tasks.get_task(t1)
         task2 = tasks.get_task(t2)
         assert task1 is not None and task2 is not None
-        assert task1["parent_task_id"] == epic_id
-        assert task2["parent_task_id"] == epic_id
-        assert task1["epic_key"] == "ATCH"
-        assert task2["epic_key"] == "ATCH"
-        assert task1["epic_seq"] is not None
-        assert task2["epic_seq"] is not None
+        assert task1.parent_task_id == epic_id
+        assert task2.parent_task_id == epic_id
+        assert task1.epic_key == "ATCH"
+        assert task2.epic_key == "ATCH"
+        assert task1.epic_seq is not None
+        assert task2.epic_seq is not None
 
     def test_attach_skips_already_attached(self) -> None:
         epic_id = tasks.create_epic("Skip Epic", "SKIP")
@@ -443,10 +443,10 @@ class TestAttachToEpic:
         t1 = tasks.create_task("Key orphan", epic_key="KCLA")
         task = tasks.get_task(t1)
         assert task is not None
-        key = f"KCLA-{task['epic_seq']}"
+        key = f"KCLA-{task.epic_seq}"
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        epic_key = f"KCLA-{epic['epic_seq']}"
+        epic_key = f"KCLA-{epic.epic_seq}"
         result = runner.invoke(
             epics_app,
             ["attach", key, "--epic", epic_key],
@@ -462,7 +462,7 @@ class TestResolveTaskIdFallback:
         task_id = tasks.create_task("Fallback test", epic_key="FLLB")
         task = tasks.get_task(task_id)
         assert task is not None
-        seq = task["epic_seq"]
+        seq = task.epic_seq
         # Only works if no task with DB id == seq exists.
         # We can test this by using the category-key approach as verification.
         from emdx.models.tasks import resolve_task_id

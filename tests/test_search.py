@@ -159,7 +159,7 @@ class TestSearchDocumentsFTS5:
 
         results = search_documents("Python")
         assert len(results) == 2
-        titles = [r["title"] for r in results]
+        titles = [r.title for r in results]
         assert "Python Guide" in titles
         assert "Testing with Pytest" in titles
 
@@ -205,9 +205,9 @@ class TestSearchRelevanceRanking:
 
         results = search_documents("Python")
         assert len(results) == 2
-        # All results should have a rank field
+        # All results should have a rank attribute
         for result in results:
-            assert "rank" in result
+            assert hasattr(result, "rank")
 
     def test_multiple_occurrences_ranked_higher(self, mock_db_connection):
         """Test that documents with more term occurrences rank higher."""
@@ -221,7 +221,7 @@ class TestSearchRelevanceRanking:
         results = search_documents("Python")
         assert len(results) == 2
         # FTS5 rank is negative (lower is better), so first result should have lower rank
-        assert results[0]["rank"] <= results[1]["rank"]
+        assert results[0].rank <= results[1].rank
 
 
 class TestSearchPagination:
@@ -274,12 +274,12 @@ class TestSearchProjectFilter:
         results = search_documents("Python", project="project1")
         assert len(results) == 2
         for result in results:
-            assert result["project"] == "project1"
+            assert result.project == "project1"
 
         # Filter by project2
         results = search_documents("Python", project="project2")
         assert len(results) == 1
-        assert results[0]["project"] == "project2"
+        assert results[0].project == "project2"
 
     def test_filter_nonexistent_project(self, mock_db_connection):
         """Test filtering by a project that doesn't exist."""
@@ -307,7 +307,7 @@ class TestSearchDateFilters:
 
         results = search_documents("Python", created_after=filter_date)
         assert len(results) == 1
-        assert results[0]["title"] == "Recent Python Doc"
+        assert results[0].title == "Recent Python Doc"
 
     def test_created_before_filter(self, mock_db_connection):
         """Test filtering by created_before date."""
@@ -322,7 +322,7 @@ class TestSearchDateFilters:
 
         results = search_documents("Python", created_before=filter_date)
         assert len(results) == 1
-        assert results[0]["title"] == "Old Python Doc"
+        assert results[0].title == "Old Python Doc"
 
     def test_modified_after_filter(self, mock_db_connection):
         """Test filtering by modified_after date."""
@@ -337,7 +337,7 @@ class TestSearchDateFilters:
 
         results = search_documents("Python", modified_after=filter_date)
         assert len(results) == 1
-        assert results[0]["title"] == "Recent Python Doc"
+        assert results[0].title == "Recent Python Doc"
 
     def test_modified_before_filter(self, mock_db_connection):
         """Test filtering by modified_before date."""
@@ -352,7 +352,7 @@ class TestSearchDateFilters:
 
         results = search_documents("Python", modified_before=filter_date)
         assert len(results) == 1
-        assert results[0]["title"] == "Old Python Doc"
+        assert results[0].title == "Old Python Doc"
 
     def test_combined_date_filters(self, mock_db_connection):
         """Test combining multiple date filters."""
@@ -372,7 +372,7 @@ class TestSearchDateFilters:
 
         results = search_documents("Python", created_after=after_date, created_before=before_date)
         assert len(results) == 1
-        assert results[0]["title"] == "Middle Doc"
+        assert results[0].title == "Middle Doc"
 
 
 class TestWildcardSearch:
@@ -400,7 +400,7 @@ class TestWildcardSearch:
         results = search_documents("*", project="project1")
         assert len(results) == 2
         for result in results:
-            assert result["project"] == "project1"
+            assert result.project == "project1"
 
     def test_wildcard_with_date_filters(self, mock_db_connection):
         """Test wildcard query with date filters."""
@@ -415,7 +415,7 @@ class TestWildcardSearch:
 
         results = search_documents("*", created_after=filter_date)
         assert len(results) == 1
-        assert results[0]["title"] == "Recent Doc"
+        assert results[0].title == "Recent Doc"
 
     def test_wildcard_ordered_by_id_desc(self, mock_db_connection):
         """Test that wildcard results are ordered by ID descending."""
@@ -428,9 +428,9 @@ class TestWildcardSearch:
         results = search_documents("*")
         assert len(results) == 3
         # Results should be ordered by ID descending (most recent first)
-        assert results[0]["id"] == id3
-        assert results[1]["id"] == id2
-        assert results[2]["id"] == id1
+        assert results[0].id == id3
+        assert results[1].id == id2
+        assert results[2].id == id1
 
     def test_wildcard_respects_limit(self, mock_db_connection):
         """Test that wildcard query respects limit parameter."""
@@ -456,7 +456,7 @@ class TestSearchExcludesDeleted:
 
         results = search_documents("Python")
         assert len(results) == 1
-        assert results[0]["title"] == "Active Python Doc"
+        assert results[0].title == "Active Python Doc"
 
     def test_soft_deleted_excluded_from_wildcard(self, mock_db_connection):
         """Test that soft-deleted documents are excluded from wildcard search."""
@@ -468,7 +468,7 @@ class TestSearchExcludesDeleted:
 
         results = search_documents("*")
         assert len(results) == 1
-        assert results[0]["title"] == "Active Doc"
+        assert results[0].title == "Active Doc"
 
 
 class TestSearchResultFields:
@@ -484,13 +484,13 @@ class TestSearchResultFields:
         assert len(results) == 1
 
         result = results[0]
-        assert "id" in result
-        assert "title" in result
-        assert "project" in result
-        assert "created_at" in result
-        assert "updated_at" in result
-        assert "snippet" in result
-        assert "rank" in result
+        assert hasattr(result, "id")
+        assert hasattr(result, "title")
+        assert hasattr(result, "project")
+        assert hasattr(result, "created_at")
+        assert hasattr(result, "updated_at")
+        assert hasattr(result, "snippet")
+        assert hasattr(result, "rank")
 
     def test_search_snippet_contains_match_context(self, mock_db_connection):
         """Test that search snippet contains context around the match."""
@@ -503,7 +503,7 @@ class TestSearchResultFields:
         results = search_documents("Python")
         assert len(results) == 1
         # Snippet should be present and contain some context
-        assert results[0]["snippet"] is not None
+        assert results[0].snippet is not None
 
     def test_wildcard_has_null_snippet(self, mock_db_connection):
         """Test that wildcard search returns NULL snippets."""
@@ -513,7 +513,7 @@ class TestSearchResultFields:
 
         results = search_documents("*")
         assert len(results) == 1
-        assert results[0]["snippet"] is None
+        assert results[0].snippet is None
 
     def test_datetime_fields_are_parsed(self, mock_db_connection):
         """Test that datetime fields are properly parsed."""
@@ -525,8 +525,8 @@ class TestSearchResultFields:
         assert len(results) == 1
 
         result = results[0]
-        assert isinstance(result["created_at"], datetime)
-        assert isinstance(result["updated_at"], datetime)
+        assert isinstance(result.created_at, datetime)
+        assert isinstance(result.updated_at, datetime)
 
 
 class TestSearchEdgeCases:
@@ -546,7 +546,7 @@ class TestSearchEdgeCases:
         # Search for the full term "Programming" which should definitely match
         results = search_documents("Programming")
         assert len(results) == 1
-        assert results[0]["title"] == "C++ Programming"
+        assert results[0].title == "C++ Programming"
 
     def test_search_with_phrase(self, mock_db_connection):
         """Test phrase search with FTS5."""
@@ -558,7 +558,7 @@ class TestSearchEdgeCases:
         # FTS5 phrase search with quotes - should match first doc with exact phrase
         results = search_documents('"Python web"')
         assert len(results) == 1
-        assert results[0]["title"] == "Python Programming"
+        assert results[0].title == "Python Programming"
 
     def test_search_with_or_literal(self, mock_db_connection):
         """Test that 'OR' is treated as a literal word, not FTS operator.
@@ -577,7 +577,7 @@ class TestSearchEdgeCases:
         # Only the doc with literal "OR" in it will match all three terms
         results = search_documents("OR")
         assert len(results) == 1
-        assert "Word OR Logic" in results[0]["title"]
+        assert "Word OR Logic" in results[0].title
 
     def test_stemming_with_porter(self, mock_db_connection):
         """Test that Porter stemmer works (running -> run)."""
@@ -588,7 +588,7 @@ class TestSearchEdgeCases:
         # Porter stemmer should match "run" to "running"
         results = search_documents("run")
         assert len(results) == 1
-        assert results[0]["title"] == "Running Tips"
+        assert results[0].title == "Running Tips"
 
 
 class TestEscapeFts5Query:
@@ -642,7 +642,7 @@ class TestHyphenatedSearch:
         # This should NOT fail with "no such column: driven" error
         results = search_documents("event-driven")
         assert len(results) == 1
-        assert "Event-Driven" in results[0]["title"]
+        assert "Event-Driven" in results[0].title
 
     def test_search_multiple_hyphenated_terms(self, mock_db_connection):
         """Test searching for multiple hyphenated terms."""
@@ -691,7 +691,7 @@ class TestDocTypeFilter:
 
         results = search_documents("Python")
         assert len(results) == 1
-        assert results[0]["title"] == "User Doc"
+        assert results[0].title == "User Doc"
 
     def test_wiki_filter_returns_only_wiki_docs(self, mock_db_connection):
         """Test that doc_type='wiki' returns only wiki docs."""
@@ -702,7 +702,7 @@ class TestDocTypeFilter:
 
         results = search_documents("Python", doc_type="wiki")
         assert len(results) == 1
-        assert results[0]["title"] == "Wiki Article"
+        assert results[0].title == "Wiki Article"
 
     def test_none_doc_type_returns_all(self, mock_db_connection):
         """Test that doc_type=None returns all document types."""
@@ -725,12 +725,12 @@ class TestDocTypeFilter:
         # Default: only user
         results = search_documents("*")
         assert len(results) == 1
-        assert results[0]["title"] == "User Doc"
+        assert results[0].title == "User Doc"
 
         # Wiki only
         results = search_documents("*", doc_type="wiki")
         assert len(results) == 1
-        assert results[0]["title"] == "Wiki Doc"
+        assert results[0].title == "Wiki Doc"
 
         # All types
         results = search_documents("*", doc_type=None)
@@ -746,4 +746,4 @@ class TestDocTypeFilter:
 
         results = search_documents("Python", project="project1", doc_type="user")
         assert len(results) == 1
-        assert results[0]["title"] == "User P1"
+        assert results[0].title == "User P1"

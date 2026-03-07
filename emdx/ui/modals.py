@@ -361,7 +361,7 @@ class DocumentPreviewScreen(Screen):
             from .markdown_config import render_markdown_to_richlog
 
             result = get_document(self.doc_id)
-            self._doc_data = dict(result) if result else None
+            self._doc_data = result.to_dict() if result else None
             if not self._doc_data:
                 self.query_one("#preview-title", Static).update(
                     f"Document #{self.doc_id} not found"

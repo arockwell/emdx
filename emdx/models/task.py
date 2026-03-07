@@ -5,14 +5,13 @@ TypedDict projections (TaskDict, EpicTaskDict, EpicViewDict,
 TaskLogEntryDict) with proper dataclasses that support:
 
 - Factory construction from sqlite3.Row with datetime parsing
-- Backward-compatible bracket access (task["title"]) for incremental migration
+- Attribute access (task.title, task.status, etc.)
 - Serialization to dict for JSON output
 """
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime
 from typing import Any
@@ -28,8 +27,7 @@ class Task:
     """Core task domain object.
 
     Constructed via ``Task.from_row()`` at the database boundary.
-    Supports ``task["field"]`` and ``task.get("field")`` for backward
-    compatibility with code that previously used TypedDict dicts.
+    All fields are accessed as attributes (``task.title``, ``task.status``).
     """
 
     id: int
@@ -58,42 +56,11 @@ class Task:
     # Children list (populated by get_epic_view, default empty)
     children: list[Task] = field(default_factory=list)
 
-    # ── Dict-compatibility layer ──────────────────────────────────────
-
-    def __getitem__(self, key: str) -> Any:
-        """Allow ``task["title"]`` access for backward compatibility."""
-        try:
-            return getattr(self, key)
-        except AttributeError:
-            raise KeyError(key) from None
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Allow ``task.get("title", "Untitled")`` for backward compatibility."""
-        return getattr(self, key, default)
-
-    def __contains__(self, key: object) -> bool:
-        """Allow ``"title" in task`` checks."""
-        if not isinstance(key, str):
-            return False
-        return key in self._field_names()
-
-    def keys(self) -> list[str]:
-        """Return field names, for code that iterates dict keys."""
-        return list(self._field_names())
-
-    def items(self) -> Iterator[tuple[str, Any]]:
-        """Yield (field_name, value) pairs, for dict-like iteration."""
-        for name in self._field_names():
-            yield name, getattr(self, name)
-
-    def values(self) -> Iterator[Any]:
-        """Yield field values, for dict-like iteration."""
-        for name in self._field_names():
-            yield getattr(self, name)
+    # ── Internal helpers ────────────────────────────────────────────────
 
     @classmethod
     def _field_names(cls) -> frozenset[str]:
-        """Cached set of field names for this dataclass."""
+        """Cached set of dataclass field names."""
         cache_attr = "_cached_field_names"
         cached: frozenset[str] | None = cls.__dict__.get(cache_attr)
         if cached is not None:
@@ -180,42 +147,11 @@ class TaskLogEntry:
     message: str
     created_at: datetime | None = None
 
-    # ── Dict-compatibility layer ──────────────────────────────────────
-
-    def __getitem__(self, key: str) -> Any:
-        """Allow ``entry["message"]`` access for backward compatibility."""
-        try:
-            return getattr(self, key)
-        except AttributeError:
-            raise KeyError(key) from None
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """Allow ``entry.get("created_at")`` for backward compatibility."""
-        return getattr(self, key, default)
-
-    def __contains__(self, key: object) -> bool:
-        """Allow ``"message" in entry`` checks."""
-        if not isinstance(key, str):
-            return False
-        return key in self._field_names()
-
-    def keys(self) -> list[str]:
-        """Return field names, for code that iterates dict keys."""
-        return list(self._field_names())
-
-    def items(self) -> Iterator[tuple[str, Any]]:
-        """Yield (field_name, value) pairs, for dict-like iteration."""
-        for name in self._field_names():
-            yield name, getattr(self, name)
-
-    def values(self) -> Iterator[Any]:
-        """Yield field values, for dict-like iteration."""
-        for name in self._field_names():
-            yield getattr(self, name)
+    # ── Internal helpers ────────────────────────────────────────────────
 
     @classmethod
     def _field_names(cls) -> frozenset[str]:
-        """Cached set of field names for this dataclass."""
+        """Cached set of dataclass field names."""
         cache_attr = "_cached_field_names"
         cached: frozenset[str] | None = cls.__dict__.get(cache_attr)
         if cached is not None:

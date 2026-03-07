@@ -470,25 +470,21 @@ class HybridSearchService:
 
         results = []
         for doc in docs:
-            raw_rank = doc.get("rank", 0)
+            raw_rank = doc.rank
             score = max(0.0, min(1.0, 1.0 + (raw_rank / 20.0))) if raw_rank else 0.5
 
             results.append(
                 HybridSearchResult(
-                    doc_id=doc["id"],
-                    title=doc["title"],
-                    project=doc.get("project"),
+                    doc_id=doc.id,
+                    title=doc.title,
+                    project=doc.project,
                     score=score,
                     keyword_score=score,
                     semantic_score=0.0,
                     source="fts",
-                    snippet=(doc.get("snippet") or "")[:200],
-                    created_at=parse_datetime(doc.get("created_at"))
-                    if doc.get("created_at")
-                    else None,
-                    updated_at=parse_datetime(doc.get("updated_at"))
-                    if doc.get("updated_at")
-                    else None,
+                    snippet=(doc.snippet or "")[:200],
+                    created_at=parse_datetime(doc.created_at) if doc.created_at else None,
+                    updated_at=parse_datetime(doc.updated_at) if doc.updated_at else None,
                 )
             )
 
@@ -759,18 +755,18 @@ class HybridSearchService:
 
         results = []
         for doc in docs:
-            score = normalize_fts5_score(doc.get("rank", 0))
+            score = normalize_fts5_score(doc.rank)
             results.append(
                 HybridSearchResult(
-                    doc_id=doc["id"],
-                    title=doc["title"],
-                    project=doc.get("project"),
+                    doc_id=doc.id,
+                    title=doc.title,
+                    project=doc.project,
                     score=score,
                     keyword_score=score,
                     semantic_score=0.0,
                     source="keyword",
-                    snippet=(doc.get("snippet") or "")[:200],
-                    doc_type=doc.get("doc_type", "user"),
+                    snippet=(doc.snippet or "")[:200],
+                    doc_type=doc.doc_type,
                 )
             )
 

@@ -77,8 +77,8 @@ class DocumentItem(ActivityItem):
 
         doc = doc_db.get_document(self.doc_id)
         if doc:
-            content = doc.get("content", "")
-            title = doc.get("title", "Untitled")
+            content = doc.content
+            title = doc.title or "Untitled"
 
             content_stripped = content.lstrip()
             if not (content_stripped.startswith(f"# {title}") or content_stripped.startswith("# ")):
