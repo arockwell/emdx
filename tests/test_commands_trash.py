@@ -10,6 +10,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from emdx.commands.trash import app
+from emdx.models.document import Document
 
 runner = CliRunner()
 
@@ -39,13 +40,15 @@ class TestTrashList:
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_list_shows_documents(self, mock_list):
         mock_list.return_value = [
-            {
-                "id": 42,
-                "title": "Test Document",
-                "project": "test-project",
-                "deleted_at": datetime(2026, 1, 15, 10, 30),
-                "access_count": 5,
-            }
+            Document.from_row(
+                {
+                    "id": 42,
+                    "title": "Test Document",
+                    "project": "test-project",
+                    "deleted_at": datetime(2026, 1, 15, 10, 30),
+                    "access_count": 5,
+                }
+            )
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
@@ -57,13 +60,15 @@ class TestTrashList:
     @patch("emdx.commands.trash.list_deleted_documents")
     def test_list_truncates_long_titles(self, mock_list):
         mock_list.return_value = [
-            {
-                "id": 1,
-                "title": "A" * 60,
-                "project": None,
-                "deleted_at": datetime(2026, 1, 15),
-                "access_count": 0,
-            }
+            Document.from_row(
+                {
+                    "id": 1,
+                    "title": "A" * 60,
+                    "project": None,
+                    "deleted_at": datetime(2026, 1, 15),
+                    "access_count": 0,
+                }
+            )
         ]
         result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
@@ -134,7 +139,9 @@ class TestTrashPurge:
     @patch("emdx.commands.trash.list_deleted_documents")
     @patch("emdx.commands.trash.purge_deleted_documents")
     def test_purge_with_force(self, mock_purge, mock_list):
-        mock_list.return_value = [{"id": 1, "deleted_at": datetime(2026, 1, 1)}]
+        mock_list.return_value = [
+            Document.from_row({"id": 1, "title": "", "deleted_at": datetime(2026, 1, 1)})
+        ]
         mock_purge.return_value = 1
         result = runner.invoke(app, ["purge", "--force"])
         assert result.exit_code == 0
@@ -143,7 +150,9 @@ class TestTrashPurge:
     @patch("emdx.commands.trash.list_deleted_documents")
     @patch("emdx.commands.trash.is_non_interactive", return_value=False)
     def test_purge_cancelled(self, mock_interactive, mock_list):
-        mock_list.return_value = [{"id": 1, "deleted_at": datetime(2026, 1, 1)}]
+        mock_list.return_value = [
+            Document.from_row({"id": 1, "title": "", "deleted_at": datetime(2026, 1, 1)})
+        ]
         result = runner.invoke(app, ["purge"], input="n\n")
         assert result.exit_code == 0
         assert "cancelled" in _out(result).lower()
@@ -155,7 +164,9 @@ class TestTrashPurge:
         self, mock_ni: Any, mock_list: Any, mock_purge: Any
     ) -> None:
         """Purge skips confirmation when stdin is not a TTY (agent mode)."""
-        mock_list.return_value = [{"id": 1, "deleted_at": datetime(2026, 1, 1)}]
+        mock_list.return_value = [
+            Document.from_row({"id": 1, "title": "", "deleted_at": datetime(2026, 1, 1)})
+        ]
         mock_purge.return_value = 1
         result = runner.invoke(app, ["purge"])
         assert result.exit_code == 0
@@ -174,8 +185,8 @@ class TestTrashRestoreNonInteractive:
     ) -> None:
         """Restore --all skips confirmation when stdin is not a TTY."""
         mock_list.return_value = [
-            {"id": 1, "title": "Doc 1", "deleted_at": datetime(2026, 1, 1)},
-            {"id": 2, "title": "Doc 2", "deleted_at": datetime(2026, 1, 2)},
+            Document.from_row({"id": 1, "title": "Doc 1", "deleted_at": datetime(2026, 1, 1)}),
+            Document.from_row({"id": 2, "title": "Doc 2", "deleted_at": datetime(2026, 1, 2)}),
         ]
         mock_restore.return_value = True
         result = runner.invoke(app, ["restore", "--all"])

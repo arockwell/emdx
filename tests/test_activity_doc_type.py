@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from textual.app import App, ComposeResult
 
+from emdx.models.document import Document
 from emdx.ui.activity.activity_data import ActivityDataLoader
 from emdx.ui.activity.activity_items import DocumentItem
 from emdx.ui.activity.activity_table import ActivityTable
@@ -25,25 +25,27 @@ def make_doc_row(
     title: str = "Test doc",
     doc_type: str = "user",
     created_at: str = "2025-01-20T12:00:00",
-) -> dict[str, Any]:
-    """Create a fake document row matching DocumentRow shape."""
-    return {
-        "id": id,
-        "title": title,
-        "content": "some content",
-        "project": None,
-        "created_at": created_at,
-        "updated_at": None,
-        "accessed_at": None,
-        "access_count": 1,
-        "deleted_at": None,
-        "is_deleted": 0,
-        "parent_id": None,
-        "relationship": None,
-        "archived_at": None,
-        "stage": None,
-        "doc_type": doc_type,
-    }
+) -> Document:
+    """Create a fake Document matching the Document dataclass shape."""
+    return Document.from_row(
+        {
+            "id": id,
+            "title": title,
+            "content": "some content",
+            "project": None,
+            "created_at": created_at,
+            "updated_at": None,
+            "accessed_at": None,
+            "access_count": 1,
+            "deleted_at": None,
+            "is_deleted": 0,
+            "parent_id": None,
+            "relationship": None,
+            "archived_at": None,
+            "stage": None,
+            "doc_type": doc_type,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -150,7 +152,7 @@ class TestDataLoaderDocTypeFilter:
     async def test_doc_type_defaults_to_user(self) -> None:
         """Documents without doc_type field default to 'user'."""
         docs = [make_doc_row(id=1, title="Old doc")]
-        docs[0]["doc_type"] = None  # Simulate missing doc_type
+        docs[0].doc_type = None  # Simulate missing doc_type  # type: ignore[assignment]
         with (
             patch(f"{_DATA_LOADER_BASE}.doc_svc") as mock_svc,
             patch(f"{_DATA_LOADER_BASE}.HAS_DOCS", True),

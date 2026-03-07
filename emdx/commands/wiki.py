@@ -184,9 +184,9 @@ def wiki_view(
             json.dumps(
                 {
                     "topic_id": topic_id,
-                    "doc_id": doc["id"],
-                    "title": doc["title"],
-                    "content": doc["content"],
+                    "doc_id": doc.id,
+                    "title": doc.title,
+                    "content": doc.content,
                 },
                 indent=2,
             )
@@ -194,16 +194,15 @@ def wiki_view(
         return
 
     if raw:
-        print(doc["content"])
+        print(doc.content)
         return
 
     from rich.markdown import Markdown
 
     console.print(
-        f"\n[bold cyan]Wiki: {doc['title']}[/bold cyan]"
-        f" [dim](topic {topic_id}, doc #{doc['id']})[/dim]\n"
+        f"\n[bold cyan]Wiki: {doc.title}[/bold cyan] [dim](topic {topic_id}, doc #{doc.id})[/dim]\n"
     )
-    console.print(Markdown(doc["content"]))
+    console.print(Markdown(doc.content))
 
 
 @wiki_app.command(name="search")

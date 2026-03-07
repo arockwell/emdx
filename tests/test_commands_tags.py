@@ -10,6 +10,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from emdx.commands.tags import app
+from emdx.models.document import Document
 
 runner = CliRunner()
 
@@ -30,7 +31,7 @@ class TestTagAddCommand:
     @patch("emdx.commands.tags.get_document")
     def test_add_tags_explicit(self, mock_get_doc, mock_add_tags, mock_get_tags):
         """Add tags via explicit 'add' subcommand."""
-        mock_get_doc.return_value = {"id": 1, "title": "Doc"}
+        mock_get_doc.return_value = Document.from_row({"id": 1, "title": "Doc"})
         mock_add_tags.return_value = ["python", "testing"]
         mock_get_tags.return_value = ["python", "testing"]
 
@@ -73,7 +74,7 @@ class TestTagAddCommand:
     @patch("emdx.commands.tags.get_document")
     def test_tag_show_current(self, mock_get_doc, mock_get_tags):
         """Tag with no tag arguments shows current tags."""
-        mock_get_doc.return_value = {"id": 1, "title": "Doc"}
+        mock_get_doc.return_value = Document.from_row({"id": 1, "title": "Doc"})
         mock_get_tags.return_value = ["python"]
 
         result = runner.invoke(app, ["add", "1"])
@@ -95,7 +96,7 @@ class TestTagAddCommand:
     @patch("emdx.commands.tags.get_document")
     def test_tag_already_exists(self, mock_get_doc, mock_add_tags, mock_get_tags):
         """Adding a tag that already exists shows message."""
-        mock_get_doc.return_value = {"id": 1, "title": "Doc"}
+        mock_get_doc.return_value = Document.from_row({"id": 1, "title": "Doc"})
         mock_add_tags.return_value = []  # no new tags added
         mock_get_tags.return_value = ["python"]
 
@@ -115,7 +116,7 @@ class TestTagRemoveCommand:
     @patch("emdx.commands.tags.get_document")
     def test_remove(self, mock_get_doc, mock_remove_tags, mock_get_tags):
         """Remove tags from a document."""
-        mock_get_doc.return_value = {"id": 1, "title": "Doc"}
+        mock_get_doc.return_value = Document.from_row({"id": 1, "title": "Doc"})
         mock_remove_tags.return_value = ["python"]
         mock_get_tags.return_value = []
 
@@ -128,7 +129,7 @@ class TestTagRemoveCommand:
     @patch("emdx.commands.tags.get_document")
     def test_remove_not_on_doc(self, mock_get_doc, mock_remove_tags, mock_get_tags):
         """Removing a tag that doesn't exist shows message."""
-        mock_get_doc.return_value = {"id": 1, "title": "Doc"}
+        mock_get_doc.return_value = Document.from_row({"id": 1, "title": "Doc"})
         mock_remove_tags.return_value = []
         mock_get_tags.return_value = []
 

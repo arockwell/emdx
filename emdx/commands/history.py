@@ -65,7 +65,7 @@ def history(
             json.dumps(
                 {
                     "doc_id": doc_id,
-                    "title": doc["title"],
+                    "title": doc.title,
                     "versions": versions,
                 },
                 indent=2,
@@ -73,7 +73,7 @@ def history(
         )
         return
 
-    table = Table(title=f"Version history for #{doc_id}: {doc['title']}")
+    table = Table(title=f"Version history for #{doc_id}: {doc.title}")
     table.add_column("Ver", justify="right", style="cyan")
     table.add_column("Date", style="dim")
     table.add_column("Delta", justify="right")
@@ -167,7 +167,7 @@ def diff(
 
     old_version: int = row[0]
     old_content: str = row[2]
-    current_content: str = doc["content"]
+    current_content: str = doc.content
 
     old_lines = old_content.splitlines(keepends=True)
     new_lines = current_content.splitlines(keepends=True)

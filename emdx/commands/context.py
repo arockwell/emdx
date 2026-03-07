@@ -124,9 +124,9 @@ def traverse_graph(
             continue
         scored = ScoredDocument(
             doc_id=sid,
-            title=doc["title"],
-            content=doc["content"],
-            tokens=estimate_tokens(doc["content"]),
+            title=doc.title,
+            content=doc.content,
+            tokens=estimate_tokens(doc.content),
             hops=0,
             score=1.0,
             path=[sid],
@@ -161,9 +161,9 @@ def traverse_graph(
                     reason = f"{depth}-hop {method} from #{source_id}"
                     visited[target_id] = ScoredDocument(
                         doc_id=target_id,
-                        title=doc["title"],
-                        content=doc["content"],
-                        tokens=estimate_tokens(doc["content"]),
+                        title=doc.title,
+                        content=doc.content,
+                        tokens=estimate_tokens(doc.content),
                         hops=depth,
                         score=hop_score,
                         path=source.path + [target_id],

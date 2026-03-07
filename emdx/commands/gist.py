@@ -203,14 +203,14 @@ def create(
         raise typer.Exit(1)
 
     # Prepare gist content
-    filename = sanitize_filename(doc["title"])
-    content = doc["content"]
+    filename = sanitize_filename(doc.title)
+    content = doc.content
 
     # Use document title and metadata in description if not provided
     if not description:
-        description = f"{doc['title']} - emdx knowledge base"
-        if doc.get("project"):
-            description += f" (Project: {doc['project']})"
+        description = f"{doc.title} - emdx knowledge base"
+        if doc.project:
+            description += f" (Project: {doc.project})"
 
     # Create or update gist
     if update:
@@ -229,7 +229,7 @@ def create(
                     SET updated_at = CURRENT_TIMESTAMP
                     WHERE gist_id = ? AND document_id = ?
                 """,
-                    (update, doc["id"]),
+                    (update, doc.id),
                 )
                 conn.commit()
         else:
@@ -253,7 +253,7 @@ def create(
                     INSERT INTO gists (document_id, gist_id, gist_url, is_public)
                     VALUES (?, ?, ?, ?)
                 """,
-                    (doc["id"], gist_id, gist_url, public),
+                    (doc.id, gist_id, gist_url, public),
                 )
                 conn.commit()
 
