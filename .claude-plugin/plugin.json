@@ -1,6 +1,6 @@
 {
   "name": "emdx",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "description": "Knowledge base skills for Claude Code. Save research, maintain session memory, and keep knowledge current across conversations.",
   "author": {
     "name": "Alex Rockwell"

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-03-07
+
+**Data model refactor: proper domain objects replace the TypedDict cast zoo.** Document, Task, TaskLogEntry, SearchHit, and Category are now `@dataclass(slots=True)` with factory methods (`from_row()`) that parse datetimes at the DB boundary and `to_dict()` for JSON serialization. The dict-compatibility layer (`__getitem__`, `.get()`) was added then fully removed in one release cycle — all ~220 bracket access sites converted to attribute access. SQLiteDatabase's isolated mode (300 lines of drifted duplicate SQL) was deleted; tests now use the conftest fixture that swaps the connection singleton.
+
+### 🚀 Major Features
+
+#### Document & Task Dataclasses (#1006, #1007, #1008)
+- **Document dataclass** — single `@dataclass(slots=True)` replaces 7 scattered TypedDicts (`DocumentDict`, `DocumentViewDict`, `SearchResult`, etc.)
+- **Task dataclass** — replaces `TaskDict`, `EpicTaskDict`, `EpicViewDict`, `TaskLogEntryDict` with proper `Task` and `TaskLogEntry` dataclasses
+- **Category dataclass** — replaces `CategoryDict` and `CategoryWithStatsDict`
+- Factory methods (`from_row()`, `from_partial_row()`) handle datetime parsing at the DB boundary
+- `to_dict()` with datetime→ISO conversion for JSON serialization
+
+#### Dict-Compat Purge & Attribute Access (#1009)
+- Removed `__getitem__`, `.get()`, `keys()`, `items()`, `values()`, `__contains__` from all domain dataclasses
+- Converted ~220 bracket access sites to attribute access across 26 files
+- Migrated 100+ test mocks from raw dicts to `Task.from_row()` / `SearchHit.from_row()`
+
+### 🔧 Improvements
+
+#### SQLiteDatabase Simplification (#1010)
+- Deleted ~300 lines of isolated-mode SQL that had drifted from canonical implementations (missing filters, FK cleanup, version snapshotting)
+- `SQLiteDatabase` reduced from 427 to 160 lines — pure delegation wrapper
+- Dynamic `_conn()` lookup preserves test fixture compatibility
+
+### 🐛 Bug Fixes
+
+- **TUI done counts** — accurate done task counts in status bar and folds (#1004)
+
 ## [0.31.0] - 2026-03-06
 
 **Task TUI overhaul: smarter sorting, toggle filters, and live refresh.** Epics sort by most recent child activity instead of alphabetically. Status filters flip from exclusive ("show only done") to additive toggles ("hide done"). A context-sensitive footer replaces the cramped help bar, showing only relevant keybindings for the current selection. The task view now auto-refreshes every second with fingerprint-based change detection to avoid scroll bounce.
@@ -29,6 +58,7 @@ Task view polls every 1 second matching the document browser's pattern. A finger
 
 - **datetime crash** — SQLite `datetime` objects in timestamp fields no longer crash the string inversion sort or silently suppress recency hints in `_format_time_ago`
 
+[0.32.0]: https://github.com/arockwell/emdx/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/arockwell/emdx/compare/v0.30.0...v0.31.0
 
 ## [0.30.0] - 2026-03-06
