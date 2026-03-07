@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from emdx.commands.core import InputContent, app, generate_title, get_input_content
 from emdx.models.document import Document
+from emdx.models.search import SearchHit
 
 runner = CliRunner()
 
@@ -190,13 +191,15 @@ class TestFindCommand:
     def test_find_basic(self, mock_search, mock_get_tags):
         """Basic search returns results."""
         mock_search.return_value = [
-            {
-                "id": 1,
-                "title": "Found Doc",
-                "project": "proj",
-                "created_at": datetime(2024, 1, 1),
-                "access_count": 3,
-            }
+            SearchHit.from_row(
+                {
+                    "id": 1,
+                    "title": "Found Doc",
+                    "project": "proj",
+                    "created_at": datetime(2024, 1, 1),
+                    "access_count": 3,
+                }
+            )
         ]
         mock_get_tags.return_value = {1: ["python"]}
 
@@ -226,13 +229,15 @@ class TestFindCommand:
     def test_find_ids_only(self, mock_search, mock_get_tags):
         """--ids-only outputs just IDs."""
         mock_search.return_value = [
-            {
-                "id": 42,
-                "title": "Doc",
-                "project": None,
-                "created_at": datetime(2024, 1, 1),
-                "access_count": 0,
-            }
+            SearchHit.from_row(
+                {
+                    "id": 42,
+                    "title": "Doc",
+                    "project": None,
+                    "created_at": datetime(2024, 1, 1),
+                    "access_count": 0,
+                }
+            )
         ]
         mock_get_tags.return_value = {}
 
@@ -246,14 +251,16 @@ class TestFindCommand:
     def test_find_json_output(self, mock_search, mock_get_tags):
         """--json outputs JSON array."""
         mock_search.return_value = [
-            {
-                "id": 1,
-                "title": "JSON Doc",
-                "project": "p",
-                "created_at": datetime(2024, 1, 1),
-                "updated_at": datetime(2024, 1, 2),
-                "access_count": 0,
-            }
+            SearchHit.from_row(
+                {
+                    "id": 1,
+                    "title": "JSON Doc",
+                    "project": "p",
+                    "created_at": datetime(2024, 1, 1),
+                    "updated_at": datetime(2024, 1, 2),
+                    "access_count": 0,
+                }
+            )
         ]
         mock_get_tags.return_value = {1: []}
 

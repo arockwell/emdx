@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 
 from emdx.main import app
 from emdx.models.document import Document
+from emdx.models.search import SearchHit
 
 runner = CliRunner()
 
@@ -126,27 +127,33 @@ class TestFindNoTagsFilter:
         """--no-tags should remove docs that have any of the excluded tags."""
         # Simulate 3 search results with all required fields
         mock_search.return_value = [
-            {
-                "id": 1,
-                "title": "Keep me",
-                "project": "p",
-                "content": "c",
-                "created_at": "2026-01-15",
-            },
-            {
-                "id": 2,
-                "title": "Exclude me",
-                "project": "p",
-                "content": "c",
-                "created_at": "2026-01-15",
-            },
-            {
-                "id": 3,
-                "title": "Also keep",
-                "project": "p",
-                "content": "c",
-                "created_at": "2026-01-15",
-            },
+            SearchHit.from_row(
+                {
+                    "id": 1,
+                    "title": "Keep me",
+                    "project": "p",
+                    "content": "c",
+                    "created_at": "2026-01-15",
+                }
+            ),
+            SearchHit.from_row(
+                {
+                    "id": 2,
+                    "title": "Exclude me",
+                    "project": "p",
+                    "content": "c",
+                    "created_at": "2026-01-15",
+                }
+            ),
+            SearchHit.from_row(
+                {
+                    "id": 3,
+                    "title": "Also keep",
+                    "project": "p",
+                    "content": "c",
+                    "created_at": "2026-01-15",
+                }
+            ),
         ]
         # Doc 2 has the excluded tag "draft"
         mock_tags_map.return_value = {
@@ -177,27 +184,33 @@ class TestFindNoTagsFilter:
     ) -> None:
         """--no-tags with comma-separated tags excludes docs with ANY of them."""
         mock_search.return_value = [
-            {
-                "id": 1,
-                "title": "Keep me",
-                "project": "p",
-                "content": "c",
-                "created_at": "2026-01-15",
-            },
-            {
-                "id": 2,
-                "title": "Has draft",
-                "project": "p",
-                "content": "c",
-                "created_at": "2026-01-15",
-            },
-            {
-                "id": 3,
-                "title": "Has wip",
-                "project": "p",
-                "content": "c",
-                "created_at": "2026-01-15",
-            },
+            SearchHit.from_row(
+                {
+                    "id": 1,
+                    "title": "Keep me",
+                    "project": "p",
+                    "content": "c",
+                    "created_at": "2026-01-15",
+                }
+            ),
+            SearchHit.from_row(
+                {
+                    "id": 2,
+                    "title": "Has draft",
+                    "project": "p",
+                    "content": "c",
+                    "created_at": "2026-01-15",
+                }
+            ),
+            SearchHit.from_row(
+                {
+                    "id": 3,
+                    "title": "Has wip",
+                    "project": "p",
+                    "content": "c",
+                    "created_at": "2026-01-15",
+                }
+            ),
         ]
         mock_tags_map.return_value = {
             1: ["notes"],

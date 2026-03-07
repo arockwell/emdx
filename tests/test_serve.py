@@ -9,6 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from emdx.commands.serve import _handle_request, _serialize
+from emdx.models.document import Document
+from emdx.models.search import SearchHit
+from emdx.models.task import Task
 
 
 # ---------------------------------------------------------------------------
@@ -50,8 +53,8 @@ class TestHandleRequest:
     def test_find_recent(self, mock_recent: Any) -> None:
         """find.recent returns recent documents."""
         mock_recent.return_value = [
-            {"id": 1, "title": "Doc 1", "created_at": "2026-01-15"},
-            {"id": 2, "title": "Doc 2", "created_at": "2026-01-14"},
+            Document.from_row({"id": 1, "title": "Doc 1", "created_at": "2026-01-15"}),
+            Document.from_row({"id": 2, "title": "Doc 2", "created_at": "2026-01-14"}),
         ]
 
         request: dict[str, Any] = {
@@ -68,7 +71,7 @@ class TestHandleRequest:
     def test_find_search(self, mock_search: Any) -> None:
         """find.search returns search results."""
         mock_search.return_value = [
-            {"id": 1, "title": "Found Doc"},
+            SearchHit.from_row({"id": 1, "title": "Found Doc"}),
         ]
 
         request: dict[str, Any] = {
@@ -102,12 +105,14 @@ class TestHandleRequest:
     @patch("emdx.commands.serve.get_document")
     def test_view_document(self, mock_get_doc: Any, mock_get_tags: Any, mock_links: Any) -> None:
         """view returns document with tags and links."""
-        mock_get_doc.return_value = {
-            "id": 42,
-            "title": "My Document",
-            "content": "Hello world",
-            "project": "test",
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 42,
+                "title": "My Document",
+                "content": "Hello world",
+                "project": "test",
+            }
+        )
         mock_get_tags.return_value = ["python"]
         mock_links.return_value = []
 
@@ -172,7 +177,7 @@ class TestHandleRequest:
     def test_task_list(self, mock_tasks: Any) -> None:
         """task.list returns tasks."""
         mock_tasks.return_value = [
-            {"id": 1, "title": "Task 1", "status": "open"},
+            Task.from_row({"id": 1, "title": "Task 1", "status": "open"}),
         ]
 
         request: dict[str, Any] = {
@@ -215,7 +220,7 @@ class TestHandleRequest:
     def test_status_method(self, mock_tasks: Any) -> None:
         """status returns current task status."""
         mock_tasks.return_value = [
-            {"id": 1, "title": "Active Task", "status": "active"},
+            Task.from_row({"id": 1, "title": "Active Task", "status": "active"}),
         ]
 
         request: dict[str, Any] = {

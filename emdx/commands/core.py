@@ -910,7 +910,7 @@ def _find_keyword_search(
         effective_query = search_query if search_query else "*"
 
         results = [
-            dict(r)
+            r.to_dict()
             for r in search_documents(
                 effective_query,
                 project=project,
