@@ -2,7 +2,7 @@
 
 import re
 import sqlite3
-from typing import Any, cast
+from typing import Any
 
 from emdx.config.constants import (
     DEFAULT_BROWSE_LIMIT,
@@ -10,13 +10,8 @@ from emdx.config.constants import (
     DEFAULT_TASK_PRIORITY,
 )
 from emdx.database import db
-from emdx.models.types import (
-    EpicTaskDict,
-    EpicViewDict,
-    TaskDict,
-    TaskLogEntryDict,
-    TaskRef,
-)
+from emdx.models.task import Task, TaskLogEntry
+from emdx.models.types import TaskRef
 
 # Valid status values
 STATUSES = ("open", "active", "blocked", "done", "failed", "wontdo", "duplicate")
@@ -165,12 +160,12 @@ def delete_epic(epic_id: int, force: bool = False) -> dict[str, int]:
     return {"children_unlinked": children_unlinked}
 
 
-def get_task(task_id: int) -> TaskDict | None:
+def get_task(task_id: int) -> Task | None:
     """Get task by ID."""
     with db.get_connection() as conn:
         cursor = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
         row = cursor.fetchone()
-        return cast(TaskDict, dict(row)) if row else None
+        return Task.from_row(row) if row else None
 
 
 _PREFIXED_ID_RE = re.compile(r"^([A-Za-z]+)-(\d+)$")
@@ -231,7 +226,7 @@ def list_tasks(
     epic_key: str | None = None,
     parent_task_id: int | None = None,
     since: str | None = None,
-) -> list[TaskDict]:
+) -> list[Task]:
     """List tasks with filters.
 
     Args:
@@ -286,7 +281,7 @@ def list_tasks(
         """,
             params,
         )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
+        return [Task.from_row(row) for row in cursor.fetchall()]
 
 
 # Allowed columns for task updates (prevents SQL injection via column names)
@@ -363,7 +358,7 @@ def delete_task(task_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-def get_dependencies(task_id: int) -> list[TaskDict]:
+def get_dependencies(task_id: int) -> list[Task]:
     """Get tasks this task depends on."""
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -374,10 +369,10 @@ def get_dependencies(task_id: int) -> list[TaskDict]:
         """,
             (task_id,),
         )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
+        return [Task.from_row(row) for row in cursor.fetchall()]
 
 
-def get_dependents(task_id: int) -> list[TaskDict]:
+def get_dependents(task_id: int) -> list[Task]:
     """Get tasks that depend on this task (tasks this one blocks)."""
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -388,13 +383,13 @@ def get_dependents(task_id: int) -> list[TaskDict]:
         """,
             (task_id,),
         )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
+        return [Task.from_row(row) for row in cursor.fetchall()]
 
 
 def get_ready_tasks(
     gameplan_id: int | None = None,
     epic_key: str | None = None,
-) -> list[TaskDict]:
+) -> list[Task]:
     """Get tasks ready to work (open + all deps done).
 
     Args:
@@ -425,7 +420,7 @@ def get_ready_tasks(
         """,
             params,
         )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
+        return [Task.from_row(row) for row in cursor.fetchall()]
 
 
 def add_dependency(task_id: int, depends_on: int) -> bool:
@@ -491,7 +486,7 @@ def log_progress(task_id: int, message: str) -> int:
         return cursor.lastrowid
 
 
-def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLogEntryDict]:
+def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLogEntry]:
     """Get task log entries."""
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -501,10 +496,10 @@ def get_task_log(task_id: int, limit: int = DEFAULT_RECENT_LIMIT) -> list[TaskLo
         """,
             (task_id, limit),
         )
-        return [cast(TaskLogEntryDict, dict(row)) for row in cursor.fetchall()]
+        return [TaskLogEntry.from_row(row) for row in cursor.fetchall()]
 
 
-def get_children(parent_task_id: int) -> list[TaskDict]:
+def get_children(parent_task_id: int) -> list[Task]:
     """Get child tasks ordered by id."""
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -515,13 +510,13 @@ def get_children(parent_task_id: int) -> list[TaskDict]:
         """,
             (parent_task_id,),
         )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
+        return [Task.from_row(row) for row in cursor.fetchall()]
 
 
 def list_epics(
     category_key: str | None = None,
     status: list[str] | None = None,
-) -> list[EpicTaskDict]:
+) -> list[Task]:
     """List epic tasks with child counts."""
     conditions = ["t.type = 'epic'"]
     params = []
@@ -550,10 +545,10 @@ def list_epics(
         """,
             params,
         )
-        return [cast(EpicTaskDict, dict(row)) for row in cursor.fetchall()]
+        return [Task.from_row(row) for row in cursor.fetchall()]
 
 
-def get_epic_view(epic_id: int) -> EpicViewDict | None:
+def get_epic_view(epic_id: int) -> Task | None:
     """Get epic task + its children."""
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -574,9 +569,9 @@ def get_epic_view(epic_id: int) -> EpicViewDict | None:
         """,
             (epic_id,),
         )
-        raw["children"] = [cast(TaskDict, dict(row)) for row in child_cursor.fetchall()]
+        raw["children"] = [dict(row) for row in child_cursor.fetchall()]
 
-        return cast(EpicViewDict, raw)
+        return Task.from_row(raw)
 
 
 def attach_to_epic(task_ids: list[int], epic_id: int) -> int:
@@ -634,7 +629,7 @@ def attach_to_epic(task_ids: list[int], epic_id: int) -> int:
         return attached
 
 
-def get_tasks_in_window(hours: int) -> list[TaskDict]:
+def get_tasks_in_window(hours: int) -> list[Task]:
     """Get tasks updated within a time window.
 
     Args:
@@ -652,4 +647,4 @@ def get_tasks_in_window(hours: int) -> list[TaskDict]:
             """,
             (f"-{hours}",),
         )
-        return [cast(TaskDict, dict(row)) for row in cursor.fetchall()]
+        return [Task.from_row(row) for row in cursor.fetchall()]

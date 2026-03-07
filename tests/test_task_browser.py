@@ -10,7 +10,7 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Input, RichLog, Static
 
-from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
+from emdx.models.task import Task, TaskLogEntry
 from emdx.ui.link_helpers import extract_urls as _extract_urls
 from emdx.ui.link_helpers import linkify_text as _linkify_text
 from emdx.ui.task_view import TaskView, _format_time_ago, _task_label
@@ -34,26 +34,27 @@ def make_task(
     type: str = "manual",
     epic_seq: int | None = None,
     **kwargs: object,
-) -> TaskDict:
-    base: TaskDict = {
-        "id": id,
-        "title": title,
-        "status": status,
-        "priority": priority,
-        "description": description,
-        "epic_key": epic_key,
-        "created_at": created_at,
-        "updated_at": updated_at,
-        "completed_at": completed_at,
-        "gameplan_id": None,
-        "project": None,
-        "current_step": None,
-        "type": type,
-        "source_doc_id": None,
-        "parent_task_id": parent_task_id,
-        "epic_seq": epic_seq,
-    }
-    return base
+) -> Task:
+    return Task.from_row(
+        {
+            "id": id,
+            "title": title,
+            "status": status,
+            "priority": priority,
+            "description": description,
+            "epic_key": epic_key,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "completed_at": completed_at,
+            "gameplan_id": None,
+            "project": None,
+            "current_step": None,
+            "type": type,
+            "source_doc_id": None,
+            "parent_task_id": parent_task_id,
+            "epic_seq": epic_seq,
+        }
+    )
 
 
 def make_epic(
@@ -65,22 +66,30 @@ def make_epic(
     children_open: int = 3,
     epic_seq: int = 1,
     **kwargs: object,
-) -> EpicTaskDict:
-    base = make_task(
-        id=id,
-        title=f"Epic: {epic_key}",
-        status=status,
-        epic_key=epic_key,
-        type="epic",
-        epic_seq=epic_seq,
+) -> Task:
+    return Task.from_row(
+        {
+            "id": id,
+            "title": f"Epic: {epic_key}",
+            "status": status,
+            "epic_key": epic_key,
+            "type": "epic",
+            "epic_seq": epic_seq,
+            "priority": 5,
+            "description": None,
+            "created_at": "2025-01-01T12:00:00",
+            "updated_at": None,
+            "completed_at": None,
+            "gameplan_id": None,
+            "project": None,
+            "current_step": None,
+            "source_doc_id": None,
+            "parent_task_id": None,
+            "child_count": child_count,
+            "children_done": children_done,
+            "children_open": children_open,
+        }
     )
-    epic: EpicTaskDict = {
-        **base,  # type: ignore[typeddict-item]
-        "child_count": child_count,
-        "children_done": children_done,
-        "children_open": children_open,
-    }
-    return epic
 
 
 def make_log_entry(
@@ -88,13 +97,15 @@ def make_log_entry(
     task_id: int = 1,
     message: str = "Did something",
     created_at: str | None = "2025-01-01T12:00:00",
-) -> TaskLogEntryDict:
-    return {
-        "id": id,
-        "task_id": task_id,
-        "message": message,
-        "created_at": created_at,
-    }
+) -> TaskLogEntry:
+    return TaskLogEntry.from_row(
+        {
+            "id": id,
+            "task_id": task_id,
+            "message": message,
+            "created_at": created_at,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +181,8 @@ def _make_list_tasks_side_effect(
     def _side_effect(
         status: list[str] | None = None,
         **kwargs: object,
-    ) -> list[TaskDict]:
-        all_tasks: list[TaskDict] = mock.return_value
+    ) -> list[Task]:
+        all_tasks: list[Task] = mock.return_value
         if status is not None:
             return [t for t in all_tasks if t["status"] in status]
         return list(all_tasks)
@@ -1804,8 +1815,9 @@ class TestCrossGroupEpicClustering:
         self, mock_task_data: MockDict
     ) -> None:
         """Children whose epic IS in the same status group cluster normally."""
-        epic_task = make_task(id=100, title="Auth Epic", status="open", epic_key="AUTH")
-        epic_task["type"] = "epic"
+        epic_task = make_task(
+            id=100, title="Auth Epic", status="open", epic_key="AUTH", type="epic"
+        )
         mock_task_data["list_tasks"].return_value = [
             epic_task,
             make_task(id=1, title="Child A", status="open", epic_key="AUTH", parent_task_id=100),

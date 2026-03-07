@@ -12,43 +12,6 @@ TaskStatus = Literal["open", "active", "blocked", "done", "failed", "wontdo", "d
 TaskRef: TypeAlias = str
 
 
-class TaskDict(TypedDict):
-    id: int
-    title: str
-    description: str | None
-    status: str
-    priority: int
-    gameplan_id: int | None
-    project: str | None
-    current_step: str | None
-    created_at: str | None
-    updated_at: str | None
-    completed_at: str | None
-    type: str
-    source_doc_id: int | None
-    output_doc_id: int | None
-    parent_task_id: int | None
-    epic_key: str | None
-    epic_seq: int | None
-
-
-class EpicTaskDict(TaskDict):
-    child_count: int
-    children_open: int
-    children_done: int
-
-
-class EpicViewDict(TaskDict):
-    children: list[TaskDict]
-
-
-class TaskLogEntryDict(TypedDict):
-    id: int
-    task_id: int
-    message: str
-    created_at: str | None
-
-
 class CategoryDict(TypedDict):
     key: str
     name: str

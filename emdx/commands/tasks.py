@@ -13,7 +13,8 @@ from rich.text import Text
 from emdx.commands.categories import app as categories_app
 from emdx.commands.epics import app as epics_app
 from emdx.models import tasks
-from emdx.models.types import TaskDict, TaskRef
+from emdx.models.task import Task
+from emdx.models.types import TaskRef
 from emdx.utils.lazy_group import make_alias_group
 from emdx.utils.output import console, is_non_interactive, print_json
 
@@ -58,7 +59,7 @@ def _blocker_summary(task_id: int) -> str:
     return f"{names}{extra}"
 
 
-def _display_id(task: TaskDict) -> str:
+def _display_id(task: Task) -> str:
     """Return KEY-N display ID if available, otherwise #id."""
     if task.get("epic_key") and task.get("epic_seq"):
         return f"{task['epic_key']}-{task['epic_seq']}"
@@ -229,7 +230,7 @@ def ready(
     ready_tasks = tasks.get_ready_tasks()
 
     if json_output:
-        print_json(ready_tasks)
+        print_json([t.to_dict() if hasattr(t, "to_dict") else t for t in ready_tasks])
         return
 
     if not ready_tasks:
@@ -596,7 +597,7 @@ def brief(
 
 
 def _assemble_brief(
-    task: TaskDict,
+    task: Task,
     task_id: int,
     log_limit: int,
 ) -> dict[str, object]:
@@ -681,11 +682,7 @@ def _assemble_brief(
             }
         )
 
-    output_id: int | None = None
-    try:
-        output_id = dict(task).get("output_doc_id")  # type: ignore[assignment]
-    except Exception:
-        pass
+    output_id: int | None = task.get("output_doc_id")
     if output_id:
         output_doc = get_document(output_id)
         related_docs.append(
@@ -898,7 +895,7 @@ def list_cmd(
     )
 
     if json_output:
-        print_json(task_list)
+        print_json([t.to_dict() if hasattr(t, "to_dict") else t for t in task_list])
         return
 
     if not task_list:
@@ -922,7 +919,7 @@ def list_cmd(
     console.print(table)
 
 
-def _task_label(task: TaskDict) -> str:
+def _task_label(task: Task) -> str:
     """Format task label: DEBT-13 if epic, else #id."""
     epic_key = task.get("epic_key")
     epic_seq = task.get("epic_seq")
@@ -931,9 +928,9 @@ def _task_label(task: TaskDict) -> str:
     return f"#{task['id']}"
 
 
-def _display_title(task: TaskDict) -> str:
+def _display_title(task: Task) -> str:
     """Strip redundant KEY-N: prefix from title since the ID column has it."""
-    title = task["title"]
+    title: str = task["title"]
     epic_key = task.get("epic_key")
     epic_seq = task.get("epic_seq")
     if epic_key and epic_seq:
@@ -1112,7 +1109,7 @@ def dep_list(
 
     if json_output:
 
-        def _dep_summary(d: TaskDict) -> dict[str, str | int]:
+        def _dep_summary(d: Task) -> dict[str, str | int]:
             return {
                 "id": d["id"],
                 "display_id": _display_id(d),
@@ -1176,7 +1173,7 @@ def chain(
 
     if json_output:
 
-        def _task_summary(t: TaskDict) -> dict[str, str | int]:
+        def _task_summary(t: Task) -> dict[str, str | int]:
             return {
                 "id": t["id"],
                 "display_id": _display_id(t),
@@ -1214,11 +1211,11 @@ def chain(
         console.print("\n[yellow]No dependencies in either direction[/yellow]")
 
 
-def _walk_deps(task_id: int, direction: str) -> list[TaskDict]:
+def _walk_deps(task_id: int, direction: str) -> list[Task]:
     """BFS walk of dependency graph. Returns tasks in traversal order."""
     visited: set[int] = set()
     queue = [task_id]
-    result: list[TaskDict] = []
+    result: list[Task] = []
 
     while queue:
         current = queue.pop(0)
