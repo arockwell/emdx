@@ -65,7 +65,7 @@ class TestWikiRenameCommand:
             _cleanup_topic(conn, 70)
 
     def test_rename_updates_label_and_slug(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "70", "New Name"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "70", "New Name"])
         assert result.exit_code == 0
         assert "Old Name" in result.output
         assert "New Name" in result.output
@@ -80,7 +80,7 @@ class TestWikiRenameCommand:
             assert row[1] == "new-name"
 
     def test_rename_auto_generates_slug(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "70", "Database Architecture"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "70", "Database Architecture"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:
@@ -88,7 +88,7 @@ class TestWikiRenameCommand:
             assert row[0] == "database-architecture"
 
     def test_rename_slug_strips_special_chars(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "70", "Auth / OAuth / JWT"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "70", "Auth / OAuth / JWT"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:
@@ -96,12 +96,12 @@ class TestWikiRenameCommand:
             assert row[0] == "auth-oauth-jwt"
 
     def test_rename_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "999", "Anything"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "999", "Anything"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
     def test_rename_shows_old_and_new(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "70", "Brand New"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "70", "Brand New"])
         assert result.exit_code == 0
         assert "Old Name" in result.output
         assert "Brand New" in result.output
@@ -126,7 +126,7 @@ class TestWikiRenameWithArticle:
             _cleanup_topic(conn, 71)
 
     def test_rename_updates_document_title(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "71", "New Article Title"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "71", "New Article Title"])
         assert result.exit_code == 0
         assert "Document #171 title updated" in result.output
 
@@ -145,7 +145,7 @@ class TestWikiRenameWithArticle:
                 with_article=False,
             )
         try:
-            result = runner.invoke(app, ["maintain", "wiki", "rename", "72", "Still No Article"])
+            result = runner.invoke(app, ["labs", "wiki", "rename", "72", "Still No Article"])
             assert result.exit_code == 0
             assert "Document #" not in result.output
 
@@ -172,13 +172,13 @@ class TestWikiRenameSlugConflict:
 
     def test_rename_rejects_conflicting_slug(self) -> None:
         # Try to rename topic 73 to a label that would produce slug "topic-b"
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "73", "Topic B"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "73", "Topic B"])
         assert result.exit_code == 1
         assert "already in use" in result.output
 
     def test_rename_allows_same_slug_on_same_topic(self) -> None:
         # Renaming topic 73 to a different label that produces the same slug should work
-        result = runner.invoke(app, ["maintain", "wiki", "rename", "73", "TOPIC A!"])
+        result = runner.invoke(app, ["labs", "wiki", "rename", "73", "TOPIC A!"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:

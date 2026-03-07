@@ -219,7 +219,7 @@ class TestRetitleCommand:
             _cleanup_topics(conn, [90, 91, 92])
 
     def test_dry_run_shows_changes(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "retitle", "--dry-run"])
+        result = runner.invoke(app, ["labs", "wiki", "retitle", "--dry-run"])
         assert result.exit_code == 0
         assert "old-label-a" in result.output
         assert "Better Title A" in result.output
@@ -231,7 +231,7 @@ class TestRetitleCommand:
             assert row[0] == "old-label-a"
 
     def test_updates_labels(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "retitle"])
+        result = runner.invoke(app, ["labs", "wiki", "retitle"])
         assert result.exit_code == 0
         assert "Retitled 2/" in result.output
 
@@ -253,7 +253,7 @@ class TestRetitleCommand:
             assert doc_a[0] == "Better Title A"
 
     def test_skips_matching(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "retitle"])
+        result = runner.invoke(app, ["labs", "wiki", "retitle"])
         assert result.exit_code == 0
         assert "1 already matching" in result.output
 

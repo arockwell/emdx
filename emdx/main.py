@@ -23,6 +23,7 @@ LAZY_SUBCOMMANDS = {
     "distill": "emdx.commands.distill:app",
     "compact": "emdx.commands.compact:app",
     "maintain": "emdx.commands.maintain:app",
+    "labs": "emdx.commands.labs:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -31,6 +32,7 @@ LAZY_HELP = {
     "distill": "Distill KB content into audience-aware summaries",
     "compact": "Reduce KB redundancy through AI synthesis",
     "maintain": "Maintenance and analysis tools",
+    "labs": "Experimental commands (may change or be removed)",
 }
 
 

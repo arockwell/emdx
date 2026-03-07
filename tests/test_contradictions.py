@@ -334,7 +334,7 @@ class TestContradictionsCommand:
             instance = MockSvc.return_value
             instance._check_embeddings_exist.return_value = False
 
-            result = runner.invoke(app, ["maintain", "contradictions"])
+            result = runner.invoke(app, ["labs", "maintain", "contradictions"])
             assert result.exit_code == 1
             assert "maintain index" in result.output
 
@@ -345,7 +345,7 @@ class TestContradictionsCommand:
             instance = MockSvc.return_value
             instance._check_embeddings_exist.return_value = False
 
-            result = runner.invoke(app, ["maintain", "contradictions", "--json"])
+            result = runner.invoke(app, ["labs", "maintain", "contradictions", "--json"])
             assert result.exit_code == 1
             assert "No embedding index found" in result.output
 
@@ -358,7 +358,7 @@ class TestContradictionsCommand:
             instance._check_nli_available.return_value = False
             instance.find_contradictions.return_value = []
 
-            result = runner.invoke(app, ["maintain", "contradictions"])
+            result = runner.invoke(app, ["labs", "maintain", "contradictions"])
             assert result.exit_code == 0
             assert "No contradictions" in result.output
 
@@ -386,7 +386,7 @@ class TestContradictionsCommand:
             instance._check_nli_available.return_value = False
             instance.find_contradictions.return_value = [mock_result]
 
-            result = runner.invoke(app, ["maintain", "contradictions"])
+            result = runner.invoke(app, ["labs", "maintain", "contradictions"])
             assert result.exit_code == 0
             # Strip ANSI escape codes for assertion
             plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
@@ -417,7 +417,7 @@ class TestContradictionsCommand:
             instance._check_nli_available.return_value = False
             instance.find_contradictions.return_value = [mock_result]
 
-            result = runner.invoke(app, ["maintain", "contradictions", "--json"])
+            result = runner.invoke(app, ["labs", "maintain", "contradictions", "--json"])
             assert result.exit_code == 0
             # Verify the mock was called correctly
             instance.find_contradictions.assert_called_once()

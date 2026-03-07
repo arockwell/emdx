@@ -53,7 +53,7 @@ class TestEntitiesJsonSingleDoc:
             "## Authentication\n\nThe `auth_handler` manages tokens.\n",
         )
 
-        result = runner.invoke(app, ["maintain", "entities", "--json", "1"])
+        result = runner.invoke(app, ["labs", "maintain", "entities", "--json", "1"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -72,7 +72,7 @@ class TestEntitiesJsonSingleDoc:
             "## Important Concept\n\nUse `some_function` here.\n",
         )
 
-        result = runner.invoke(app, ["maintain", "entities", "--no-wikify", "--json", "1"])
+        result = runner.invoke(app, ["labs", "maintain", "entities", "--no-wikify", "--json", "1"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -98,7 +98,7 @@ class TestEntitiesJsonAllDocs:
             "## Session Management\n\nUses `auth_handler` for auth.\n",
         )
 
-        result = runner.invoke(app, ["maintain", "entities", "--all", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "entities", "--all", "--json"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -116,7 +116,9 @@ class TestEntitiesJsonAllDocs:
             "## Some Heading\n\nContent with `code_term`.\n",
         )
 
-        result = runner.invoke(app, ["maintain", "entities", "--all", "--no-wikify", "--json"])
+        result = runner.invoke(
+            app, ["labs", "maintain", "entities", "--all", "--no-wikify", "--json"]
+        )
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -130,7 +132,7 @@ class TestEntitiesJsonErrors:
 
     def test_json_no_doc_id_no_all(self, clean_entity_db: Any) -> None:
         """Missing doc ID and --all with --json outputs error JSON."""
-        result = runner.invoke(app, ["maintain", "entities", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "entities", "--json"])
 
         data = json.loads(result.output)
         assert "error" in data

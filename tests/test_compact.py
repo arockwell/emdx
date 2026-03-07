@@ -365,7 +365,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--threshold", "0.3"])
+        result = runner.invoke(app, ["labs", "compact", "--dry-run", "--threshold", "0.3"])
 
         # Should succeed
         assert result.exit_code == 0
@@ -390,7 +390,7 @@ class TestCompactCommand:
             conn.commit()
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "99999", "99998"])
+        result = runner.invoke(app, ["labs", "compact", "99999", "99998"])
 
         # Should show error about documents not found
         assert "not found" in result.stdout.lower()
@@ -419,7 +419,7 @@ class TestCompactCommand:
             conn.commit()
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", str(doc_id)])
+        result = runner.invoke(app, ["labs", "compact", str(doc_id)])
 
         # Should show error about needing at least 2 documents
         assert "at least 2" in result.stdout.lower()
@@ -431,7 +431,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "--help"])
+        result = runner.invoke(app, ["labs", "compact", "--help"])
 
         assert result.exit_code == 0
         output = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout).lower()
@@ -446,7 +446,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "--dry-run"])
+        result = runner.invoke(app, ["labs", "compact", "--dry-run"])
 
         assert result.exit_code == 0
         assert "no documents" in result.stdout.lower()
@@ -474,7 +474,7 @@ class TestCompactCommand:
 
         runner = CliRunner()
         # Use high threshold to ensure no clusters
-        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--threshold", "0.95"])
+        result = runner.invoke(app, ["labs", "compact", "--dry-run", "--threshold", "0.95"])
 
         assert result.exit_code == 0
         assert "no clusters" in result.stdout.lower()
@@ -486,7 +486,7 @@ class TestCompactCommand:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--topic", "Python"])
+        result = runner.invoke(app, ["labs", "compact", "--dry-run", "--topic", "Python"])
 
         assert result.exit_code == 0
         # Should filter to only Python documents
@@ -504,7 +504,7 @@ class TestCompactJsonOutput:
         from emdx.main import app
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "--dry-run", "--json"])
+        result = runner.invoke(app, ["labs", "compact", "--dry-run", "--json"])
 
         assert result.exit_code == 0
         data = json.loads(result.stdout)
@@ -520,7 +520,7 @@ class TestCompactJsonOutput:
         runner = CliRunner()
         result = runner.invoke(
             app,
-            ["maintain", "compact", "--dry-run", "--json", "--threshold", "0.3"],
+            ["labs", "compact", "--dry-run", "--json", "--threshold", "0.3"],
         )
 
         assert result.exit_code == 0
@@ -574,7 +574,7 @@ class TestCompactJsonOutput:
         runner = CliRunner()
         result = runner.invoke(
             app,
-            ["maintain", "compact", "--dry-run", "--json", "--threshold", "0.95"],
+            ["labs", "compact", "--dry-run", "--json", "--threshold", "0.95"],
         )
 
         assert result.exit_code == 0
@@ -601,7 +601,7 @@ class TestCompactJsonOutput:
         runner = CliRunner()
         result = runner.invoke(
             app,
-            ["maintain", "compact", "--dry-run", "--json", "--topic", "nonexistent"],
+            ["labs", "compact", "--dry-run", "--json", "--topic", "nonexistent"],
         )
 
         assert result.exit_code == 0
@@ -625,7 +625,7 @@ class TestCompactJsonOutput:
             conn.commit()
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "--json", "99999", "99998"])
+        result = runner.invoke(app, ["labs", "compact", "--json", "99999", "99998"])
 
         data = json.loads(result.stdout)
         assert "error" in data
@@ -656,7 +656,7 @@ class TestCompactJsonOutput:
             conn.commit()
 
         runner = CliRunner()
-        result = runner.invoke(app, ["maintain", "compact", "--json", str(doc_id)])
+        result = runner.invoke(app, ["labs", "compact", "--json", str(doc_id)])
 
         data = json.loads(result.stdout)
         assert "error" in data

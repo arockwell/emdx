@@ -82,7 +82,7 @@ class TestFindWander:
     )
     def test_wander_too_few_documents(self, mock_es_class: Any, capsys: Any) -> None:
         """Should show helpful message when <10 docs have embeddings."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock(stats_indexed=5)
         mock_es_class.return_value = mock_service
@@ -100,7 +100,7 @@ class TestFindWander:
     )
     def test_wander_too_few_documents_json(self, mock_es_class: Any, capsys: Any) -> None:
         """JSON mode should also report the error."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock(stats_indexed=3)
         mock_es_class.return_value = mock_service
@@ -121,7 +121,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any, seed_embedding: Any
     ) -> None:
         """--wander with a query uses the query as embedding seed."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -198,7 +198,7 @@ class TestFindWander:
         seed_embedding: Any,
     ) -> None:
         """--wander without query picks a random recent doc as seed."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -259,7 +259,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any, seed_embedding: Any
     ) -> None:
         """Should show message when no docs in Goldilocks band."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -303,7 +303,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any, seed_embedding: Any
     ) -> None:
         """--wander should respect --limit but cap at 5."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -349,7 +349,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any, seed_embedding: Any
     ) -> None:
         """--wander should cap results at 5 even with higher limit."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -393,7 +393,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any, seed_embedding: Any
     ) -> None:
         """--wander with --project should filter by project."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -429,7 +429,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any, seed_embedding: Any
     ) -> None:
         """Human-readable output includes title, similarity, snippet."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -474,7 +474,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any
     ) -> None:
         """Without query, if no recent docs have embeddings, show error."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
@@ -499,7 +499,7 @@ class TestFindWander:
         self, mock_es_class: Any, mock_db: Any, capsys: Any, seed_embedding: Any
     ) -> None:
         """The seed document itself should be excluded from results."""
-        from emdx.commands.core import _find_wander
+        from emdx.commands.labs_ask import _run_wander as _find_wander
 
         mock_service = _make_service_mock()
         mock_es_class.return_value = mock_service
