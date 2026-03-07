@@ -450,7 +450,7 @@ def _briefing_save(hours: int, model: str | None) -> None:
 
     if docs:
         doc_lines = ["## Documents Created"]
-        doc_lines.extend(f"- #{d['id']}: {d['title']}" for d in docs[:15])
+        doc_lines.extend(f"- #{d.id}: {d.title}" for d in docs[:15])
         sections.append("\n".join(doc_lines))
 
     sections.append(

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from emdx.commands.core import app
+from emdx.models.document import Document
 
 runner = CliRunner()
 
@@ -18,14 +19,16 @@ def _out(result) -> str:  # type: ignore[no-untyped-def]
     return re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
 
 
-_DOC = {
-    "id": 42,
-    "title": "Architecture Plan",
-    "content": "We currently use REST. Today the API handles 1000 rps.",
-    "project": "acme",
-    "created_at": datetime(2024, 6, 1),
-    "access_count": 3,
-}
+_DOC = Document.from_row(
+    {
+        "id": 42,
+        "title": "Architecture Plan",
+        "content": "We currently use REST. Today the API handles 1000 rps.",
+        "project": "acme",
+        "created_at": datetime(2024, 6, 1),
+        "access_count": 3,
+    }
+)
 
 
 class TestViewReviewFlag:

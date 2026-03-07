@@ -10,6 +10,7 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import RichLog, Static
 
+from emdx.models.document import Document
 from emdx.ui.activity.activity_items import DocumentItem
 from emdx.ui.activity.activity_view import ActivityView
 
@@ -143,14 +144,16 @@ class TestStreamingRemoval:
         """Document preview rendering still works after streaming removal."""
         doc_item = make_doc_item(item_id=100, title="My Document")
         mock_activity_deps["loader"].load_all.return_value = [doc_item]
-        mock_activity_deps["doc_db"].get_document.return_value = {
-            "id": 100,
-            "title": "My Document",
-            "content": "# My Document\n\nHello world",
-            "project": "test",
-            "created_at": "2025-01-01T12:00:00",
-            "access_count": 5,
-        }
+        mock_activity_deps["doc_db"].get_document.return_value = Document.from_row(
+            {
+                "id": 100,
+                "title": "My Document",
+                "content": "# My Document\n\nHello world",
+                "project": "test",
+                "created_at": "2025-01-01T12:00:00",
+                "access_count": 5,
+            }
+        )
 
         app = ActivityTestApp()
         async with app.run_test() as pilot:
@@ -164,14 +167,16 @@ class TestStreamingRemoval:
         """Copy mode toggle still works after streaming removal."""
         doc_item = make_doc_item(item_id=100, title="My Document")
         mock_activity_deps["loader"].load_all.return_value = [doc_item]
-        mock_activity_deps["doc_db"].get_document.return_value = {
-            "id": 100,
-            "title": "My Document",
-            "content": "# My Document\n\nHello world",
-            "project": "test",
-            "created_at": "2025-01-01T12:00:00",
-            "access_count": 1,
-        }
+        mock_activity_deps["doc_db"].get_document.return_value = Document.from_row(
+            {
+                "id": 100,
+                "title": "My Document",
+                "content": "# My Document\n\nHello world",
+                "project": "test",
+                "created_at": "2025-01-01T12:00:00",
+                "access_count": 1,
+            }
+        )
 
         app = ActivityTestApp()
         async with app.run_test() as pilot:

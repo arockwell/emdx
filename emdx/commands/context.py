@@ -10,14 +10,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
 
 from ..database import db
 from ..database.document_links import get_links_for_document
-from ..database.types import DocumentLinkDetail, DocumentRow
+from ..database.types import DocumentLinkDetail
+from ..models.document import Document
 
 if TYPE_CHECKING:
     from ..services.hybrid_search import HybridSearchResult
@@ -89,7 +90,7 @@ def compute_link_score(
 # ── Document fetching (no access tracking) ───────────────────────────
 
 
-def _fetch_document(doc_id: int) -> DocumentRow | None:
+def _fetch_document(doc_id: int) -> Document | None:
     """Fetch a document by ID without updating access tracking."""
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -98,7 +99,7 @@ def _fetch_document(doc_id: int) -> DocumentRow | None:
         )
         row = cursor.fetchone()
         if row:
-            return cast(DocumentRow, dict(row))
+            return Document.from_row(row)
         return None
 
 
@@ -123,9 +124,9 @@ def traverse_graph(
             continue
         scored = ScoredDocument(
             doc_id=sid,
-            title=doc["title"],
-            content=doc["content"],
-            tokens=estimate_tokens(doc["content"]),
+            title=doc.title,
+            content=doc.content,
+            tokens=estimate_tokens(doc.content),
             hops=0,
             score=1.0,
             path=[sid],
@@ -160,9 +161,9 @@ def traverse_graph(
                     reason = f"{depth}-hop {method} from #{source_id}"
                     visited[target_id] = ScoredDocument(
                         doc_id=target_id,
-                        title=doc["title"],
-                        content=doc["content"],
-                        tokens=estimate_tokens(doc["content"]),
+                        title=doc.title,
+                        content=doc.content,
+                        tokens=estimate_tokens(doc.content),
                         hops=depth,
                         score=hop_score,
                         path=source.path + [target_id],

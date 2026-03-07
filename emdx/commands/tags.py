@@ -62,7 +62,7 @@ def _add_tags_impl(
             suggestions = tagger.suggest_tags(doc_id)
 
             if suggestions:
-                console.print(f"\n[bold]Tag suggestions for #{doc_id}: {doc['title']}[/bold]\n")
+                console.print(f"\n[bold]Tag suggestions for #{doc_id}: {doc.title}[/bold]\n")
 
                 table = Table(show_header=True, header_style="bold cyan")
                 table.add_column("Tag", style="cyan")
@@ -91,10 +91,10 @@ def _add_tags_impl(
         if not tags:
             current_tags = get_document_tags(doc_id)
             if current_tags:
-                console.print(f"\n[bold]Tags for #{doc_id}: {doc['title']}[/bold]")
+                console.print(f"\n[bold]Tags for #{doc_id}: {doc.title}[/bold]")
                 console.print(f"[cyan]{format_tags(current_tags)}[/cyan]")
             else:
-                console.print(f"[yellow]No tags for #{doc_id}: {doc['title']}[/yellow]")
+                console.print(f"[yellow]No tags for #{doc_id}: {doc.title}[/yellow]")
             return
 
         # Add tags manually
@@ -375,7 +375,7 @@ def batch(
                 doc = get_document(str(doc_id))
                 if not doc:
                     continue
-                title = truncate_title(doc["title"])
+                title = truncate_title(doc.title)
 
                 console.print(f"  [dim]#{doc_id}[/dim] {title}")
                 for tag_name, conf in tag_list:

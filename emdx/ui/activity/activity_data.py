@@ -67,7 +67,7 @@ class ActivityDataLoader:
             from emdx.models.tags import get_document_tags
 
             for doc in docs:
-                doc_id = doc["id"]
+                doc_id = doc.id
                 doc_tags[doc_id] = get_document_tags(doc_id)
         except ImportError:
             pass
@@ -76,7 +76,7 @@ class ActivityDataLoader:
 
         for doc in docs:
             try:
-                doc_id = doc["id"]
+                doc_id = doc.id
                 created = doc.get("created_at")
                 title = doc.get("title", "")
                 doc_type = doc.get("doc_type", "user") or "user"

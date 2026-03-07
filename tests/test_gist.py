@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from emdx.commands.gist import sanitize_filename
 from emdx.main import app as main_app
+from emdx.models.document import Document
 
 runner = CliRunner()
 
@@ -111,12 +112,14 @@ class TestGistCommand:
     @patch("emdx.commands.gist.get_document")
     def test_gist_no_auth(self, mock_get_doc: Any, mock_auth: Any) -> None:
         """Gist without GitHub auth shows authentication error."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Test Doc",
-            "content": "Hello world",
-            "project": "test",
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Test Doc",
+                "content": "Hello world",
+                "project": "test",
+            }
+        )
         mock_auth.return_value = None
 
         result = runner.invoke(main_app, ["gist", "1"])
@@ -132,12 +135,14 @@ class TestGistCommand:
         self, mock_get_doc: Any, mock_auth: Any, mock_create: Any, mock_db: Any
     ) -> None:
         """Successful gist creation shows URL."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Test Doc",
-            "content": "Hello world",
-            "project": "test",
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Test Doc",
+                "content": "Hello world",
+                "project": "test",
+            }
+        )
         mock_auth.return_value = "ghp_test_token"
         mock_create.return_value = {
             "id": "abc123",
@@ -158,12 +163,14 @@ class TestGistCommand:
     @patch("emdx.commands.gist.get_document")
     def test_gist_create_failure(self, mock_get_doc: Any, mock_auth: Any, mock_create: Any) -> None:
         """Failed gist creation shows error."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Test Doc",
-            "content": "Hello world",
-            "project": None,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Test Doc",
+                "content": "Hello world",
+                "project": None,
+            }
+        )
         mock_auth.return_value = "ghp_test_token"
         mock_create.return_value = None
 
@@ -187,12 +194,14 @@ class TestGistCommand:
         self, mock_get_doc: Any, mock_auth: Any, mock_update: Any, mock_db: Any
     ) -> None:
         """Updating an existing gist succeeds."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Test Doc",
-            "content": "Updated content",
-            "project": None,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Test Doc",
+                "content": "Updated content",
+                "project": None,
+            }
+        )
         mock_auth.return_value = "ghp_test_token"
         mock_update.return_value = True
         # Mock the database connection so UPDATE gists doesn't fail
@@ -210,12 +219,14 @@ class TestGistCommand:
     @patch("emdx.commands.gist.get_document")
     def test_gist_update_failure(self, mock_get_doc: Any, mock_auth: Any, mock_update: Any) -> None:
         """Failed gist update shows error."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Test Doc",
-            "content": "Content",
-            "project": None,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Test Doc",
+                "content": "Content",
+                "project": None,
+            }
+        )
         mock_auth.return_value = "ghp_test_token"
         mock_update.return_value = False
 

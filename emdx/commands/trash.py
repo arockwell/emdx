@@ -69,11 +69,11 @@ def _list_trash(days: int | None = None, limit: int = 50) -> None:
 
         for doc in deleted_docs:
             table.add_row(
-                str(doc["id"]),
-                doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
-                doc["project"] or "[dim]None[/dim]",
-                doc["deleted_at"].strftime("%Y-%m-%d %H:%M") if doc["deleted_at"] else "Unknown",
-                str(doc["access_count"]),
+                str(doc.id),
+                doc.title[:50] + "..." if len(doc.title) > 50 else doc.title,
+                doc.project or "[dim]None[/dim]",
+                doc.deleted_at.strftime("%Y-%m-%d %H:%M") if doc.deleted_at else "Unknown",
+                str(doc.access_count),
             )
 
         console.print(table)
@@ -110,7 +110,7 @@ def restore(
 
             restored_count = 0
             for doc in deleted_docs:
-                if restore_document(str(doc["id"])):
+                if restore_document(str(doc.id)):
                     restored_count += 1
 
             console.print(f"\n[green]✅ Restored {restored_count} document(s)[/green]")
@@ -157,7 +157,7 @@ def purge(
 
             cutoff = datetime.now() - timedelta(days=older_than)
             docs_to_purge = [
-                d for d in deleted_docs if d["deleted_at"] is not None and d["deleted_at"] < cutoff
+                d for d in deleted_docs if d.deleted_at is not None and d.deleted_at < cutoff
             ]
             count = len(docs_to_purge)
         else:

@@ -10,6 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from emdx.commands.tasks import app
+from emdx.models.document import Document
 
 runner = CliRunner()
 
@@ -735,7 +736,7 @@ class TestTaskView:
         mock_tasks.get_dependencies.return_value = []
         mock_tasks.get_dependents.return_value = []
         mock_tasks.get_task_log.return_value = []
-        mock_get_doc.return_value = {"id": 99, "title": "Security audit report"}
+        mock_get_doc.return_value = Document.from_row({"id": 99, "title": "Security audit report"})
 
         result = runner.invoke(app, ["view", "10"])
         out = _out(result)

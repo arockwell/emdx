@@ -8,7 +8,6 @@ import json
 import os
 import subprocess
 import tempfile
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +21,7 @@ from emdx.database.documents import (
     find_supersede_candidate,
     set_parent,
 )
+from emdx.models.document import Document
 from emdx.models.documents import (
     delete_document,
     get_document,
@@ -166,12 +166,12 @@ def display_save_result(
     doc_id: int,
     metadata: DocumentMetadata,
     applied_tags: list[str],
-    supersede_target: Mapping[str, Any] | None = None,
+    supersede_target: Document | None = None,
 ) -> None:
     """Display save result to user"""
     console.print(f"[green]✅ Saved as #{doc_id}:[/green] [cyan]{metadata.title}[/cyan]")
     if supersede_target:
-        console.print(f"   [dim]↳ Superseded #{supersede_target['id']}[/dim]")
+        console.print(f"   [dim]↳ Superseded #{supersede_target.id}[/dim]")
     if metadata.project:
         console.print(f"   [dim]Project:[/dim] {metadata.project}")
     if applied_tags:
@@ -251,7 +251,7 @@ def save(
 
     # Step 5.5: If superseding, link the old doc as a child of the new doc
     if supersede_target:
-        set_parent(supersede_target["id"], doc_id, relationship="supersedes")
+        set_parent(supersede_target.id, doc_id, relationship="supersedes")
 
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
@@ -671,13 +671,13 @@ def _find_list_all(
     table.add_column("Views", justify="right", style="blue")
 
     for doc in docs:
-        created = doc["created_at"].strftime("%Y-%m-%d") if doc["created_at"] else ""
+        created = doc.created_at.strftime("%Y-%m-%d") if doc.created_at else ""
         table.add_row(
-            str(doc["id"]),
-            truncate_title(doc["title"]),
-            doc["project"] or "None",
+            str(doc.id),
+            truncate_title(doc.title),
+            doc.project or "None",
             created,
-            str(doc["access_count"]),
+            str(doc.access_count),
         )
 
     console.print(table)
@@ -696,7 +696,7 @@ def _find_recent(
 
     docs = get_recent_documents(limit=limit, doc_type=doc_type)
     if project:
-        docs = [d for d in docs if d.get("project") == project]
+        docs = [d for d in docs if d.project == project]
 
     if not docs:
         console.print("[yellow]No recently accessed documents found[/yellow]")
@@ -725,14 +725,14 @@ def _find_recent(
 
     for doc in docs:
         accessed_str = "Never"
-        if doc["accessed_at"]:
-            accessed_str = doc["accessed_at"].strftime("%Y-%m-%d %H:%M")
+        if doc.accessed_at:
+            accessed_str = doc.accessed_at.strftime("%Y-%m-%d %H:%M")
         table.add_row(
-            str(doc["id"]),
-            truncate_title(doc["title"]),
-            doc["project"] or "None",
+            str(doc.id),
+            truncate_title(doc.title),
+            doc.project or "None",
             accessed_str,
-            str(doc["access_count"]),
+            str(doc.access_count),
         )
 
     console.print(table)
@@ -1112,24 +1112,24 @@ def view(
         # Record view event (non-critical, best-effort)
         from emdx.models.events import record_event
 
-        record_event("view", doc_id=doc["id"])
+        record_event("view", doc_id=doc.id)
 
-        doc_tags = get_document_tags(doc["id"])
+        doc_tags = get_document_tags(doc.id)
 
         # Fetch linked documents
         try:
             from emdx.database.document_links import get_links_for_document
 
-            doc_links = get_links_for_document(doc["id"])
+            doc_links = get_links_for_document(doc.id)
         except Exception:
             doc_links = []
 
         # JSON output
         if json_output:
-            content = doc["content"]
+            content = doc.content
             linked_docs = []
             for link in doc_links:
-                if link["source_doc_id"] == doc["id"]:
+                if link["source_doc_id"] == doc.id:
                     linked_docs.append(
                         {
                             "id": link["target_doc_id"],
@@ -1148,15 +1148,15 @@ def view(
                         }
                     )
             output = {
-                "id": doc["id"],
-                "title": doc["title"],
+                "id": doc.id,
+                "title": doc.title,
                 "content": content,
-                "project": doc["project"],
-                "created_at": str(doc.get("created_at") or ""),
-                "updated_at": str(doc.get("updated_at") or ""),
-                "accessed_at": str(doc.get("accessed_at") or ""),
-                "access_count": doc["access_count"],
-                "parent_id": doc.get("parent_id"),
+                "project": doc.project,
+                "created_at": str(doc.created_at or ""),
+                "updated_at": str(doc.updated_at or ""),
+                "accessed_at": str(doc.accessed_at or ""),
+                "access_count": doc.access_count,
+                "parent_id": doc.parent_id,
                 "tags": doc_tags,
                 "linked_docs": linked_docs,
                 "word_count": len(content.split()),
@@ -1169,10 +1169,10 @@ def view(
         # Handle --links: show detailed link information
         if links:
             if not doc_links:
-                console.print(f"[yellow]No links found for document #{doc['id']}[/yellow]")
+                console.print(f"[yellow]No links found for document #{doc.id}[/yellow]")
                 return
 
-            console.print(f"[bold]Links for #{doc['id']} '{doc['title']}':[/bold]\n")
+            console.print(f"[bold]Links for #{doc.id} '{doc.title}':[/bold]\n")
             from rich.table import Table as LinksTable
 
             table = LinksTable()
@@ -1182,7 +1182,7 @@ def view(
             table.add_column("Method", style="dim", width=8)
 
             for link in doc_links:
-                if link["source_doc_id"] == doc["id"]:
+                if link["source_doc_id"] == doc.id:
                     other_id = link["target_doc_id"]
                     other_title = link["target_title"]
                 else:
@@ -1201,17 +1201,17 @@ def view(
                 else:
                     _print_view_header_plain(doc, doc_tags)
                 if doc_links:
-                    _print_related_docs(doc["id"], doc_links, rich_mode)
+                    _print_related_docs(doc.id, doc_links, rich_mode)
                 print()
 
             if raw:
-                print(doc["content"])
+                print(doc.content)
             elif rich_mode:
                 from emdx.ui.markdown_config import MarkdownConfig
 
-                console.print(MarkdownConfig.create_markdown(doc["content"]))
+                console.print(MarkdownConfig.create_markdown(doc.content))
             else:
-                print(doc["content"])
+                print(doc.content)
 
         if no_pager:
             _render_output()
@@ -1230,7 +1230,7 @@ def view(
         raise typer.Exit(1) from e
 
 
-def _view_review(doc: Mapping[str, Any]) -> None:
+def _view_review(doc: Document) -> None:
     """Run an adversarial review of a document using an LLM.
 
     Finds similar documents via embeddings (if available) and prompts
@@ -1248,9 +1248,9 @@ def _view_review(doc: Mapping[str, Any]) -> None:
         )
         raise typer.Exit(1)
 
-    doc_id: int = doc["id"]
-    title: str = doc["title"]
-    content: str = doc["content"]
+    doc_id: int = doc.id
+    title: str = doc.title
+    content: str = doc.content
 
     console.print(f"[dim]Reviewing #{doc_id} '{escape(title)}'...[/dim]")
 
@@ -1332,17 +1332,17 @@ def _view_review(doc: Mapping[str, Any]) -> None:
         console.print(f"\n[dim]Similar docs referenced: {id_list}[/dim]")
 
 
-def _print_view_header_plain(doc: Mapping[str, Any], doc_tags: list[str]) -> None:
+def _print_view_header_plain(doc: Document, doc_tags: list[str]) -> None:
     """Print a plain text header for machine-friendly output."""
-    print(f"#{doc['id']}  {doc['title']}")
+    print(f"#{doc.id}  {doc.title}")
 
     meta = []
-    if doc.get("project"):
-        meta.append(f"Project: {doc['project']}")
-    created = str(doc.get("created_at") or "")[:16]
+    if doc.project:
+        meta.append(f"Project: {doc.project}")
+    created = str(doc.created_at or "")[:16]
     if created:
         meta.append(f"Created: {created}")
-    updated = str(doc.get("updated_at") or "")[:16]
+    updated = str(doc.updated_at or "")[:16]
     if updated and updated != created:
         meta.append(f"Updated: {updated}")
     if doc_tags:
@@ -1352,26 +1352,26 @@ def _print_view_header_plain(doc: Mapping[str, Any], doc_tags: list[str]) -> Non
     print("---")
 
 
-def _print_view_header_rich(doc: Mapping[str, Any], doc_tags: list[str]) -> None:
+def _print_view_header_rich(doc: Document, doc_tags: list[str]) -> None:
     """Print a rich panel header for document view, matching the TUI."""
-    content = doc.get("content", "")
+    content = doc.content
     word_count = len(content.split())
     char_count = len(content)
     line_count = content.count("\n") + 1 if content else 0
 
     lines = []
-    lines.append(f"[bold cyan]#{doc['id']}[/bold cyan]  [bold]{doc['title']}[/bold]")
+    lines.append(f"[bold cyan]#{doc.id}[/bold cyan]  [bold]{doc.title}[/bold]")
     lines.append("")
 
-    if doc.get("project"):
-        lines.append(f"  [dim]Project:[/dim]   {doc['project']}")
+    if doc.project:
+        lines.append(f"  [dim]Project:[/dim]   {doc.project}")
 
     if doc_tags:
         lines.append(f"  [dim]Tags:[/dim]      {format_tags(doc_tags)}")
 
-    created = str(doc.get("created_at") or "")[:16]
-    updated = str(doc.get("updated_at") or "")[:16]
-    accessed = str(doc.get("accessed_at") or "")[:16]
+    created = str(doc.created_at or "")[:16]
+    updated = str(doc.updated_at or "")[:16]
+    accessed = str(doc.accessed_at or "")[:16]
 
     if created:
         lines.append(f"  [dim]Created:[/dim]   {created}")
@@ -1381,14 +1381,14 @@ def _print_view_header_rich(doc: Mapping[str, Any], doc_tags: list[str]) -> None
         lines.append(f"  [dim]Accessed:[/dim]  {accessed}")
 
     lines.append(
-        f"  [dim]Views:[/dim]     {doc.get('access_count', 0)}   "
+        f"  [dim]Views:[/dim]     {doc.access_count}   "
         f"[dim]Words:[/dim] {word_count}   "
         f"[dim]Lines:[/dim] {line_count}   "
         f"[dim]Chars:[/dim] {char_count}"
     )
 
-    if doc.get("parent_id"):
-        lines.append(f"  [dim]Parent:[/dim]    #{doc['parent_id']}")
+    if doc.parent_id:
+        lines.append(f"  [dim]Parent:[/dim]    #{doc.parent_id}")
 
     panel = Panel(
         "\n".join(lines),
@@ -1457,10 +1457,10 @@ def edit(
 
         # Quick title update without editing content
         if title:
-            success = update_document(doc["id"], title, doc["content"])
+            success = update_document(doc.id, title, doc.content)
             if success:
                 console.print(
-                    f"[green]✅ Updated title of #{doc['id']} to:[/green] [cyan]{title}[/cyan]"
+                    f"[green]✅ Updated title of #{doc.id} to:[/green] [cyan]{title}[/cyan]"
                 )
                 # Flag wiki articles sourced from this doc as stale
                 try:
@@ -1468,7 +1468,7 @@ def edit(
                         check_doc_staleness,
                     )
 
-                    check_doc_staleness(doc["id"])
+                    check_doc_staleness(doc.id)
                 except Exception:
                     pass  # Wiki tables may not exist; non-critical
             else:
@@ -1483,9 +1483,9 @@ def edit(
         # Create temporary file with current content
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp_file:
             # Write header comment
-            tmp_file.write(f"# Editing: {doc['title']} (ID: {doc['id']})\n")
-            tmp_file.write(f"# Project: {doc['project'] or 'None'}\n")
-            tmp_file.write(f"# Created: {str(doc['created_at'] or '')[:16]}\n")
+            tmp_file.write(f"# Editing: {doc.title} (ID: {doc.id})\n")
+            tmp_file.write(f"# Project: {doc.project or 'None'}\n")
+            tmp_file.write(f"# Created: {str(doc.created_at or '')[:16]}\n")
             tmp_file.write("# Lines starting with '#' will be removed\n")
             tmp_file.write("#\n")
             tmp_file.write("# First line (after comments) will be used as the title\n")
@@ -1493,8 +1493,8 @@ def edit(
             tmp_file.write("#\n")
 
             # Write title and content
-            tmp_file.write(f"{doc['title']}\n\n")
-            tmp_file.write(doc["content"])
+            tmp_file.write(f"{doc.title}\n\n")
+            tmp_file.write(doc.content)
             tmp_file_path = tmp_file.name
 
         try:
@@ -1535,17 +1535,17 @@ def edit(
             new_content = "".join(lines[content_start:]).strip()
 
             # Check if anything changed
-            if new_title == doc["title"] and new_content == doc["content"].strip():
+            if new_title == doc.title and new_content == doc.content.strip():
                 console.print("[yellow]No changes made[/yellow]")
                 return
 
             # Update document
-            success = update_document(doc["id"], new_title, new_content)
+            success = update_document(doc.id, new_title, new_content)
 
             if success:
-                console.print(f"[green]✅ Updated #{doc['id']}:[/green] [cyan]{new_title}[/cyan]")
-                if new_title != doc["title"]:
-                    console.print(f"   [dim]Title changed from:[/dim] {doc['title']}")
+                console.print(f"[green]✅ Updated #{doc.id}:[/green] [cyan]{new_title}[/cyan]")
+                if new_title != doc.title:
+                    console.print(f"   [dim]Title changed from:[/dim] {doc.title}")
                 console.print("   [dim]Content updated[/dim]")
 
                 # Flag wiki articles sourced from this doc as stale
@@ -1554,7 +1554,7 @@ def edit(
                         check_doc_staleness,
                     )
 
-                    check_doc_staleness(doc["id"])
+                    check_doc_staleness(doc.id)
                 except Exception:
                     pass  # Wiki tables may not exist; non-critical
             else:
@@ -1618,10 +1618,10 @@ def delete(
 
         for doc in docs_to_delete:
             table.add_row(
-                str(doc["id"]),
-                doc["title"][:50] + "..." if len(doc["title"]) > 50 else doc["title"],
-                doc["project"] or "[dim]None[/dim]",
-                str(doc["created_at"] or "")[:10],
+                str(doc.id),
+                doc.title[:50] + "..." if len(doc.title) > 50 else doc.title,
+                doc.project or "[dim]None[/dim]",
+                str(doc.created_at or "")[:10],
                 "[red]PERMANENT[/red]" if hard else "[yellow]Soft delete[/yellow]",
             )
 
@@ -1655,7 +1655,7 @@ def delete(
         failed = []
 
         for doc in docs_to_delete:
-            success = delete_document(str(doc["id"]), hard_delete=hard)
+            success = delete_document(str(doc.id), hard_delete=hard)
             if success:
                 deleted_count += 1
             else:

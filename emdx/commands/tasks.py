@@ -417,13 +417,13 @@ def view(
     if source_id:
         source_doc = get_document(source_id)
         if source_doc:
-            console.print(f"  [dim]Source:[/dim] #{source_id} [cyan]{source_doc['title']}[/cyan]")
+            console.print(f"  [dim]Source:[/dim] #{source_id} [cyan]{source_doc.title}[/cyan]")
         else:
             console.print(f"  [dim]Source:[/dim] #{source_id} [dim](deleted)[/dim]")
     if output_id:
         output_doc = get_document(output_id)
         if output_doc:
-            console.print(f"  [dim]Output:[/dim] #{output_id} [cyan]{output_doc['title']}[/cyan]")
+            console.print(f"  [dim]Output:[/dim] #{output_id} [cyan]{output_doc.title}[/cyan]")
         else:
             console.print(f"  [dim]Output:[/dim] #{output_id} [dim](deleted)[/dim]")
 
@@ -676,7 +676,7 @@ def _assemble_brief(
         related_docs.append(
             {
                 "id": source_id,
-                "title": source_doc["title"] if source_doc else "(deleted)",
+                "title": source_doc.title if source_doc else "(deleted)",
                 "relation": "source",
             }
         )
@@ -691,7 +691,7 @@ def _assemble_brief(
         related_docs.append(
             {
                 "id": output_id,
-                "title": output_doc["title"] if output_doc else "(deleted)",
+                "title": output_doc.title if output_doc else "(deleted)",
                 "relation": "output",
             }
         )

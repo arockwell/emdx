@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from emdx.main import app
+from emdx.models.document import Document
 
 runner = CliRunner()
 
@@ -238,7 +239,9 @@ class TestHistoryJsonOutput:
         mock_db: MagicMock,
     ) -> None:
         """history --json should produce parseable JSON with version info."""
-        mock_get_doc.return_value = {"id": 42, "title": "Test Document", "content": "body"}
+        mock_get_doc.return_value = Document.from_row(
+            {"id": 42, "title": "Test Document", "content": "body"}
+        )
 
         # Simulate version rows from the database
         mock_conn = MagicMock()
@@ -267,7 +270,9 @@ class TestHistoryJsonOutput:
         mock_db: MagicMock,
     ) -> None:
         """history --json with no versions should output a JSON error message."""
-        mock_get_doc.return_value = {"id": 42, "title": "Test", "content": "body"}
+        mock_get_doc.return_value = Document.from_row(
+            {"id": 42, "title": "Test", "content": "body"}
+        )
 
         mock_conn = MagicMock()
         mock_db.get_connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
@@ -346,11 +351,13 @@ class TestWikiViewNoCrash:
         mock_row.__getitem__ = MagicMock(return_value=99)
         mock_conn.execute.return_value.fetchone.return_value = mock_row
 
-        mock_get_doc.return_value = {
-            "id": 99,
-            "title": "Wiki Article Title",
-            "content": "# Article\n\nSome content here.",
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 99,
+                "title": "Wiki Article Title",
+                "content": "# Article\n\nSome content here.",
+            }
+        )
 
         result = runner.invoke(app, ["wiki", "view", "5", "--raw"])
         assert result.exit_code == 0

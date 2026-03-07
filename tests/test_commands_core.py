@@ -8,6 +8,7 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from emdx.commands.core import InputContent, app, generate_title, get_input_content
+from emdx.models.document import Document
 
 runner = CliRunner()
 
@@ -291,14 +292,16 @@ class TestViewCommand:
     @patch("emdx.commands.core.get_document")
     def test_view_by_id(self, mock_get_doc, mock_get_tags):
         """View a document by numeric ID."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "My Doc",
-            "content": "Hello world",
-            "project": "test",
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 5,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "My Doc",
+                "content": "Hello world",
+                "project": "test",
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 5,
+            }
+        )
         mock_get_tags.return_value = ["python"]
 
         result = runner.invoke(app, ["view", "1", "--no-pager"])
@@ -318,14 +321,16 @@ class TestViewCommand:
     @patch("emdx.commands.core.get_document")
     def test_view_raw(self, mock_get_doc, mock_get_tags):
         """View with --raw shows raw content."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Raw Doc",
-            "content": "# Raw markdown",
-            "project": None,
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 0,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Raw Doc",
+                "content": "# Raw markdown",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 0,
+            }
+        )
         mock_get_tags.return_value = []
 
         result = runner.invoke(app, ["view", "1", "--raw", "--no-pager"])
@@ -336,14 +341,16 @@ class TestViewCommand:
     @patch("emdx.commands.core.get_document")
     def test_view_no_header(self, mock_get_doc, mock_get_tags):
         """View with --no-header hides header."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "No Header",
-            "content": "Just content",
-            "project": None,
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 0,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "No Header",
+                "content": "Just content",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 0,
+            }
+        )
         mock_get_tags.return_value = []
 
         result = runner.invoke(app, ["view", "1", "--no-header", "--no-pager"])
@@ -356,16 +363,18 @@ class TestViewCommand:
     @patch("emdx.commands.core.get_document")
     def test_view_json(self, mock_get_doc, mock_get_tags):
         """View with --json outputs valid JSON."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "JSON Doc",
-            "content": "Hello world",
-            "project": "test",
-            "created_at": datetime(2024, 1, 1),
-            "updated_at": datetime(2024, 1, 2),
-            "accessed_at": datetime(2024, 1, 3),
-            "access_count": 5,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "JSON Doc",
+                "content": "Hello world",
+                "project": "test",
+                "created_at": datetime(2024, 1, 1),
+                "updated_at": datetime(2024, 1, 2),
+                "accessed_at": datetime(2024, 1, 3),
+                "access_count": 5,
+            }
+        )
         mock_get_tags.return_value = ["python"]
 
         result = runner.invoke(app, ["view", "1", "--json"])
@@ -394,13 +403,15 @@ class TestEditCommand:
     @patch("emdx.commands.core.get_document")
     def test_edit_title_only(self, mock_get_doc, mock_update):
         """Edit with --title updates title without opening editor."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Old Title",
-            "content": "content",
-            "project": "p",
-            "created_at": datetime(2024, 1, 1),
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Old Title",
+                "content": "content",
+                "project": "p",
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
         mock_update.return_value = True
 
         result = runner.invoke(app, ["edit", "1", "--title", "New Title"])
@@ -421,13 +432,15 @@ class TestEditCommand:
     @patch("emdx.commands.core.get_document")
     def test_edit_title_failure(self, mock_get_doc, mock_update):
         """Edit that fails to update shows error."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Title",
-            "content": "c",
-            "project": None,
-            "created_at": datetime(2024, 1, 1),
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Title",
+                "content": "c",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
         mock_update.return_value = False
 
         result = runner.invoke(app, ["edit", "1", "--title", "New"])
@@ -450,13 +463,15 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.get_document")
     def test_delete_soft(self, mock_get_doc, mock_delete):
         """Soft delete with --force skips confirmation."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "To Delete",
-            "project": "p",
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 0,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "To Delete",
+                "project": "p",
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 0,
+            }
+        )
         mock_delete.return_value = True
 
         result = runner.invoke(app, ["delete", "1", "--force"])
@@ -469,13 +484,15 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.get_document")
     def test_delete_hard_force(self, mock_get_doc, mock_delete):
         """Hard delete with --force --hard."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Perm Delete",
-            "project": None,
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 0,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Perm Delete",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 0,
+            }
+        )
         mock_delete.return_value = True
 
         result = runner.invoke(app, ["delete", "1", "--force", "--hard"])
@@ -496,13 +513,15 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.get_document")
     def test_delete_dry_run(self, mock_get_doc):
         """--dry-run shows what would be deleted without deleting."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Dry Run Doc",
-            "project": "p",
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 0,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Dry Run Doc",
+                "project": "p",
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 0,
+            }
+        )
 
         result = runner.invoke(app, ["delete", "1", "--dry-run"])
         assert result.exit_code == 0
@@ -515,20 +534,24 @@ class TestDeleteCommand:
 
         def side_effect(identifier):
             docs = {
-                "1": {
-                    "id": 1,
-                    "title": "Doc 1",
-                    "project": None,
-                    "created_at": datetime(2024, 1, 1),
-                    "access_count": 0,
-                },  # noqa: E501
-                "2": {
-                    "id": 2,
-                    "title": "Doc 2",
-                    "project": None,
-                    "created_at": datetime(2024, 1, 2),
-                    "access_count": 0,
-                },  # noqa: E501
+                "1": Document.from_row(
+                    {
+                        "id": 1,
+                        "title": "Doc 1",
+                        "project": None,
+                        "created_at": datetime(2024, 1, 1),
+                        "access_count": 0,
+                    }
+                ),
+                "2": Document.from_row(
+                    {
+                        "id": 2,
+                        "title": "Doc 2",
+                        "project": None,
+                        "created_at": datetime(2024, 1, 2),
+                        "access_count": 0,
+                    }
+                ),
             }
             return docs.get(identifier)
 
@@ -549,13 +572,15 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.is_non_interactive", return_value=True)
     def test_delete_auto_confirms_when_non_tty(self, mock_isatty, mock_get_doc, mock_delete):
         """Delete skips confirmation when stdin is not a TTY (agent mode)."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Agent Delete",
-            "project": "p",
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 0,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Agent Delete",
+                "project": "p",
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 0,
+            }
+        )
         mock_delete.return_value = True
 
         # No --force flag, but should still proceed without prompting
@@ -570,13 +595,15 @@ class TestDeleteCommand:
     @patch("emdx.commands.core.is_non_interactive", return_value=True)
     def test_delete_hard_auto_confirms_when_non_tty(self, mock_isatty, mock_get_doc, mock_delete):
         """Hard delete skips confirmation when stdin is not a TTY (agent mode)."""
-        mock_get_doc.return_value = {
-            "id": 1,
-            "title": "Agent Hard Delete",
-            "project": None,
-            "created_at": datetime(2024, 1, 1),
-            "access_count": 0,
-        }
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 1,
+                "title": "Agent Hard Delete",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+                "access_count": 0,
+            }
+        )
         mock_delete.return_value = True
 
         # No --force flag, --hard, should still proceed without prompting
@@ -610,13 +637,15 @@ class TestTrashCommand:
     def test_trash_with_items(self, mock_list_deleted):
         """Trash with items shows table."""
         mock_list_deleted.return_value = [
-            {
-                "id": 1,
-                "title": "Deleted Doc",
-                "project": "proj",
-                "deleted_at": datetime(2024, 6, 1, 10, 0),
-                "access_count": 3,
-            }
+            Document.from_row(
+                {
+                    "id": 1,
+                    "title": "Deleted Doc",
+                    "project": "proj",
+                    "deleted_at": datetime(2024, 6, 1, 10, 0),
+                    "access_count": 3,
+                }
+            )
         ]
 
         result = runner.invoke(main_app, ["trash"])
@@ -668,8 +697,8 @@ class TestRestoreCommand:
     def test_restore_all(self, mock_restore, mock_list_deleted):
         """Restore --all restores all deleted documents."""
         mock_list_deleted.return_value = [
-            {"id": 1, "title": "D1"},
-            {"id": 2, "title": "D2"},
+            Document.from_row({"id": 1, "title": "D1"}),
+            Document.from_row({"id": 2, "title": "D2"}),
         ]
         mock_restore.return_value = True
 
@@ -699,8 +728,8 @@ class TestPurgeCommand:
     def test_purge_with_force(self, mock_list_deleted, mock_purge):
         """Purge --force skips confirmation."""
         mock_list_deleted.return_value = [
-            {"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)}
-        ]  # noqa: E501
+            Document.from_row({"id": 1, "title": "D", "deleted_at": datetime(2024, 1, 1)})
+        ]
         mock_purge.return_value = 1
 
         result = runner.invoke(main_app, ["trash", "purge", "--force"])
