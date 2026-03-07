@@ -51,7 +51,7 @@ def _blocker_summary(task_id: int) -> str:
     deps = tasks.get_dependencies(task_id)
     if not deps:
         return ""
-    open_deps = [d for d in deps if d["status"] not in ("done", "closed", "wontdo", "duplicate")]
+    open_deps = [d for d in deps if d.status not in ("done", "closed", "wontdo", "duplicate")]
     if not open_deps:
         return ""
     names = ", ".join(_display_id(d) for d in open_deps[:3])
@@ -61,9 +61,9 @@ def _blocker_summary(task_id: int) -> str:
 
 def _display_id(task: Task) -> str:
     """Return KEY-N display ID if available, otherwise #id."""
-    if task.get("epic_key") and task.get("epic_seq"):
-        return f"{task['epic_key']}-{task['epic_seq']}"
-    return f"#{task['id']}"
+    if task.epic_key and task.epic_seq:
+        return f"{task.epic_key}-{task.epic_seq}"
+    return f"#{task.id}"
 
 
 def _resolve_id(
@@ -123,8 +123,8 @@ def add(
             raise typer.Exit(1)
         parent_task_id = epic_id
         # Inherit epic_key from the parent epic if not explicitly set
-        if not epic_key and parent_task.get("epic_key"):
-            epic_key = parent_task["epic_key"]
+        if not epic_key and parent_task.epic_key:
+            epic_key = parent_task.epic_key
 
     depends_on = after if after else None
 
@@ -186,8 +186,8 @@ def plan(
         raise typer.Exit(1)
 
     epic_key = cat.upper() if cat else None
-    if not epic_key and parent_task.get("epic_key"):
-        epic_key = parent_task["epic_key"]
+    if not epic_key and parent_task.epic_key:
+        epic_key = parent_task.epic_key
 
     created: list[dict[str, str | int]] = []
     prev_id: int | None = None
@@ -284,14 +284,14 @@ def done(
     if json_output:
         result: dict[str, str | int | None] = {
             "id": task_id,
-            "title": task["title"],
+            "title": task.title,
             "status": "done",
         }
         if output_doc is not None:
             result["output_doc_id"] = output_doc
         print_json(result)
     else:
-        msg = f"[green]✓ Done:[/green] {_display_id(task)} {task['title']}"
+        msg = f"[green]✓ Done:[/green] {_display_id(task)} {task.title}"
         if output_doc is not None:
             msg += f" [dim](output #{output_doc})[/dim]"
         console.print(msg)
@@ -328,9 +328,9 @@ def wontdo(
         tasks.log_progress(task_id, f"Won't do: {note}")
 
     if json_output:
-        print_json({"id": task_id, "title": task["title"], "status": "wontdo"})
+        print_json({"id": task_id, "title": task.title, "status": "wontdo"})
     else:
-        console.print(f"[dim]⊘ Won't do:[/dim] {_display_id(task)} {task['title']}")
+        console.print(f"[dim]⊘ Won't do:[/dim] {_display_id(task)} {task.title}")
 
 
 @app.command()
@@ -364,9 +364,9 @@ def duplicate(
         tasks.log_progress(task_id, f"Duplicate: {note}")
 
     if json_output:
-        print_json({"id": task_id, "title": task["title"], "status": "duplicate"})
+        print_json({"id": task_id, "title": task.title, "status": "duplicate"})
     else:
-        console.print(f"[dim]◆ Duplicate:[/dim] {_display_id(task)} {task['title']}")
+        console.print(f"[dim]◆ Duplicate:[/dim] {_display_id(task)} {task.title}")
 
 
 @app.command()
@@ -388,31 +388,30 @@ def view(
         console.print(f"[red]Task {task_id_str} not found[/red]")
         raise typer.Exit(1)
 
-    icon = ICONS.get(task["status"], "?")
+    icon = ICONS.get(task.status, "?")
     display = _display_id(task)
-    console.print(f"\n[bold]{icon} {display}: {task['title']}[/bold]")
+    console.print(f"\n[bold]{icon} {display}: {task.title}[/bold]")
 
     # Metadata line
-    meta = [f"Status: {task['status']}"]
-    if task.get("epic_key"):
-        meta.append(f"Category: {task['epic_key']}")
-    parent_task_id: int | None = task.get("parent_task_id")
-    if parent_task_id:
-        parent = tasks.get_task(parent_task_id)
-        epic_label = _display_id(parent) if parent else task.get("epic_key", "?")
+    meta = [f"Status: {task.status}"]
+    if task.epic_key:
+        meta.append(f"Category: {task.epic_key}")
+    if task.parent_task_id:
+        parent = tasks.get_task(task.parent_task_id)
+        epic_label = _display_id(parent) if parent else (task.epic_key or "?")
         meta.append(f"Epic: {epic_label}")
-    if task.get("priority") and task["priority"] != 3:
-        meta.append(f"Priority: {task['priority']}")
+    if task.priority and task.priority != 3:
+        meta.append(f"Priority: {task.priority}")
     console.print(f"[dim]{' | '.join(meta)}[/dim]")
 
-    if task.get("created_at"):
-        console.print(f"[dim]Created: {task['created_at']}[/dim]")
+    if task.created_at:
+        console.print(f"[dim]Created: {task.created_at}[/dim]")
 
     # Linked documents
     from emdx.models.documents import get_document
 
-    source_id = task.get("source_doc_id")
-    output_id = task.get("output_doc_id")
+    source_id = task.source_doc_id
+    output_id = task.output_doc_id
     if source_id or output_id:
         console.print()
     if source_id:
@@ -429,7 +428,7 @@ def view(
             console.print(f"  [dim]Output:[/dim] #{output_id} [dim](deleted)[/dim]")
 
     # Description
-    desc = task.get("description") or ""
+    desc = task.description or ""
     if desc:
         console.print()
         from emdx.ui.markdown_config import MarkdownConfig
@@ -442,23 +441,23 @@ def view(
     if deps:
         console.print("\n[bold]Blocked by:[/bold]")
         for d in deps:
-            dep_icon = ICONS.get(d["status"], "?")
-            console.print(f"  {dep_icon} {_display_id(d)} {d['title']}")
+            dep_icon = ICONS.get(d.status, "?")
+            console.print(f"  {dep_icon} {_display_id(d)} {d.title}")
 
     dependents = tasks.get_dependents(task_id)
     if dependents:
         console.print("\n[bold]Blocks:[/bold]")
         for d in dependents:
-            dep_icon = ICONS.get(d["status"], "?")
-            console.print(f"  {dep_icon} {_display_id(d)} {d['title']}")
+            dep_icon = ICONS.get(d.status, "?")
+            console.print(f"  {dep_icon} {_display_id(d)} {d.title}")
 
     # Work log
     log = tasks.get_task_log(task_id, limit=5)
     if log:
         console.print("\n[bold]Work log:[/bold]")
         for entry in log:
-            ts = entry.get("created_at", "")
-            console.print(f"  [dim]{ts}[/dim] {entry['message']}")
+            ts = entry.created_at or ""
+            console.print(f"  [dim]{ts}[/dim] {entry.message}")
 
 
 @app.command()
@@ -485,7 +484,7 @@ def active(
     if note:
         tasks.log_progress(task_id, note)
 
-    console.print(f"[blue]● Active:[/blue] {_display_id(task)} {task['title']}")
+    console.print(f"[blue]● Active:[/blue] {_display_id(task)} {task.title}")
 
 
 @app.command()
@@ -519,10 +518,10 @@ def log(
         console.print(f"[yellow]No log entries for {_display_id(task)}[/yellow]")
         return
 
-    console.print(f"\n[bold]Log for {_display_id(task)}: {task['title']}[/bold]")
+    console.print(f"\n[bold]Log for {_display_id(task)}: {task.title}[/bold]")
     for entry in entries:
-        ts = entry.get("created_at", "")
-        console.print(f"  [dim]{ts}[/dim] {entry['message']}")
+        ts = entry.created_at or ""
+        console.print(f"  [dim]{ts}[/dim] {entry.message}")
 
 
 @app.command()
@@ -610,19 +609,19 @@ def _assemble_brief(
         "id": task_id,
         "display_id": display,
         "title": _display_title(task),
-        "status": task["status"],
-        "priority": task.get("priority", 3),
-        "category": task.get("epic_key"),
-        "description": task.get("description") or "",
+        "status": task.status,
+        "priority": task.priority,
+        "category": task.epic_key,
+        "description": task.description or "",
     }
 
     # Epic info
-    parent_id = task.get("parent_task_id")
+    parent_id = task.parent_task_id
     if parent_id:
         parent = tasks.get_task(parent_id)
         data["epic"] = {
             "id": parent_id,
-            "title": parent["title"] if parent else "(deleted)",
+            "title": parent.title if parent else "(deleted)",
             "display_id": _display_id(parent) if parent else f"#{parent_id}",
         }
 
@@ -630,10 +629,10 @@ def _assemble_brief(
     deps = tasks.get_dependencies(task_id)
     data["dependencies"] = [
         {
-            "id": d["id"],
+            "id": d.id,
             "display_id": _display_id(d),
             "title": _display_title(d),
-            "status": d["status"],
+            "status": d.status,
         }
         for d in deps
     ]
@@ -642,10 +641,10 @@ def _assemble_brief(
     dependents = tasks.get_dependents(task_id)
     data["dependents"] = [
         {
-            "id": d["id"],
+            "id": d.id,
             "display_id": _display_id(d),
             "title": _display_title(d),
-            "status": d["status"],
+            "status": d.status,
         }
         for d in dependents
     ]
@@ -654,24 +653,22 @@ def _assemble_brief(
     children = tasks.get_children(task_id)
     data["subtasks"] = [
         {
-            "id": c["id"],
+            "id": c.id,
             "display_id": _display_id(c),
             "title": _display_title(c),
-            "status": c["status"],
+            "status": c.status,
         }
         for c in children
     ]
 
     # Task log
     log_entries = tasks.get_task_log(task_id, limit=log_limit)
-    data["log"] = [
-        {"created_at": e.get("created_at", ""), "message": e["message"]} for e in log_entries
-    ]
+    data["log"] = [{"created_at": e.created_at or "", "message": e.message} for e in log_entries]
 
     # Related documents
     related_docs: list[dict[str, object]] = []
 
-    source_id = task.get("source_doc_id")
+    source_id = task.source_doc_id
     if source_id:
         source_doc = get_document(source_id)
         related_docs.append(
@@ -682,7 +679,7 @@ def _assemble_brief(
             }
         )
 
-    output_id: int | None = task.get("output_doc_id")
+    output_id: int | None = task.output_doc_id
     if output_id:
         output_doc = get_document(output_id)
         related_docs.append(
@@ -696,9 +693,9 @@ def _assemble_brief(
     data["related_documents"] = related_docs
 
     # Key files extracted from description and log
-    all_text = task.get("description") or ""
+    all_text = task.description or ""
     for entry in log_entries:
-        all_text += "\n" + entry["message"]
+        all_text += "\n" + entry.message
     data["key_files"] = _extract_file_paths(all_text)
 
     return data
@@ -829,7 +826,7 @@ def blocked(
     if reason:
         tasks.log_progress(task_id, f"Blocked: {reason}")
 
-    msg = f"[yellow]⊘ Blocked:[/yellow] {_display_id(task)} {task['title']}"
+    msg = f"[yellow]⊘ Blocked:[/yellow] {_display_id(task)} {task.title}"
     if reason:
         msg += f"\n  [dim]{reason}[/dim]"
     console.print(msg)

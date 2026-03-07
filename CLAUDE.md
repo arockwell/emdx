@@ -228,19 +228,7 @@ emdx find --tags "gameplan,active"     # Tag filtering (comma = AND, use --any-t
 emdx find --all                        # List all documents
 emdx find --recent 10                  # Show 10 most recently accessed docs
 emdx find --similar 42                 # Find docs similar to doc #42
-emdx find --ask "question"             # RAG: retrieve context + LLM answer
-emdx find --ask "question" --think     # Deliberative: position paper with arguments
-emdx find --ask "question" --think --challenge  # Devil's advocate (requires --think)
-emdx find --ask "question" --debug     # Socratic debugger: diagnostic questions
-emdx find --ask "question" --cite      # Inline [#ID] citations
 emdx find --context "question" | claude  # Output retrieved context for piping
-emdx find "query" --wander             # Serendipity: surface surprising connections
-emdx find "query" --watch              # Save as standing query (alerts on new matches)
-emdx find --watch-check                # Check standing queries for new matches
-emdx find --watch-list                 # List all standing queries
-emdx find --watch-remove 1             # Remove a standing query by ID
-emdx find --ask --machine "question"   # Pipe-friendly output (ANSWER/SOURCES/CONFIDENCE)
-emdx find --ask --recent-days 7 "q"    # Scope ask to recent docs only
 
 # View
 emdx view 42                           # View document content
@@ -270,11 +258,6 @@ emdx prime                             # Full context injection
 emdx prime --smart                     # Context-aware: recent activity, key docs, knowledge map
 emdx prime --brief                     # Compact: tasks + epics only
 
-# Context assembly
-emdx context 87                        # Graph-walk context bundle from doc 87
-emdx context --seed "auth error"       # Find seeds from text query
-emdx context 87 --depth 3 --max-tokens 6000  # Control traversal and budget
-
 # Staleness
 emdx stale                             # Show documents needing review by urgency
 emdx stale --tier critical             # Show only critical tier
@@ -287,8 +270,7 @@ emdx status --stats --detailed         # Detailed stats with project breakdown
 emdx status --vitals                   # KB vitals dashboard
 emdx status --mirror                   # Reflective KB summary (narrative)
 
-# Maintenance
-emdx maintain compact --dry-run        # Find similar docs to merge
+# Maintenance (stable)
 emdx maintain index                    # Build/update embedding index
 emdx maintain link --all               # Auto-link related documents
 # Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
@@ -298,35 +280,28 @@ emdx maintain backup --list            # List existing backups
 emdx maintain backup --restore <file>  # Restore from a backup
 emdx maintain freshness                # Score document freshness (staleness)
 emdx maintain freshness --stale        # Show only stale docs
-emdx maintain gaps                     # Detect knowledge gaps and sparse coverage
-emdx maintain drift                    # Detect stale work items (default 30 days)
-emdx maintain drift --days 7           # More aggressive threshold
-emdx maintain contradictions           # Find conflicting claims via NLI
-emdx maintain code-drift               # Detect code references that have drifted
-emdx maintain cloud-backup upload      # Upload backup to GitHub Gists
-emdx maintain cloud-backup list        # List cloud backups
-emdx maintain cloud-backup download <id>  # Download a cloud backup
-emdx compact --dry-run                 # Top-level alias for maintain compact
 
-# Wiki (top-level; `emdx maintain wiki ...` still works)
-emdx wiki                              # Compact wiki overview
-emdx wiki setup                        # Full bootstrap (index → entities → topics → auto-label)
-emdx wiki topics --save --auto-label   # Discover and label topics
-emdx wiki triage --skip-below 0.05     # Bulk skip low-coherence topics
-emdx wiki triage --auto-label          # LLM-label all topics
-emdx wiki progress                     # Show generation progress + costs
-emdx wiki generate                     # Generate articles (sequential)
-emdx wiki generate -c 3               # Generate with 3 concurrent
-emdx wiki view <topic_id>             # View a wiki article by topic
-emdx wiki search "query"              # Search wiki articles
-emdx wiki export ./wiki-site          # Export to MkDocs
-emdx wiki export ./wiki-site --topic 42  # Single article
-
-# Distill — audience-aware content synthesis
-emdx distill "authentication"          # Synthesize docs on a topic
-emdx distill --tags "security,active"  # Synthesize docs matching tags
-emdx distill "topic" --for coworkers   # Audience: me (default), docs, coworkers
-emdx distill "topic" --save            # Save distilled output to KB
+# Labs — experimental commands (may change or be removed)
+emdx labs ask "question"               # RAG: retrieve context + LLM answer
+emdx labs ask --think "question"       # Deliberative: position paper
+emdx labs ask --debug "bug"            # Socratic debugger
+emdx labs ask --cite "question"        # Inline [#ID] citations
+emdx labs wander                       # Serendipity: surprising connections
+emdx labs wander "topic"              # Serendipity from a topic seed
+emdx labs watch add "query"           # Save as standing query
+emdx labs watch check                  # Check standing queries
+emdx labs watch list                   # List standing queries
+emdx labs context 87                   # Graph-walk context bundle
+emdx labs briefing                     # Recent activity summary
+emdx labs compact --dry-run            # AI-powered doc merging
+emdx labs distill "topic"              # Audience-aware synthesis
+emdx labs wiki setup                   # Auto-wiki bootstrap
+emdx labs explore                      # Topic clustering map
+emdx labs maintain drift               # Detect stale work items
+emdx labs maintain gaps                # Detect knowledge gaps
+emdx labs maintain contradictions      # Find conflicting claims
+emdx labs maintain code-drift          # Detect stale code refs
+emdx labs maintain cloud-backup upload # Cloud backup to Gists
 
 # History / Diff — document versioning
 emdx history 42                        # Show version history for doc #42

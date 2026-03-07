@@ -104,13 +104,13 @@ class TestWikiCoverageEmpty:
 
     def test_coverage_empty_db(self, clean_wiki_db: Any) -> None:
         """Empty database shows 100% coverage (0/0)."""
-        result = runner.invoke(app, ["maintain", "wiki", "coverage"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage"])
         assert result.exit_code == 0
         assert "All user documents are covered" in result.output
 
     def test_coverage_empty_json(self, clean_wiki_db: Any) -> None:
         """Empty database JSON output has correct structure."""
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--json"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["total_docs"] == 0
@@ -131,7 +131,7 @@ class TestWikiCoverageWithDocs:
         _add_member(1, 1)
         _add_member(1, 2)
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage"])
         assert result.exit_code == 0
         assert "All user documents are covered" in result.output
 
@@ -142,7 +142,7 @@ class TestWikiCoverageWithDocs:
         _create_topic(1, "Topic 1")
         _add_member(1, 1)
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "Uncovered:        1" in output
@@ -154,7 +154,7 @@ class TestWikiCoverageWithDocs:
         _create_user_doc(2, "Doc B")
         _create_user_doc(3, "Doc C")
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "Uncovered:        3" in output
@@ -165,7 +165,7 @@ class TestWikiCoverageWithDocs:
         _create_user_doc(1, "User Doc")
         _create_wiki_doc(2, "Wiki Article")
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--json"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["total_docs"] == 1  # Only user doc counted
@@ -175,7 +175,7 @@ class TestWikiCoverageWithDocs:
         _create_user_doc(1, "Active Doc")
         _create_deleted_doc(2, "Deleted Doc")
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--json"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["total_docs"] == 1  # Only non-deleted counted
@@ -187,7 +187,7 @@ class TestWikiCoverageWithDocs:
         _create_topic(1, "Topic 1")
         _add_member(1, 1)
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--json"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
 
@@ -204,7 +204,7 @@ class TestWikiCoverageWithDocs:
         for i in range(1, 6):
             _create_user_doc(i, f"Doc {i}")
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--limit", "2"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--limit", "2"])
         assert result.exit_code == 0
         output = _strip_ansi(result.output)
         assert "and 3 more" in output
@@ -214,7 +214,7 @@ class TestWikiCoverageWithDocs:
         for i in range(1, 6):
             _create_user_doc(i, f"Doc {i}")
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--json", "--limit", "2"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--json", "--limit", "2"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["uncovered_docs"] == 5  # Total count still correct
@@ -229,7 +229,7 @@ class TestWikiCoverageWithDocs:
         _add_member(1, 1)
         _add_member(2, 1)
 
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--json"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["covered_docs"] == 1
@@ -241,6 +241,6 @@ class TestWikiCoverageHelp:
 
     def test_help(self) -> None:
         """Help text shows expected content."""
-        result = runner.invoke(app, ["maintain", "wiki", "coverage", "--help"])
+        result = runner.invoke(app, ["labs", "wiki", "coverage", "--help"])
         assert result.exit_code == 0
         assert "coverage" in result.output.lower()

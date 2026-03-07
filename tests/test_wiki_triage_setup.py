@@ -63,7 +63,7 @@ class TestWikiTriageSkipBelow:
             conn.commit()
 
     def test_skip_below_skips_low_coherence(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "triage", "--skip-below", "0.05"])
+        result = runner.invoke(app, ["labs", "wiki", "triage", "--skip-below", "0.05"])
         assert result.exit_code == 0
         assert "Skipped" in result.output or "skipped" in result.output
 
@@ -72,7 +72,7 @@ class TestWikiTriageSkipBelow:
             assert _get_topic_status(conn, 81) == "active"
 
     def test_skip_below_ignores_already_skipped(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "triage", "--skip-below", "0.05"])
+        result = runner.invoke(app, ["labs", "wiki", "triage", "--skip-below", "0.05"])
         assert result.exit_code == 0
         # Topic 82 was already skipped — should not appear in output
         assert "Already Skipped" not in result.output
@@ -80,7 +80,7 @@ class TestWikiTriageSkipBelow:
     def test_skip_below_dry_run(self) -> None:
         result = runner.invoke(
             app,
-            ["maintain", "wiki", "triage", "--skip-below", "0.05", "--dry-run"],
+            ["labs", "wiki", "triage", "--skip-below", "0.05", "--dry-run"],
         )
         assert result.exit_code == 0
         assert "dry run" in result.output.lower()
@@ -89,7 +89,7 @@ class TestWikiTriageSkipBelow:
             assert _get_topic_status(conn, 80) == "active"
 
     def test_triage_requires_flags(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "triage"])
+        result = runner.invoke(app, ["labs", "wiki", "triage"])
         assert result.exit_code == 1
         assert "Specify" in result.output
 
@@ -98,7 +98,7 @@ class TestWikiTriageNoTopics:
     """Test triage with no saved topics."""
 
     def test_triage_no_topics(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "triage", "--skip-below", "0.05"])
+        result = runner.invoke(app, ["labs", "wiki", "triage", "--skip-below", "0.05"])
         assert result.exit_code == 1
         assert "No saved topics" in result.output
 
@@ -131,7 +131,7 @@ class TestWikiTriageAutoLabel:
         mock_has_claude.return_value = True
         mock_run.return_value = MagicMock(returncode=0, stdout="Better Topic Name", stderr="")
 
-        result = runner.invoke(app, ["maintain", "wiki", "triage", "--auto-label"])
+        result = runner.invoke(app, ["labs", "wiki", "triage", "--auto-label"])
         assert result.exit_code == 0
         assert "Better Topic Name" in result.output
 
@@ -141,7 +141,7 @@ class TestWikiTriageAutoLabel:
     @patch("emdx.services.wiki_clustering_service._has_claude_cli")
     def test_auto_label_fails_without_claude(self, mock_has_claude: MagicMock) -> None:
         mock_has_claude.return_value = False
-        result = runner.invoke(app, ["maintain", "wiki", "triage", "--auto-label"])
+        result = runner.invoke(app, ["labs", "wiki", "triage", "--auto-label"])
         assert result.exit_code == 1
         assert "Claude CLI not found" in result.output
 
@@ -181,7 +181,7 @@ class TestWikiTopicsAutoLabel:
         mock_auto_label.return_value = [cluster]
         mock_save.return_value = 1
 
-        result = runner.invoke(app, ["maintain", "wiki", "topics", "--save", "--auto-label"])
+        result = runner.invoke(app, ["labs", "wiki", "topics", "--save", "--auto-label"])
         assert result.exit_code == 0
         mock_auto_label.assert_called_once()
 
@@ -197,7 +197,7 @@ class TestWikiTopicsAutoLabel:
             resolution=0.005,
         )
 
-        result = runner.invoke(app, ["maintain", "wiki", "topics"])
+        result = runner.invoke(app, ["labs", "wiki", "topics"])
         assert result.exit_code == 0
 
 
@@ -340,7 +340,7 @@ class TestWikiSetup:
             resolution=0.005,
         )
 
-        result = runner.invoke(app, ["maintain", "wiki", "setup"])
+        result = runner.invoke(app, ["labs", "wiki", "setup"])
         assert result.exit_code == 0
         assert "Wiki Setup Complete" in result.output
         assert "Saved" in result.output
@@ -370,6 +370,6 @@ class TestWikiSetup:
             resolution=0.005,
         )
 
-        result = runner.invoke(app, ["maintain", "wiki", "setup"])
+        result = runner.invoke(app, ["labs", "wiki", "setup"])
         assert result.exit_code == 0
         assert "No topic clusters found" in result.output

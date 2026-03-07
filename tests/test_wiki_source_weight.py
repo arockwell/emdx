@@ -64,7 +64,7 @@ class TestWikiSourcesCommand:
             _cleanup(conn)
 
     def test_sources_lists_all_members(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "sources", "80"])
+        result = runner.invoke(app, ["labs", "wiki", "sources", "80"])
         assert result.exit_code == 0
         assert "Weight Test Topic" in result.output
         assert "#180" in result.output
@@ -72,7 +72,7 @@ class TestWikiSourcesCommand:
         assert "#182" in result.output
 
     def test_sources_shows_weight_and_status(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "sources", "80"])
+        result = runner.invoke(app, ["labs", "wiki", "sources", "80"])
         assert result.exit_code == 0
         assert "w=1.00" in result.output
         assert "included" in result.output
@@ -85,12 +85,12 @@ class TestWikiSourcesCommand:
             )
             conn.commit()
 
-        result = runner.invoke(app, ["maintain", "wiki", "sources", "80"])
+        result = runner.invoke(app, ["labs", "wiki", "sources", "80"])
         assert result.exit_code == 0
         assert "EXCLUDED" in result.output
 
     def test_sources_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "sources", "999"])
+        result = runner.invoke(app, ["labs", "wiki", "sources", "999"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
@@ -107,7 +107,7 @@ class TestWikiWeightCommand:
             _cleanup(conn)
 
     def test_weight_sets_relevance_score(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "weight", "80", "180", "0.5"])
+        result = runner.invoke(app, ["labs", "wiki", "weight", "80", "180", "0.5"])
         assert result.exit_code == 0
         assert "0.50" in result.output
 
@@ -120,23 +120,23 @@ class TestWikiWeightCommand:
         assert row[0] == pytest.approx(0.5)
 
     def test_weight_shows_old_and_new(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "weight", "80", "180", "0.3"])
+        result = runner.invoke(app, ["labs", "wiki", "weight", "80", "180", "0.3"])
         assert result.exit_code == 0
         assert "1.00" in result.output  # old weight
         assert "0.30" in result.output  # new weight
 
     def test_weight_rejects_invalid_range(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "weight", "80", "180", "1.5"])
+        result = runner.invoke(app, ["labs", "wiki", "weight", "80", "180", "1.5"])
         assert result.exit_code == 1
         assert "between 0.0 and 1.0" in result.output
 
     def test_weight_rejects_negative(self) -> None:
         # Negative floats are parsed as flags by click, so exit_code is 2
-        result = runner.invoke(app, ["maintain", "wiki", "weight", "80", "180", "-0.1"])
+        result = runner.invoke(app, ["labs", "wiki", "weight", "80", "180", "-0.1"])
         assert result.exit_code != 0
 
     def test_weight_nonexistent_member(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "weight", "80", "999", "0.5"])
+        result = runner.invoke(app, ["labs", "wiki", "weight", "80", "999", "0.5"])
         assert result.exit_code == 1
         assert "not a member" in result.output
 
@@ -153,7 +153,7 @@ class TestWikiExcludeCommand:
             _cleanup(conn)
 
     def test_exclude_sets_is_primary_to_zero(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "exclude", "80", "181"])
+        result = runner.invoke(app, ["labs", "wiki", "exclude", "80", "181"])
         assert result.exit_code == 0
         assert "Excluded" in result.output
 
@@ -166,7 +166,7 @@ class TestWikiExcludeCommand:
         assert row[0] == 0
 
     def test_exclude_nonexistent_member(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "exclude", "80", "999"])
+        result = runner.invoke(app, ["labs", "wiki", "exclude", "80", "999"])
         assert result.exit_code == 1
         assert "not a member" in result.output
 
@@ -188,7 +188,7 @@ class TestWikiIncludeCommand:
             _cleanup(conn)
 
     def test_include_sets_is_primary_to_one(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "include", "80", "182"])
+        result = runner.invoke(app, ["labs", "wiki", "include", "80", "182"])
         assert result.exit_code == 0
         assert "Included" in result.output
 
@@ -201,7 +201,7 @@ class TestWikiIncludeCommand:
         assert row[0] == 1
 
     def test_include_nonexistent_member(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "include", "80", "999"])
+        result = runner.invoke(app, ["labs", "wiki", "include", "80", "999"])
         assert result.exit_code == 1
         assert "not a member" in result.output
 

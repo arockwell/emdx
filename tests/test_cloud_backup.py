@@ -38,9 +38,9 @@ def runner() -> CliRunner:
 
 @pytest.fixture
 def cli_app() -> typer.Typer:
-    from emdx.commands.maintain import app
+    from emdx.commands.labs import labs_maintain_app
 
-    return app
+    return labs_maintain_app
 
 
 @pytest.fixture

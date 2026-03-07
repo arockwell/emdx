@@ -451,7 +451,7 @@ class TestGapsCLI:
 
     def test_gaps_help(self) -> None:
         """Gaps command shows help."""
-        result = runner.invoke(app, ["maintain", "gaps", "--help"])
+        result = runner.invoke(app, ["labs", "maintain", "gaps", "--help"])
         assert result.exit_code == 0
         plain = _strip_ansi(result.output)
         assert "gaps" in plain.lower()
@@ -459,7 +459,7 @@ class TestGapsCLI:
 
     def test_gaps_no_results(self) -> None:
         """No gaps shows friendly message."""
-        result = runner.invoke(app, ["maintain", "gaps"])
+        result = runner.invoke(app, ["labs", "maintain", "gaps"])
         assert result.exit_code == 0
         assert "No knowledge gaps detected" in result.output
 
@@ -468,7 +468,7 @@ class TestGapsCLI:
         with db.get_connection() as conn:
             _create_doc(conn, "Isolated Document")
 
-        result = runner.invoke(app, ["maintain", "gaps"])
+        result = runner.invoke(app, ["labs", "maintain", "gaps"])
         assert result.exit_code == 0
         assert "Isolated Document" in result.output
         assert "Orphan Documents" in result.output
@@ -479,13 +479,13 @@ class TestGapsCLI:
             for i in range(5):
                 _create_doc(conn, f"Orphan {i}")
 
-        result = runner.invoke(app, ["maintain", "gaps", "--top", "2"])
+        result = runner.invoke(app, ["labs", "maintain", "gaps", "--top", "2"])
         assert result.exit_code == 0
         assert "Orphan Documents" in result.output
 
     def test_gaps_json_output(self) -> None:
         """JSON output produces valid JSON."""
-        result = runner.invoke(app, ["maintain", "gaps", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "gaps", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "tag_gaps" in data
@@ -499,7 +499,7 @@ class TestGapsCLI:
         with db.get_connection() as conn:
             _create_doc(conn, "JSON Test Doc")
 
-        result = runner.invoke(app, ["maintain", "gaps", "--json"])
+        result = runner.invoke(app, ["labs", "maintain", "gaps", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert len(data["orphan_docs"]) >= 1
@@ -513,13 +513,13 @@ class TestGapsCLI:
             _add_tag(conn, doc_id, "semi-stale")
 
         # Default 60 days -- not stale
-        result = runner.invoke(app, ["maintain", "gaps"])
+        result = runner.invoke(app, ["labs", "maintain", "gaps"])
         assert "Stale Topics" not in result.output
 
         # 30-day threshold -- stale
         result = runner.invoke(
             app,
-            ["maintain", "gaps", "--stale-days", "30"],
+            ["labs", "maintain", "gaps", "--stale-days", "30"],
         )
         assert "Stale Topics" in result.output
         assert "semi-stale" in result.output

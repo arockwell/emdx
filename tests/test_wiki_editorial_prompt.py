@@ -89,7 +89,7 @@ class TestWikiPromptCommand:
             conn.commit()
 
     def test_set_editorial_prompt(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "prompt", "70", "Focus on security"])
+        result = runner.invoke(app, ["labs", "wiki", "prompt", "70", "Focus on security"])
         assert result.exit_code == 0
         assert "Set editorial prompt" in result.output
 
@@ -103,7 +103,7 @@ class TestWikiPromptCommand:
             conn.execute("UPDATE wiki_topics SET editorial_prompt = 'old prompt' WHERE id = 70")
             conn.commit()
 
-        result = runner.invoke(app, ["maintain", "wiki", "prompt", "70", "--clear"])
+        result = runner.invoke(app, ["labs", "wiki", "prompt", "70", "--clear"])
         assert result.exit_code == 0
         assert "Cleared editorial prompt" in result.output
 
@@ -116,27 +116,27 @@ class TestWikiPromptCommand:
             conn.execute("UPDATE wiki_topics SET editorial_prompt = 'my prompt' WHERE id = 70")
             conn.commit()
 
-        result = runner.invoke(app, ["maintain", "wiki", "prompt", "70"])
+        result = runner.invoke(app, ["labs", "wiki", "prompt", "70"])
         assert result.exit_code == 0
         assert "my prompt" in result.output
 
     def test_show_no_prompt(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "prompt", "70"])
+        result = runner.invoke(app, ["labs", "wiki", "prompt", "70"])
         assert result.exit_code == 0
         assert "no editorial prompt set" in result.output
 
     def test_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "prompt", "999", "some text"])
+        result = runner.invoke(app, ["labs", "wiki", "prompt", "999", "some text"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
     def test_clear_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "prompt", "999", "--clear"])
+        result = runner.invoke(app, ["labs", "wiki", "prompt", "999", "--clear"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
     def test_clear_with_text_errors(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "prompt", "70", "text", "--clear"])
+        result = runner.invoke(app, ["labs", "wiki", "prompt", "70", "text", "--clear"])
         assert result.exit_code == 1
         assert "Cannot use --clear" in result.output
 
@@ -266,12 +266,12 @@ class TestWikiTopicsVerbose:
             conn.commit()
 
     def test_verbose_shows_editorial_prompt_column(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "topics", "--verbose"])
+        result = runner.invoke(app, ["labs", "wiki", "topics", "--verbose"])
         assert result.exit_code == 0
         assert "Editorial Prompt" in result.output
 
     def test_verbose_shows_prompt_text(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "topics", "--verbose"])
+        result = runner.invoke(app, ["labs", "wiki", "topics", "--verbose"])
         assert result.exit_code == 0
         assert "Be concise" in result.output
 
@@ -279,6 +279,6 @@ class TestWikiTopicsVerbose:
         with db.get_connection() as conn:
             conn.execute("UPDATE wiki_topics SET editorial_prompt = NULL WHERE id = 85")
             conn.commit()
-        result = runner.invoke(app, ["maintain", "wiki", "topics", "--verbose"])
+        result = runner.invoke(app, ["labs", "wiki", "topics", "--verbose"])
         assert result.exit_code == 0
         assert "-" in result.output

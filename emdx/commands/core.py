@@ -4,7 +4,6 @@ Core CRUD operations for emdx
 
 from __future__ import annotations
 
-import contextlib
 import json
 import os
 import subprocess
@@ -12,10 +11,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from emdx.services.ask_service import AskMode
+from typing import Any
 
 import typer
 from rich.panel import Panel
@@ -395,70 +391,17 @@ def find(
     similar: int | None = typer.Option(
         None, "--similar", help="Find documents similar to this doc ID"
     ),
-    ask: bool = typer.Option(
-        False, "--ask", help="Answer the query using RAG (retrieves context + LLM)"
-    ),
-    think: bool = typer.Option(
-        False,
-        "--think",
-        help="Deliberative search: build a position paper with arguments for/against",
-    ),
-    challenge: bool = typer.Option(
-        False,
-        "--challenge",
-        help="Devil's advocate: find evidence AGAINST the queried position (use with --think)",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        help="Socratic debugger: diagnostic questions from your bug history",
-    ),
-    cite: bool = typer.Option(
-        False,
-        "--cite",
-        help="Add inline [#ID] citations using chunk-level retrieval",
-    ),
     context: bool = typer.Option(
         False, "--context", help="Output retrieved context as plain text (for piping to claude)"
-    ),
-    machine: bool = typer.Option(
-        False,
-        "--machine",
-        help="Machine-readable output for --ask (answer on stdout, metadata on stderr)",
     ),
     recent_days: int | None = typer.Option(
         None,
         "--recent-days",
-        help="Filter --ask/--context to docs created in the last N days",
+        help="Filter --context to docs created in the last N days",
     ),
     wiki: bool = typer.Option(False, "--wiki", help="Show only wiki articles (doc_type='wiki')"),
     all_types: bool = typer.Option(
         False, "--all-types", help="Show all document types (user, wiki, etc.)"
-    ),
-    wander: bool = typer.Option(
-        False,
-        "--wander",
-        help="Serendipity mode: surface surprising but related documents",
-    ),
-    watch: bool = typer.Option(
-        False,
-        "--watch",
-        help="Save query as a standing query (alerts on new matches)",
-    ),
-    watch_list: bool = typer.Option(
-        False,
-        "--watch-list",
-        help="List all standing queries",
-    ),
-    watch_check: bool = typer.Option(
-        False,
-        "--watch-check",
-        help="Check all standing queries for new matches",
-    ),
-    watch_remove: int | None = typer.Option(
-        None,
-        "--watch-remove",
-        help="Remove a standing query by ID",
     ),
 ) -> None:
     """Search the knowledge base with full-text search.
@@ -471,14 +414,10 @@ def find(
     Use --extract to see the matching paragraph/section instead of the full document.
     Use --all to list all documents, --recent N to show recently accessed docs.
     Use --similar N to find documents similar to doc #N.
-    Use --ask to get an AI-powered answer to your question.
-    Use --think to get a deliberative position paper with arguments for/against.
-    Use --debug to get Socratic diagnostic questions from your bug history.
-    Use --cite to add inline citations to any AI-powered answer.
     Use --context to retrieve docs as plain text for piping to claude.
-    Use --machine to get pipe-friendly output (answer on stdout, metadata on stderr).
-    Use --recent-days N to scope --ask/--context to docs from the last N days.
-    Use --wander for serendipity: surface surprising but related documents.
+    Use --recent-days N to scope --context to docs from the last N days.
+
+    For AI-powered search, use: emdx labs ask, emdx labs wander, emdx labs watch.
 
     Examples:
         emdx find "authentication patterns"              # hybrid search
@@ -487,81 +426,9 @@ def find(
         emdx find --all                                  # list all documents
         emdx find --recent 10                            # recently accessed
         emdx find --similar 42                           # docs similar to #42
-        emdx find --ask "What's our caching strategy?"   # RAG Q&A
-        emdx find --ask --tags "gameplan" "strategy?"    # scoped to tagged docs
-        emdx find --ask --recent-days 7 "what changed?"  # last 7 days only
-        emdx find --ask --machine "summarize auth"       # pipe-friendly output
-        emdx find --think "rewrite in Rust"              # position paper
-        emdx find --think --challenge "rewrite in Rust"  # devil's advocate
-        emdx find --debug "TUI freezes on click"         # Socratic debugger
-        emdx find --ask --cite "how does auth work?"     # with citations
         emdx find --context "auth" | claude              # pipe context to claude
-        emdx find --wander                               # random serendipity
-        emdx find --wander "machine learning"            # serendipity from topic
-        emdx find --watch "deployment"                   # save as standing query
-        emdx find --watch-list                           # list standing queries
-        emdx find --watch-check                          # check for new matches
-        emdx find --watch-remove 3                       # remove standing query #3
     """
     search_query = " ".join(query) if query else ""
-
-    # ── Handle --watch sub-commands ──────────────────────────────────
-    if watch_list or watch_check or watch_remove is not None or watch:
-        from emdx.commands._watch import (
-            check_standing_queries,
-            create_standing_query,
-            display_check_results,
-            display_standing_queries_list,
-            remove_standing_query,
-        )
-
-        if watch_list:
-            display_standing_queries_list(json_output=json_output)
-            return
-
-        if watch_check:
-            matches = check_standing_queries()
-            display_check_results(matches, json_output=json_output)
-            return
-
-        if watch_remove is not None:
-            removed = remove_standing_query(watch_remove)
-            if removed:
-                if json_output:
-                    print(json.dumps({"removed": watch_remove}))
-                else:
-                    print(f"Removed standing query #{watch_remove}")
-            else:
-                if json_output:
-                    print(json.dumps({"error": f"No standing query #{watch_remove}"}))
-                else:
-                    console.print(f"[red]Error: No standing query #{watch_remove}[/red]")
-                raise typer.Exit(1)
-            return
-
-        if watch:
-            if not search_query and not tags:
-                console.print("[red]Error: --watch requires a query or --tags[/red]")
-                raise typer.Exit(1)
-            sq_id = create_standing_query(
-                query=search_query,
-                tags=tags,
-                project=project,
-            )
-            if json_output:
-                print(
-                    json.dumps(
-                        {
-                            "id": sq_id,
-                            "query": search_query,
-                            "tags": tags,
-                            "project": project,
-                        }
-                    )
-                )
-            else:
-                print(f"Saved standing query #{sq_id}: {search_query or tags}")
-            return
 
     # Record search event (non-critical, best-effort)
     if search_query:
@@ -592,33 +459,6 @@ def find(
         # Handle --similar: find documents similar to a given one
         if similar is not None:
             _find_similar(similar, limit, json_output)
-            return
-
-        # Handle --wander: serendipity search
-        if wander:
-            _find_wander(search_query, limit, project, json_output)
-            return
-
-        # Handle AI-powered modes: --ask, --think, --debug
-        ask_mode = _resolve_ask_mode(ask, think, challenge, debug, cite)
-        if ask_mode is not None:
-            if not search_query:
-                from ..services.ask_service import AskMode
-
-                flag = "ask" if ask_mode == AskMode.ANSWER else ask_mode.value
-                console.print(f"[red]Error: --{flag} requires a question[/red]")
-                raise typer.Exit(1)
-            _find_ask(
-                search_query,
-                limit,
-                project,
-                tags,
-                recent_days=recent_days,
-                mode=ask_mode,
-                cite=cite,
-                json_output=json_output,
-                machine=machine,
-            )
             return
 
         # Handle --context: retrieve context for piping
@@ -952,365 +792,6 @@ def _find_similar(
     console.print(table)
 
 
-def _find_wander(
-    search_query: str,
-    limit: int,
-    project: str | None,
-    json_output: bool,
-) -> None:
-    """Serendipity search using the Goldilocks similarity band.
-
-    Surfaces documents in the 0.2-0.4 cosine similarity range --
-    related enough to be interesting, different enough to surprise.
-    """
-    import random
-
-    try:
-        from ..services.embedding_service import EmbeddingService
-    except ImportError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from None
-
-    from ..database import db
-
-    service = EmbeddingService()
-
-    # Check how many docs have embeddings
-    stats = service.stats()
-    if stats.indexed_documents < 10:
-        msg = (
-            f"Serendipity works better with 50+ documents. "
-            f"You have {stats.indexed_documents}. "
-            f"Try `emdx maintain index` first."
-        )
-        if json_output:
-            print(json.dumps({"error": msg}))
-        else:
-            console.print(f"[yellow]{msg}[/yellow]")
-        return
-
-    # Get the seed embedding
-    seed_doc_id: int | None = None
-    if search_query:
-        # Use query text as seed
-        seed_embedding = service.embed_text(search_query)
-    else:
-        # Pick a random recently-accessed document as seed
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            query_sql = (
-                "SELECT d.id FROM documents d "
-                "JOIN document_embeddings e "
-                "ON d.id = e.document_id "
-                "WHERE d.is_deleted = 0 AND e.model_name = ? "
-                "ORDER BY d.accessed_at DESC NULLS LAST "
-                "LIMIT 20"
-            )
-            params: list[str | int] = [service.MODEL_NAME]
-            cursor.execute(query_sql, params)
-            recent_ids = [row[0] for row in cursor.fetchall()]
-
-        if not recent_ids:
-            msg = "No documents with embeddings found."
-            if json_output:
-                print(json.dumps({"error": msg}))
-            else:
-                console.print(f"[yellow]{msg}[/yellow]")
-            return
-
-        chosen_id: int = random.choice(recent_ids)
-        seed_doc_id = chosen_id
-        seed_embedding = service.embed_document(chosen_id)
-
-    # Load all embeddings and find docs in the Goldilocks band
-    try:
-        import numpy as np
-    except ImportError:
-        console.print(
-            "[red]numpy is required for --wander. Install with: pip install 'emdx[ai]'[/red]"
-        )
-        raise typer.Exit(1) from None
-
-    with db.get_connection() as conn:
-        cursor = conn.cursor()
-        base_sql = (
-            "SELECT e.document_id, e.embedding, d.title, "
-            "d.project, SUBSTR(d.content, 1, 200) as snippet "
-            "FROM document_embeddings e "
-            "JOIN documents d ON e.document_id = d.id "
-            "WHERE e.model_name = ? AND d.is_deleted = 0"
-        )
-        sql_params: list[str | int] = [service.MODEL_NAME]
-
-        if project:
-            base_sql += " AND d.project = ?"
-            sql_params.append(project)
-
-        cursor.execute(base_sql, sql_params)
-        rows = cursor.fetchall()
-
-    # Compute similarities and filter to Goldilocks band
-    goldilocks_min = 0.2
-    goldilocks_max = 0.4
-    candidates = []
-    for doc_id, emb_bytes, title, doc_project, snippet in rows:
-        # Skip the seed document
-        if doc_id == seed_doc_id:
-            continue
-
-        doc_embedding = np.frombuffer(emb_bytes, dtype=np.float32)
-        similarity = float(np.dot(seed_embedding, doc_embedding))
-
-        if goldilocks_min <= similarity <= goldilocks_max:
-            clean_snippet = ""
-            if snippet:
-                clean_snippet = snippet.replace("\n", " ")[:100]
-            candidates.append(
-                {
-                    "id": doc_id,
-                    "title": title,
-                    "project": doc_project,
-                    "similarity": round(similarity, 3),
-                    "snippet": clean_snippet,
-                }
-            )
-
-    if not candidates:
-        msg = (
-            "No surprising connections found. "
-            "Your KB might be too focused -- "
-            "try saving docs on different topics!"
-        )
-        if json_output:
-            print(json.dumps({"error": msg}))
-        else:
-            console.print(f"[yellow]{msg}[/yellow]")
-        return
-
-    # Sort by similarity descending (prefer more-related end)
-    candidates.sort(key=lambda x: x["similarity"], reverse=True)
-
-    # Cap results
-    effective_limit = min(limit, 5)
-    results = candidates[:effective_limit]
-
-    if json_output:
-        output = {
-            "seed": search_query if search_query else f"doc #{seed_doc_id}",
-            "results": results,
-        }
-        print(json.dumps(output, indent=2))
-        return
-
-    # Human-readable output
-    seed_desc = f"'{search_query}'" if search_query else f"doc #{seed_doc_id}"
-    console.print(
-        f"\n[bold]Wandering from {seed_desc} ({len(results)} surprising connections):[/bold]\n"
-    )
-    for i, r in enumerate(results, 1):
-        console.print(f"[bold cyan]#{r['id']}[/bold cyan] [bold]{r['title']}[/bold]")
-        meta = []
-        if r["project"]:
-            meta.append(f"[green]{r['project']}[/green]")
-        meta.append(f"[dim]similarity: {r['similarity']:.3f}[/dim]")
-        console.print(" | ".join(meta))
-        if r["snippet"]:
-            console.print(f"[dim]{r['snippet']}[/dim]")
-        if i < len(results):
-            console.print()
-
-    console.print("\n[dim]Use 'emdx view <id>' to explore a document[/dim]")
-
-
-def _resolve_ask_mode(
-    ask: bool,
-    think: bool,
-    challenge: bool,
-    debug: bool,
-    cite: bool,
-) -> AskMode | None:
-    """Resolve CLI flags to an AskMode, or None if no AI mode requested.
-
-    Validates mutual exclusivity of --ask, --think, --debug.
-    --challenge is only valid with --think.
-    --cite without --ask/--think/--debug auto-enables --ask.
-    """
-    from ..services.ask_service import AskMode
-
-    active_modes = sum([ask, think, debug])
-    if active_modes > 1:
-        console.print("[red]Error: --ask, --think, and --debug are mutually exclusive[/red]")
-        raise typer.Exit(1)
-
-    if challenge and not think:
-        console.print("[red]Error: --challenge requires --think[/red]")
-        raise typer.Exit(1)
-
-    if think and challenge:
-        return AskMode.CHALLENGE
-    if think:
-        return AskMode.THINK
-    if debug:
-        return AskMode.DEBUG
-    if ask:
-        return AskMode.ANSWER
-    if cite:
-        # --cite without explicit mode auto-enables --ask
-        return AskMode.ANSWER
-    return None
-
-
-def _find_ask(
-    question: str,
-    limit: int,
-    project: str | None,
-    tags: str | None,
-    recent_days: int | None = None,
-    mode: AskMode | None = None,
-    cite: bool = False,
-    json_output: bool = False,
-    machine: bool = False,
-) -> None:
-    """Answer a question using RAG (retrieves context + LLM)."""
-    import sys
-
-    from ..services.ask_service import AskMode, AskService
-
-    if mode is None:
-        mode = AskMode.ANSWER
-
-    mode_labels = {
-        AskMode.ANSWER: "Thinking",
-        AskMode.THINK: "Building position paper",
-        AskMode.CHALLENGE: "Finding counterarguments",
-        AskMode.DEBUG: "Analyzing error patterns",
-    }
-    spinner_label = mode_labels.get(mode, "Thinking")
-
-    service = AskService()
-    try:
-        # Suppress spinner in JSON/machine mode to keep stdout clean
-        status_ctx = (
-            contextlib.nullcontext()
-            if (json_output or machine)
-            else console.status(f"[bold blue]{spinner_label}...", spinner="dots")
-        )
-        with status_ctx:
-            result = service.ask(
-                question,
-                limit=limit,
-                project=project,
-                tags=tags,
-                recent_days=recent_days,
-                mode=mode,
-                cite=cite,
-            )
-    except ImportError as e:
-        console.print(f"[red]{e}[/red]")
-        raise typer.Exit(1) from None
-
-    # Machine-readable output mode (--machine)
-    if machine:
-        # Answer on stdout (clean, no markup)
-        print(f"ANSWER: {result.text}")
-        print()
-        print("SOURCES:")
-        if result.source_titles:
-            for doc_id, title in result.source_titles:
-                print(f'#{doc_id} "{title}"')
-        else:
-            print("(none)")
-        print()
-        print(f"CONFIDENCE: {result.confidence}")
-
-        # Metadata on stderr
-        print(
-            f"method={result.method} "
-            f"context_size={result.context_size} "
-            f"sources={len(result.sources)}",
-            file=sys.stderr,
-        )
-        return
-
-    # JSON output mode
-    if json_output:
-        output: dict[str, object] = {
-            "mode": mode.value,
-            "query": question,
-            "answer": result.text,
-            "confidence": result.confidence,
-            "method": result.method,
-            "context_size": result.context_size,
-            "sources": [{"id": doc_id, "title": title} for doc_id, title in result.source_titles],
-        }
-        if result.confidence_signals:
-            signals = result.confidence_signals
-            output["confidence_score"] = round(signals.composite_score, 3)
-            output["confidence_signals"] = {
-                "retrieval_score_mean": round(signals.retrieval_score_mean, 3),
-                "retrieval_score_spread": round(signals.retrieval_score_spread, 3),
-                "source_count": signals.source_count,
-                "query_term_coverage": round(signals.query_term_coverage, 3),
-                "topic_coherence": round(signals.topic_coherence, 3),
-                "recency_score": round(signals.recency_score, 3),
-            }
-        if cite and result.cited_ids:
-            output["cited_ids"] = result.cited_ids
-        print(json.dumps(output, indent=2))
-        return
-
-    # Rich output mode
-    from rich.panel import Panel
-
-    confidence_colors = {
-        "high": "green",
-        "medium": "yellow",
-        "low": "red",
-        "insufficient": "red",
-    }
-    confidence_color = confidence_colors.get(result.confidence, "dim")
-
-    # Build panel title based on mode
-    mode_title = {
-        AskMode.ANSWER: "Answer",
-        AskMode.THINK: "Position Paper",
-        AskMode.CHALLENGE: "Devil's Advocate",
-        AskMode.DEBUG: "Debugging Analysis",
-    }.get(mode, "Answer")
-    panel_title = f"{mode_title} [{result.confidence.upper()} confidence]"
-
-    console.print()
-    console.print(
-        Panel(
-            result.text,
-            title=panel_title,
-            border_style=confidence_color,
-        )
-    )
-
-    # Show confidence details if signals are available
-    if result.confidence_signals:
-        signals = result.confidence_signals
-        console.print()
-        console.print(
-            f"[dim]Confidence: {signals.composite_score:.0%} "
-            f"({signals.source_count} sources, "
-            f"coverage: {signals.query_term_coverage:.0%}, "
-            f"coherence: {signals.topic_coherence:.0%})[/dim]"
-        )
-
-    # Show cited IDs if cite mode
-    if cite and result.cited_ids:
-        console.print()
-        cited_strs = [f"#{cid}" for cid in result.cited_ids]
-        console.print(f"[dim]Cited: {', '.join(cited_strs)}[/dim]")
-
-    if result.source_titles:
-        console.print()
-        source_strs = [f'#{doc_id} "{title}"' for doc_id, title in result.source_titles]
-        console.print(f"[dim]Sources: {', '.join(source_strs)}[/dim]")
-
-
 def _find_context(
     question: str,
     limit: int,
@@ -1403,7 +884,7 @@ def _find_keyword_search(
 
             # Combine: only show documents that match both criteria
             results: list[dict[str, Any]] = [
-                dict(doc) for doc in search_results if doc["id"] in tag_doc_ids
+                dict(doc) for doc in search_results if doc.id in tag_doc_ids
             ][:limit]
 
             if not results:

@@ -596,72 +596,62 @@ class TestResolveModeFlags:
 
     def test_ask_returns_answer_mode(self) -> None:
         """--ask should return ANSWER mode."""
-        from emdx.commands.core import _resolve_ask_mode
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         result = _resolve_ask_mode(ask=True, think=False, challenge=False, debug=False, cite=False)
         assert result == AskMode.ANSWER
 
     def test_think_returns_think_mode(self) -> None:
         """--think should return THINK mode."""
-        from emdx.commands.core import _resolve_ask_mode
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         result = _resolve_ask_mode(ask=False, think=True, challenge=False, debug=False, cite=False)
         assert result == AskMode.THINK
 
     def test_think_challenge_returns_challenge_mode(self) -> None:
         """--think --challenge should return CHALLENGE mode."""
-        from emdx.commands.core import _resolve_ask_mode
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         result = _resolve_ask_mode(ask=False, think=True, challenge=True, debug=False, cite=False)
         assert result == AskMode.CHALLENGE
 
     def test_debug_returns_debug_mode(self) -> None:
         """--debug should return DEBUG mode."""
-        from emdx.commands.core import _resolve_ask_mode
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         result = _resolve_ask_mode(ask=False, think=False, challenge=False, debug=True, cite=False)
         assert result == AskMode.DEBUG
 
     def test_cite_alone_returns_answer_mode(self) -> None:
         """--cite alone should auto-enable --ask (ANSWER)."""
-        from emdx.commands.core import _resolve_ask_mode
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         result = _resolve_ask_mode(ask=False, think=False, challenge=False, debug=False, cite=True)
         assert result == AskMode.ANSWER
 
-    def test_no_flags_returns_none(self) -> None:
-        """No AI flags should return None."""
-        from emdx.commands.core import _resolve_ask_mode
+    def test_no_flags_returns_answer(self) -> None:
+        """No AI flags should return ANSWER (default for labs ask)."""
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         result = _resolve_ask_mode(ask=False, think=False, challenge=False, debug=False, cite=False)
-        assert result is None
+        assert result == AskMode.ANSWER
 
-    def test_mutual_exclusion_ask_think(self) -> None:
-        """--ask and --think together should raise Exit."""
+    def test_mutual_exclusion_think_debug(self) -> None:
+        """--think and --debug together should raise Exit."""
         import pytest
         from click.exceptions import Exit
 
-        from emdx.commands.core import _resolve_ask_mode
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         with pytest.raises(Exit):
-            _resolve_ask_mode(ask=True, think=True, challenge=False, debug=False, cite=False)
-
-    def test_mutual_exclusion_ask_debug(self) -> None:
-        """--ask and --debug together should raise Exit."""
-        import pytest
-        from click.exceptions import Exit
-
-        from emdx.commands.core import _resolve_ask_mode
-
-        with pytest.raises(Exit):
-            _resolve_ask_mode(ask=True, think=False, challenge=False, debug=True, cite=False)
+            _resolve_ask_mode(ask=True, think=True, challenge=False, debug=True, cite=False)
 
     def test_challenge_without_think_raises(self) -> None:
         """--challenge without --think should raise Exit."""
         import pytest
         from click.exceptions import Exit
 
-        from emdx.commands.core import _resolve_ask_mode
+        from emdx.commands.labs_ask import _resolve_ask_mode
 
         with pytest.raises(Exit):
             _resolve_ask_mode(ask=False, think=False, challenge=True, debug=False, cite=False)
@@ -703,7 +693,7 @@ class TestFindAskJsonOutput:
         """--json should produce valid JSON with expected keys."""
         import json
 
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer()
 
@@ -739,7 +729,7 @@ class TestFindAskJsonOutput:
         """--json should include confidence score and signal breakdown."""
         import json
 
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer()
 
@@ -772,7 +762,7 @@ class TestFindAskJsonOutput:
         """--think --json should output mode='think'."""
         import json
 
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer(mode=AskMode.THINK)
 
@@ -799,7 +789,7 @@ class TestFindAskJsonOutput:
         """--debug --json should output mode='debug'."""
         import json
 
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer(mode=AskMode.DEBUG)
 
@@ -826,7 +816,7 @@ class TestFindAskJsonOutput:
         """--think --challenge --json should output mode='challenge'."""
         import json
 
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer(mode=AskMode.CHALLENGE)
 
@@ -853,7 +843,7 @@ class TestFindAskJsonOutput:
         """--cite --json should include cited_ids."""
         import json
 
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer(cite=True)
 
@@ -881,7 +871,7 @@ class TestFindAskJsonOutput:
         """Without --cite, JSON should not include cited_ids."""
         import json
 
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer(cite=False)
 
@@ -905,7 +895,7 @@ class TestFindAskJsonOutput:
 
     def test_json_output_no_console_print(self) -> None:
         """--json should not use console.print (no Rich markup)."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = self._make_answer()
 

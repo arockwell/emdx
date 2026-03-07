@@ -49,7 +49,7 @@ class TestAskTagFiltering:
 
     def test_tags_passed_to_ask_service(self) -> None:
         """--tags should be forwarded to AskService.ask()."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 
@@ -116,7 +116,7 @@ class TestAskRecentDaysFiltering:
 
     def test_recent_days_passed_to_ask_service(self) -> None:
         """--recent-days should be forwarded to AskService.ask()."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 
@@ -188,7 +188,7 @@ class TestMachineOutput:
 
     def test_machine_output_format(self) -> None:
         """--machine should produce structured plain text output."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer(confidence="high", source_count=3)
 
@@ -222,7 +222,7 @@ class TestMachineOutput:
 
     def test_machine_output_metadata_on_stderr(self) -> None:
         """--machine should write metadata to stderr."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 
@@ -253,7 +253,7 @@ class TestMachineOutput:
 
     def test_machine_no_sources(self) -> None:
         """--machine with no sources should show '(none)'."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer(confidence="insufficient", source_count=0)
 
@@ -280,7 +280,7 @@ class TestMachineOutput:
 
     def test_machine_does_not_produce_json(self) -> None:
         """--machine should not produce JSON output."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 
@@ -315,7 +315,7 @@ class TestMachineOutput:
 
     def test_machine_suppresses_spinner(self) -> None:
         """--machine should not show Rich spinner."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 
@@ -388,7 +388,7 @@ class TestConfidenceLevels:
 
     def test_machine_output_shows_confidence(self) -> None:
         """--machine output should include confidence level."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         for level in ("high", "medium", "low", "insufficient"):
             answer = _make_answer(confidence=level)
@@ -423,7 +423,7 @@ class TestMachineWithFilters:
 
     def test_machine_with_tags(self) -> None:
         """--machine --tags should pass tags to service and format output."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 
@@ -446,7 +446,7 @@ class TestMachineWithFilters:
 
     def test_machine_with_recent_days(self) -> None:
         """--machine --recent-days should pass recent_days to service."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 
@@ -470,7 +470,7 @@ class TestMachineWithFilters:
 
     def test_machine_with_all_filters(self) -> None:
         """All filters combined should work with --machine."""
-        from emdx.commands.core import _find_ask
+        from emdx.commands.labs_ask import _run_ask as _find_ask
 
         answer = _make_answer()
 

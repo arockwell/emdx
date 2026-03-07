@@ -102,7 +102,7 @@ class TestWikiMergeCommand:
             _cleanup_docs(conn, [801, 802, 803, 804])
 
     def test_merge_combines_members(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "80", "81"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "80", "81"])
         assert result.exit_code == 0
         assert "Merged topic 81" in result.output
         assert "Auth" in result.output
@@ -117,7 +117,7 @@ class TestWikiMergeCommand:
             assert doc_ids == [801, 802, 803, 804]
 
     def test_merge_updates_label_and_slug(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "80", "81"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "80", "81"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:
@@ -128,7 +128,7 @@ class TestWikiMergeCommand:
             assert row[1] == "auth-security"
 
     def test_merge_deletes_source_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "80", "81"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "80", "81"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:
@@ -136,23 +136,23 @@ class TestWikiMergeCommand:
             assert row is None
 
     def test_merge_shows_member_counts(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "80", "81"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "80", "81"])
         assert result.exit_code == 0
         assert "Members moved: 2" in result.output
         assert "Total members: 4" in result.output
 
     def test_merge_nonexistent_target(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "999", "81"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "999", "81"])
         assert result.exit_code == 1
         assert "999 not found" in result.output
 
     def test_merge_nonexistent_source(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "80", "999"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "80", "999"])
         assert result.exit_code == 1
         assert "999 not found" in result.output
 
     def test_merge_self(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "80", "80"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "80", "80"])
         assert result.exit_code == 1
         assert "cannot merge a topic with itself" in result.output
 
@@ -171,7 +171,7 @@ class TestWikiMergeWithOverlap:
             _cleanup_docs(conn, [810, 811, 812])
 
     def test_merge_skips_duplicate_members(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "82", "83"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "82", "83"])
         assert result.exit_code == 0
         # Doc 811 was in both — only 812 should be moved
         assert "Members moved: 1" in result.output
@@ -206,7 +206,7 @@ class TestWikiMergeWithArticle:
             _cleanup_docs(conn, [820, 821])
 
     def test_merge_deletes_source_article(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "84", "85"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "84", "85"])
         assert result.exit_code == 0
         assert "Deleted wiki article" in result.output
 
@@ -220,7 +220,7 @@ class TestWikiMergeWithArticle:
             assert doc[0] == 1
 
     def test_merge_marks_target_article_stale(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "merge", "84", "85"])
+        result = runner.invoke(app, ["labs", "wiki", "merge", "84", "85"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:
@@ -273,7 +273,7 @@ class TestWikiSplitCommand:
             _cleanup_docs(conn, [830, 831, 832, 833])
 
     def test_split_moves_matching_docs(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "split", "86", "--entity", "OAuth"])
+        result = runner.invoke(app, ["labs", "wiki", "split", "86", "--entity", "OAuth"])
         assert result.exit_code == 0
         assert "Split topic 86" in result.output
         assert "Moved 2 doc(s)" in result.output
@@ -282,7 +282,7 @@ class TestWikiSplitCommand:
         assert "Remaining in original: 2" in result.output
 
     def test_split_creates_new_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "split", "86", "--entity", "OAuth"])
+        result = runner.invoke(app, ["labs", "wiki", "split", "86", "--entity", "OAuth"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:
@@ -293,7 +293,7 @@ class TestWikiSplitCommand:
             assert new_topic[2] == "oauth"
 
     def test_split_moves_members_correctly(self) -> None:
-        runner.invoke(app, ["maintain", "wiki", "split", "86", "--entity", "OAuth"])
+        runner.invoke(app, ["labs", "wiki", "split", "86", "--entity", "OAuth"])
 
         with db.get_connection() as conn:
             # Original topic should retain non-OAuth docs
@@ -317,17 +317,17 @@ class TestWikiSplitCommand:
             assert new_doc_ids == [830, 832]
 
     def test_split_case_insensitive(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "split", "86", "--entity", "oauth"])
+        result = runner.invoke(app, ["labs", "wiki", "split", "86", "--entity", "oauth"])
         assert result.exit_code == 0
         assert "Moved 2 doc(s)" in result.output
 
     def test_split_nonexistent_topic(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "split", "999", "--entity", "OAuth"])
+        result = runner.invoke(app, ["labs", "wiki", "split", "999", "--entity", "OAuth"])
         assert result.exit_code == 1
         assert "999 not found" in result.output
 
     def test_split_no_matching_docs(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "split", "86", "--entity", "GraphQL"])
+        result = runner.invoke(app, ["labs", "wiki", "split", "86", "--entity", "GraphQL"])
         assert result.exit_code == 1
         assert "No documents" in result.output
 
@@ -352,7 +352,7 @@ class TestWikiSplitCommand:
             )
 
         try:
-            result = runner.invoke(app, ["maintain", "wiki", "split", "87", "--entity", "OAuth"])
+            result = runner.invoke(app, ["labs", "wiki", "split", "87", "--entity", "OAuth"])
             assert result.exit_code == 1
             assert "nothing would remain" in result.output
         finally:
@@ -391,7 +391,7 @@ class TestWikiSplitMarksArticleStale:
             _cleanup_docs(conn, [850, 851])
 
     def test_split_marks_original_article_stale(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "split", "88", "--entity", "OAuth"])
+        result = runner.invoke(app, ["labs", "wiki", "split", "88", "--entity", "OAuth"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:
@@ -435,7 +435,7 @@ class TestWikiSplitSlugUniqueness:
             _cleanup_docs(conn, [860, 861])
 
     def test_split_appends_suffix_on_slug_conflict(self) -> None:
-        result = runner.invoke(app, ["maintain", "wiki", "split", "89", "--entity", "OAuth"])
+        result = runner.invoke(app, ["labs", "wiki", "split", "89", "--entity", "OAuth"])
         assert result.exit_code == 0
 
         with db.get_connection() as conn:

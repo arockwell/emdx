@@ -199,15 +199,26 @@ def mock_task_data() -> Generator[MockDict, None, None]:
     with (
         patch(f"{_MOCK_BASE}.list_tasks") as m_list,
         patch(f"{_MOCK_BASE}.list_epics", return_value=[]) as m_epics,
+        patch(f"{_MOCK_BASE}.count_tasks_by_status") as m_counts,
         patch(f"{_MOCK_BASE}.get_dependencies", return_value=[]) as m_deps,
         patch(f"{_MOCK_BASE}.get_dependents", return_value=[]) as m_depts,
         patch(f"{_MOCK_BASE}.get_task_log", return_value=[]) as m_log,
     ):
         m_list.return_value = []
         m_list.side_effect = _make_list_tasks_side_effect(m_list)
+
+        def _count_side_effect() -> dict[str, int]:
+            counts: dict[str, int] = {}
+            for t in m_list.return_value:
+                s = t["status"]
+                counts[s] = counts.get(s, 0) + 1
+            return counts
+
+        m_counts.side_effect = _count_side_effect
         yield {
             "list_tasks": m_list,
             "list_epics": m_epics,
+            "count_tasks_by_status": m_counts,
             "get_dependencies": m_deps,
             "get_dependents": m_depts,
             "get_task_log": m_log,
@@ -729,7 +740,7 @@ class TestScreenSwitching:
 
     @pytest.mark.asyncio
     async def test_help_bar_shows_key_hints(self, mock_task_data: MockDict) -> None:
-        """TaskBrowser help bar shows essential keybinding hints."""
+        """TaskBrowser help bar shows task-context keybinding hints."""
         from emdx.ui.task_browser import TaskBrowser
 
         class HelpBarApp(App[None]):
@@ -741,14 +752,9 @@ class TestScreenSwitching:
             await pilot.pause()
             bar = app.query_one("#task-help-bar", Static)
             content = str(bar.content)
-            assert "1" in content
-            assert "2" in content
-            assert "Docs" in content
-            assert "Tasks" in content
             assert "Done" in content
             assert "Active" in content
             assert "Blocked" in content
-            assert "Reopen" in content
             assert "Help" in content
             assert "Filter" in content
 
@@ -1163,8 +1169,8 @@ class TestStatusFilter:
     """Tests for quick status filter keys (o/i/x/f/*)."""
 
     @pytest.mark.asyncio
-    async def test_o_filters_to_open_only(self, mock_task_data: MockDict) -> None:
-        """Pressing o shows only open/ready tasks."""
+    async def test_o_hides_open_tasks(self, mock_task_data: MockDict) -> None:
+        """Pressing o hides open/ready tasks (toggle model)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
             make_task(id=2, title="Active task", status="active"),
@@ -1181,13 +1187,12 @@ class TestStatusFilter:
 
             assert table.row_count < initial_count
             task_titles = _task_titles(table)
-            assert any("Open task" in t for t in task_titles)
-            assert not any("Active task" in t for t in task_titles)
-            assert not any("Done task" in t for t in task_titles)
+            assert not any("Open task" in t for t in task_titles)
+            assert any("Active task" in t for t in task_titles)
 
     @pytest.mark.asyncio
-    async def test_i_filters_to_active_only(self, mock_task_data: MockDict) -> None:
-        """Pressing i shows only active tasks."""
+    async def test_i_hides_active_tasks(self, mock_task_data: MockDict) -> None:
+        """Pressing i hides active tasks (toggle model)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
             make_task(id=2, title="Active task", status="active"),
@@ -1201,13 +1206,12 @@ class TestStatusFilter:
 
             table = app.query_one("#task-table", DataTable)
             task_titles = _task_titles(table)
-            assert any("Active task" in t for t in task_titles)
-            assert not any("Open task" in t for t in task_titles)
-            assert not any("Done task" in t for t in task_titles)
+            assert not any("Active task" in t for t in task_titles)
+            assert any("Open task" in t for t in task_titles)
 
     @pytest.mark.asyncio
-    async def test_x_filters_to_blocked_only(self, mock_task_data: MockDict) -> None:
-        """Pressing x shows only blocked tasks."""
+    async def test_x_hides_blocked_tasks(self, mock_task_data: MockDict) -> None:
+        """Pressing x hides blocked tasks (toggle model)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
             make_task(id=2, title="Blocked task", status="blocked"),
@@ -1220,12 +1224,12 @@ class TestStatusFilter:
 
             table = app.query_one("#task-table", DataTable)
             task_titles = _task_titles(table)
-            assert any("Blocked task" in t for t in task_titles)
-            assert not any("Open task" in t for t in task_titles)
+            assert not any("Blocked task" in t for t in task_titles)
+            assert any("Open task" in t for t in task_titles)
 
     @pytest.mark.asyncio
-    async def test_f_filters_to_done_and_failed(self, mock_task_data: MockDict) -> None:
-        """Pressing f shows done and failed tasks."""
+    async def test_f_hides_finished_tasks(self, mock_task_data: MockDict) -> None:
+        """Pressing f hides done/failed/wontdo/duplicate tasks (toggle model)."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
             make_task(id=2, title="Done task", status="done"),
@@ -1239,9 +1243,9 @@ class TestStatusFilter:
 
             table = app.query_one("#task-table", DataTable)
             task_titles = _task_titles(table)
-            assert any("Done task" in t for t in task_titles)
-            assert any("Failed task" in t for t in task_titles)
-            assert not any("Open task" in t for t in task_titles)
+            assert not any("Done task" in t for t in task_titles)
+            assert not any("Failed task" in t for t in task_titles)
+            assert any("Open task" in t for t in task_titles)
 
     @pytest.mark.asyncio
     async def test_asterisk_clears_status_filter(self, mock_task_data: MockDict) -> None:
@@ -1290,8 +1294,10 @@ class TestStatusFilter:
             assert table.row_count == initial_count
 
     @pytest.mark.asyncio
-    async def test_status_filter_shows_label_in_status_bar(self, mock_task_data: MockDict) -> None:
-        """Status bar shows the active status filter label."""
+    async def test_status_filter_shows_hiding_label_in_status_bar(
+        self, mock_task_data: MockDict
+    ) -> None:
+        """Status bar shows 'hiding: READY' when open tasks are hidden."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
             make_task(id=2, title="Active task", status="active"),
@@ -1303,11 +1309,13 @@ class TestStatusFilter:
             await pilot.pause()
 
             bar = app.query_one("#task-status-bar", Static)
-            assert "READY" in str(bar.content)
+            bar_text = str(bar.content)
+            assert "hiding:" in bar_text
+            assert "READY" in bar_text
 
     @pytest.mark.asyncio
     async def test_status_filter_composes_with_text_filter(self, mock_task_data: MockDict) -> None:
-        """Status filter and text filter work together."""
+        """Status filter (hide) and text filter work together."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Fix auth bug", status="open"),
             make_task(id=2, title="Fix deploy bug", status="open"),
@@ -1317,8 +1325,8 @@ class TestStatusFilter:
         async with app.run_test() as pilot:
             await pilot.pause()
 
-            # Filter to open only
-            await pilot.press("o")
+            # Hide finished tasks (done/failed/wontdo/duplicate)
+            await pilot.press("f")
             await pilot.pause()
 
             # Add text filter for "auth"
@@ -1330,7 +1338,7 @@ class TestStatusFilter:
 
             table = app.query_one("#task-table", DataTable)
             task_titles = _task_titles(table)
-            # Only "Fix auth bug" (open + matches "auth")
+            # Only "Fix auth bug" (open + matches "auth", done regression hidden)
             assert len(task_titles) == 1
             assert "auth" in task_titles[0].lower()
 
@@ -1359,19 +1367,111 @@ class TestStatusFilter:
 
     @pytest.mark.asyncio
     async def test_status_filter_no_matches(self, mock_task_data: MockDict) -> None:
-        """Status filter with no matching tasks shows 'no matches'."""
+        """Hiding all present statuses shows 'no matches'."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            # Filter to active — but there are none
-            await pilot.press("i")
+            # Hide open — the only status present
+            await pilot.press("o")
             await pilot.pause()
 
             bar = app.query_one("#task-status-bar", Static)
             assert "no matches" in str(bar.content)
+
+    @pytest.mark.asyncio
+    async def test_multiple_toggles_combine(self, mock_task_data: MockDict) -> None:
+        """Pressing o then i hides both open and active tasks."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+            make_task(id=3, title="Blocked task", status="blocked"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Hide open
+            await pilot.press("o")
+            await pilot.pause()
+            # Also hide active
+            await pilot.press("i")
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            task_titles = _task_titles(table)
+            assert not any("Open task" in t for t in task_titles)
+            assert not any("Active task" in t for t in task_titles)
+            assert any("Blocked task" in t for t in task_titles)
+
+    @pytest.mark.asyncio
+    async def test_toggle_unhide_after_hide(self, mock_task_data: MockDict) -> None:
+        """Pressing f twice: first hides finished, second shows them again."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Done task", status="done"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
+
+            # Hide finished
+            await pilot.press("f")
+            await pilot.pause()
+            assert table.row_count < initial_count
+
+            # Unhide finished
+            await pilot.press("f")
+            await pilot.pause()
+            assert table.row_count == initial_count
+
+    @pytest.mark.asyncio
+    async def test_clear_all_resets_hidden(self, mock_task_data: MockDict) -> None:
+        """Pressing * clears all hidden statuses and epic filter."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Active task", status="active"),
+            make_task(id=3, title="Done task", status="done"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            initial_count = table.row_count
+
+            # Hide multiple statuses
+            await pilot.press("o")
+            await pilot.pause()
+            await pilot.press("i")
+            await pilot.pause()
+            assert table.row_count < initial_count
+
+            # Clear all
+            await pilot.press("asterisk")
+            await pilot.pause()
+            assert table.row_count == initial_count
+
+    @pytest.mark.asyncio
+    async def test_status_bar_shows_hiding_label(self, mock_task_data: MockDict) -> None:
+        """Status bar shows 'hiding: DONE+...' when finished tasks are hidden."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="Open task", status="open"),
+            make_task(id=2, title="Done task", status="done"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("f")
+            await pilot.pause()
+
+            bar = app.query_one("#task-status-bar", Static)
+            bar_text = str(bar.content)
+            assert "hiding:" in bar_text
+            assert "DONE" in bar_text
 
 
 # ===================================================================
@@ -1484,7 +1584,7 @@ class TestEpicGrouping:
 
     @pytest.mark.asyncio
     async def test_epic_grouping_composes_with_filters(self, mock_task_data: MockDict) -> None:
-        """Epic grouping (default) works together with status and text filters."""
+        """Epic grouping (default) works together with status hide filters."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Fix auth", status="open", epic_key="AUTH", parent_task_id=100),
             make_task(id=2, title="Fix deploy", status="open", epic_key="AUTH", parent_task_id=100),
@@ -1497,13 +1597,13 @@ class TestEpicGrouping:
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            # Filter to open only (epic grouping is default)
-            await pilot.press("o")
+            # Hide active tasks (epic grouping is default)
+            await pilot.press("i")
             await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
-            # AUTH tasks are open, TUI task is active — TUI should be gone
+            # AUTH tasks are open (visible), TUI task is active (hidden)
             assert any("AUTH" in t for t in titles)
             assert not any("TUI" in t for t in titles)
 
@@ -1574,7 +1674,7 @@ class TestEpicGrouping:
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=300, epic_key="MIX"),
+            make_epic(id=300, epic_key="MIX", child_count=3, children_done=2, children_open=1),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1640,6 +1740,119 @@ class TestEpicGrouping:
             old_idx = next(i for i, t in enumerate(titles) if "Old finish" in t)
             assert finished_idx < old_idx
 
+    @pytest.mark.asyncio
+    async def test_epics_sorted_by_recent_child_activity(self, mock_task_data: MockDict) -> None:
+        """Epics with more recently updated children appear first."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Old child",
+                status="open",
+                epic_key="STALE",
+                parent_task_id=500,
+                updated_at="2025-01-01T00:00:00",
+            ),
+            make_task(
+                id=2,
+                title="Recent child",
+                status="open",
+                epic_key="FRESH",
+                parent_task_id=501,
+                updated_at="2025-06-15T12:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=500, epic_key="STALE"),
+            make_epic(id=501, epic_key="FRESH"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            fresh_idx = next(i for i, t in enumerate(titles) if "FRESH" in t)
+            stale_idx = next(i for i, t in enumerate(titles) if "STALE" in t)
+            assert fresh_idx < stale_idx, "Epic with recently-updated child should appear first"
+
+    @pytest.mark.asyncio
+    async def test_epics_with_active_children_float_to_top(self, mock_task_data: MockDict) -> None:
+        """Epics with in-progress children appear before those without."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Idle child",
+                status="open",
+                epic_key="IDLE",
+                parent_task_id=600,
+                updated_at="2025-06-15T12:00:00",
+            ),
+            make_task(
+                id=2,
+                title="Active child",
+                status="active",
+                epic_key="BUSY",
+                parent_task_id=601,
+                updated_at="2025-01-01T00:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=600, epic_key="IDLE"),
+            make_epic(id=601, epic_key="BUSY"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            busy_idx = next(i for i, t in enumerate(titles) if "BUSY" in t)
+            idle_idx = next(i for i, t in enumerate(titles) if "IDLE" in t)
+            assert busy_idx < idle_idx, "Epic with active child should float above idle epic"
+
+    @pytest.mark.asyncio
+    async def test_children_sorted_oldest_first(self, mock_task_data: MockDict) -> None:
+        """Tasks within an epic are sorted oldest-first (queue discipline)."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Newest task",
+                status="open",
+                epic_key="Q",
+                parent_task_id=700,
+                created_at="2025-03-01T00:00:00",
+            ),
+            make_task(
+                id=2,
+                title="Middle task",
+                status="open",
+                epic_key="Q",
+                parent_task_id=700,
+                created_at="2025-02-01T00:00:00",
+            ),
+            make_task(
+                id=3,
+                title="Oldest task",
+                status="open",
+                epic_key="Q",
+                parent_task_id=700,
+                created_at="2025-01-01T00:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=700, epic_key="Q"),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            task_titles = _task_titles(table)
+            q_tasks = [t for t in task_titles if t in {"Oldest task", "Middle task", "Newest task"}]
+            assert q_tasks == ["Oldest task", "Middle task", "Newest task"], (
+                f"Expected oldest-first queue order, got {q_tasks}"
+            )
+
 
 # ===================================================================
 # K. Won't Do Status
@@ -1651,16 +1864,14 @@ class TestWontdoStatus:
 
     @pytest.mark.asyncio
     async def test_wontdo_icon_and_color(self, mock_task_data: MockDict) -> None:
-        """Wontdo tasks show the ⊘ icon with dim styling."""
+        """Wontdo tasks show the 🚫 icon with dim styling."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Skipped task", status="wontdo"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
             await pilot.pause()
-            # Filter to finished tasks so the wontdo task is visible
-            await pilot.press("f")
-            await pilot.pause()
+            # Wontdo task visible by default (ungrouped, shown inline)
             table = app.query_one("#task-table", DataTable)
             icons = _table_cell_texts(table, "icon")
             task_icons = [i for i in icons if i.strip()]
@@ -1690,8 +1901,8 @@ class TestWontdoStatus:
                 m_update.assert_called_once_with(1, status="wontdo")
 
     @pytest.mark.asyncio
-    async def test_f_filter_includes_wontdo(self, mock_task_data: MockDict) -> None:
-        """Pressing f shows wontdo tasks alongside done and failed."""
+    async def test_f_filter_hides_wontdo(self, mock_task_data: MockDict) -> None:
+        """Pressing f hides wontdo tasks alongside done and failed."""
         mock_task_data["list_tasks"].return_value = [
             make_task(id=1, title="Open task", status="open"),
             make_task(id=2, title="Done task", status="done"),
@@ -1705,9 +1916,9 @@ class TestWontdoStatus:
 
             table = app.query_one("#task-table", DataTable)
             task_titles = _task_titles(table)
-            assert any("Done task" in t for t in task_titles)
-            assert any("Wontdo task" in t for t in task_titles)
-            assert not any("Open task" in t for t in task_titles)
+            assert not any("Done task" in t for t in task_titles)
+            assert not any("Wontdo task" in t for t in task_titles)
+            assert any("Open task" in t for t in task_titles)
 
     @pytest.mark.asyncio
     async def test_wontdo_epic_collapsed_at_bottom(self, mock_task_data: MockDict) -> None:
@@ -2153,12 +2364,387 @@ class TestCollapseExpand:
         async with app.run_test() as pilot:
             await pilot.pause()
 
-            # Enable finished filter to see COMPLETED section
-            await pilot.press("f")
+            # COMPLETED section visible by default (no statuses hidden)
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            # DEAD epic header visible but children hidden (collapsed)
+            assert any("DEAD" in t for t in titles)
+            assert not any("Done child" in t for t in titles)
+
+
+# ===================================================================
+# N. Help Modal Shows Filter Keybindings (FEAT-58)
+# ===================================================================
+
+
+class TestHelpModalFilterKeys:
+    """Verify that pressing ? shows the new filter keybindings."""
+
+    @pytest.mark.asyncio
+    async def test_help_modal_shows_filter_keys(self, mock_task_data: MockDict) -> None:
+        """Pressing ? opens help modal containing the new filter bindings."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        class HelpApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = HelpApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("question_mark")
+            await pilot.pause()
+
+            from emdx.ui.modals import KeybindingsHelpScreen
+
+            screen = app.screen
+            assert isinstance(screen, KeybindingsHelpScreen)
+
+            help_rows = screen.query(".help-row")
+            help_text = " ".join(str(row.content) for row in help_rows)
+
+            assert "Toggle Open" in help_text
+            assert "Toggle Active" in help_text
+            assert "Toggle Blocked" in help_text
+            assert "Toggle Finished" in help_text
+            assert "Clear Filters" in help_text
+            assert "Epic Filter" in help_text
+            assert "Group By" in help_text
+            assert "Open URLs" in help_text
+            assert "Expand/Collapse" in help_text
+
+    @pytest.mark.asyncio
+    async def test_help_bar_includes_filter_keys(self, mock_task_data: MockDict) -> None:
+        """Help bar text shows context-appropriate keys (task row default)."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        class HelpBarApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = HelpBarApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            bar = app.query_one("#task-help-bar", Static)
+            content = str(bar.content)
+            # Default footer shows task-action keys
+            assert "Done" in content
+            assert "Blocked" in content
+            assert "Navigate" in content
+
+
+# ===================================================================
+# O. Done-Fold Recency Hint (FEAT-61)
+# ===================================================================
+
+
+class TestDoneFoldRecency:
+    """Tests for the recency hint on collapsed done-fold rows."""
+
+    @pytest.mark.asyncio
+    async def test_done_fold_shows_recency_hint(self, mock_task_data: MockDict) -> None:
+        """Collapsed done epic shows fold row with 'latest:' recency hint."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Active work",
+                status="open",
+                epic_key="LIVE",
+                parent_task_id=200,
+            ),
+            make_task(
+                id=2,
+                title="Done child",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at="2025-01-01T12:00:00",
+            ),
+            make_task(
+                id=3,
+                title="Also done",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at="2025-01-02T12:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=2,
+                children_done=2,
+                children_open=0,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
             await pilot.pause()
 
             table = app.query_one("#task-table", DataTable)
             titles = _table_cell_texts(table, "title")
-            # DEAD epic header visible but children hidden
-            assert any("DEAD" in t for t in titles)
-            assert not any("Done child" in t for t in titles)
+            fold_rows = [t for t in titles if "completed" in t and "▸" in t]
+            assert len(fold_rows) >= 1, f"No fold row found in: {titles}"
+            assert "latest:" in fold_rows[0]
+
+    @pytest.mark.asyncio
+    async def test_done_fold_without_completed_at(self, mock_task_data: MockDict) -> None:
+        """Fold row falls back to updated_at when completed_at is missing."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Active work",
+                status="open",
+                epic_key="LIVE",
+                parent_task_id=200,
+            ),
+            make_task(
+                id=2,
+                title="Done child",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at=None,
+                updated_at="2025-01-01T12:00:00",
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=1,
+                children_done=1,
+                children_open=0,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            fold_rows = [t for t in titles if "completed" in t and "▸" in t]
+            assert len(fold_rows) >= 1
+            assert "latest:" in fold_rows[0]
+
+    @pytest.mark.asyncio
+    async def test_done_fold_no_dates(self, mock_task_data: MockDict) -> None:
+        """Fold row without any dates shows count but no 'latest:' hint."""
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Active work",
+                status="open",
+                epic_key="LIVE",
+                parent_task_id=200,
+            ),
+            make_task(
+                id=2,
+                title="Done child",
+                status="done",
+                epic_key="DEAD",
+                parent_task_id=201,
+                completed_at=None,
+                updated_at=None,
+                created_at=None,
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=200, epic_key="LIVE"),
+            make_epic(
+                id=201,
+                epic_key="DEAD",
+                status="done",
+                child_count=1,
+                children_done=1,
+                children_open=0,
+            ),
+        ]
+        app = TaskTestApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            table = app.query_one("#task-table", DataTable)
+            titles = _table_cell_texts(table, "title")
+            fold_rows = [t for t in titles if "completed" in t and "▸" in t]
+            assert len(fold_rows) >= 1
+            assert "latest:" not in fold_rows[0]
+
+
+# ===================================================================
+# P. Context-Sensitive Footer (FEAT-59)
+# ===================================================================
+
+
+class TestContextSensitiveFooter:
+    """Tests for the dynamic footer bar that changes with selection."""
+
+    @pytest.mark.asyncio
+    async def test_footer_shows_task_context_keys(self, mock_task_data: MockDict) -> None:
+        """Footer shows task-action keys when a normal task row is selected."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        mock_task_data["list_tasks"].return_value = [
+            make_task(id=1, title="My task", status="open"),
+        ]
+
+        class FooterApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = FooterApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Navigate down until we land on a task: row
+            table = app.query_one("#task-table", DataTable)
+            for _i in range(table.row_count):
+                await pilot.press("j")
+                await pilot.pause()
+                if table.cursor_row is not None:
+                    key = str(table.ordered_rows[table.cursor_row].key.value)
+                    if key.startswith("task:"):
+                        break
+
+            bar = app.query_one("#task-help-bar", Static)
+            content = str(bar.content)
+            assert "Done" in content
+            assert "Active" in content
+            assert "Blocked" in content
+            assert "Navigate" in content
+            assert "Help" in content
+            # Should NOT show epic-header keys
+            assert "Expand/Collapse" not in content
+
+    @pytest.mark.asyncio
+    async def test_footer_shows_epic_context_keys(self, mock_task_data: MockDict) -> None:
+        """Footer shows epic keys when an epic header row is highlighted."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=100,
+                title="Epic: AUTH",
+                status="open",
+                epic_key="AUTH",
+                type="epic",
+            ),
+            make_task(
+                id=1,
+                title="Child task",
+                status="open",
+                epic_key="AUTH",
+                parent_task_id=100,
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(id=100, epic_key="AUTH"),
+        ]
+
+        class FooterApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = FooterApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            table = app.query_one("#task-table", DataTable)
+            # Navigate to the epic row (task:100 with type="epic")
+            for _ in range(table.row_count):
+                await pilot.press("k")
+                await pilot.pause()
+            # Scan for the epic task row
+            found_epic = False
+            for _i in range(table.row_count):
+                if table.cursor_row is not None:
+                    key = str(table.ordered_rows[table.cursor_row].key.value)
+                    if key == "task:100":
+                        found_epic = True
+                        # Press j then k to trigger highlight event
+                        await pilot.press("j")
+                        await pilot.pause()
+                        await pilot.press("k")
+                        await pilot.pause()
+                        break
+                await pilot.press("j")
+                await pilot.pause()
+
+            assert found_epic, "Epic row task:100 not found"
+            bar = app.query_one("#task-help-bar", Static)
+            content = str(bar.content)
+            assert "Expand/Collapse" in content
+            assert "Epic Filter" in content
+            assert "Group By" in content
+            # Should NOT show task-action keys
+            assert "Done" not in content
+            assert "Active" not in content
+
+    @pytest.mark.asyncio
+    async def test_footer_shows_done_fold_context(self, mock_task_data: MockDict) -> None:
+        """Footer shows expand hint when a done-fold row is highlighted."""
+        from emdx.ui.task_browser import TaskBrowser
+
+        mock_task_data["list_tasks"].return_value = [
+            make_task(
+                id=1,
+                title="Open task",
+                status="open",
+                epic_key="AUTH",
+                parent_task_id=100,
+            ),
+            make_task(
+                id=2,
+                title="Done task 1",
+                status="done",
+                epic_key="AUTH",
+                parent_task_id=100,
+            ),
+            make_task(
+                id=3,
+                title="Done task 2",
+                status="done",
+                epic_key="AUTH",
+                parent_task_id=100,
+            ),
+        ]
+        mock_task_data["list_epics"].return_value = [
+            make_epic(
+                id=100,
+                epic_key="AUTH",
+                child_count=3,
+                children_done=2,
+                children_open=1,
+            ),
+        ]
+
+        class FooterApp(App[None]):
+            def compose(self) -> ComposeResult:
+                yield TaskBrowser()
+
+        app = FooterApp()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            # Navigate down to find the done-fold row
+            table = app.query_one("#task-table", DataTable)
+            found_fold = False
+            for _i in range(table.row_count):
+                await pilot.press("j")
+                await pilot.pause()
+                if table.cursor_row is not None:
+                    key = str(table.ordered_rows[table.cursor_row].key.value)
+                    if key.startswith("done-fold:"):
+                        found_fold = True
+                        break
+
+            if found_fold:
+                bar = app.query_one("#task-help-bar", Static)
+                content = str(bar.content)
+                assert "Expand" in content
+                assert "Filter" in content
+                assert "Help" in content
+                # Should NOT show task-action keys
+                assert "Done" not in content
