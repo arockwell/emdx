@@ -22,6 +22,7 @@ from textual.widget import Widget
 from textual.widgets import DataTable, Input, RichLog, Static
 
 from emdx.models.tasks import (
+    count_tasks_by_status,
     get_dependencies,
     get_dependents,
     get_epic_view,
@@ -331,6 +332,7 @@ class TaskView(Widget):
         self._current_task: TaskDict | None = None
         self._refresh_in_progress: bool = False
         self._data_fingerprint: str = ""  # skip no-op refreshes
+        self._true_status_counts: dict[str, int] = {}  # accurate DB counts
 
     def compose(self) -> ComposeResult:
         yield Static("Loading tasks...", id="task-status-bar")
@@ -493,6 +495,13 @@ class TaskView(Widget):
             logger.error(f"Failed to load epics: {e}")
             self._epics = {}
 
+        # Get accurate status counts (not limited by query caps)
+        try:
+            self._true_status_counts = count_tasks_by_status()
+        except Exception as e:
+            logger.error(f"Failed to count tasks: {e}")
+            self._true_status_counts = {}
+
         # Group by status (respecting active filters)
         self._tasks_by_status = defaultdict(list)
         for task in self._tasks:
@@ -503,6 +512,28 @@ class TaskView(Widget):
 
         self._render_task_table(restore_row=restore_row)
         self._update_status_bar()
+
+    def _ensure_done_tasks_loaded(self, epic_id: int) -> None:
+        """Lazy-load done tasks for an epic when its fold is expanded.
+
+        The initial load caps done tasks at 200. When a user expands a fold,
+        fetch all done children for that epic and merge any missing ones.
+        """
+        loaded_ids = {t["id"] for t in self._tasks}
+        try:
+            epic_done = list_tasks(
+                status=["done", "wontdo", "duplicate"],
+                parent_task_id=epic_id,
+                limit=5000,
+            )
+        except Exception as e:
+            logger.error(f"Failed to lazy-load done tasks for epic {epic_id}: {e}")
+            return
+        new_tasks = [t for t in epic_done if t["id"] not in loaded_ids]
+        if new_tasks:
+            self._tasks.extend(new_tasks)
+            # Invalidate fingerprint so next auto-refresh doesn't discard them
+            self._data_fingerprint = ""
 
     def _row_key_for_task(self, task: TaskDict) -> str:
         """Generate a stable row key for a task."""
@@ -938,10 +969,13 @@ class TaskView(Widget):
                         done_kids[0].get("completed_at") or done_kids[0].get("updated_at") or ""
                     )
                     recency = _format_time_ago(latest_ts)
+                    # Use accurate DB count from epic data when available
+                    epic_info = self._epics.get(pid) if pid is not None else None
+                    epic_done_count = epic_info["children_done"] if epic_info else len(done_kids)
                     if recency:
-                        fold_label = f"{len(done_kids)} completed (latest: {recency}) {arrow}"
+                        fold_label = f"{epic_done_count} completed (latest: {recency}) {arrow}"
                     else:
-                        fold_label = f"{len(done_kids)} completed {arrow}"
+                        fold_label = f"{epic_done_count} completed {arrow}"
                     is_last_row = not done_fold_open
                     connector = "└─" if is_last_row else "├─"
                     table.add_row(
@@ -1002,13 +1036,19 @@ class TaskView(Widget):
                 kids = children_by_parent.get(pid, [])
                 if pid in self._collapsed:
                     # Collapsed: show fold summary with recency hint
-                    if kids:
-                        latest = kids[0].get("completed_at") or kids[0].get("updated_at") or ""
-                        recency = _format_time_ago(latest)
-                        if recency:
-                            fold_label = f"{len(kids)} completed (latest: {recency}) ▸"
+                    # Use accurate DB count from epic data when available
+                    epic_info = self._epics.get(pid)
+                    epic_done_count = epic_info["children_done"] if epic_info else len(kids)
+                    if epic_done_count > 0:
+                        if kids:
+                            latest = kids[0].get("completed_at") or kids[0].get("updated_at") or ""
+                            recency = _format_time_ago(latest)
                         else:
-                            fold_label = f"{len(kids)} completed ▸"
+                            recency = ""
+                        if recency:
+                            fold_label = f"{epic_done_count} completed (latest: {recency}) ▸"
+                        else:
+                            fold_label = f"{epic_done_count} completed ▸"
                         table.add_row(
                             Text(""),
                             Text(""),
@@ -1049,7 +1089,16 @@ class TaskView(Widget):
         """Update the status bar with summary counts."""
         status_bar = self.query_one("#task-status-bar", Static)
 
-        counts = {s: len(self._tasks_by_status.get(s, [])) for s in STATUS_ORDER}
+        # Use accurate DB counts when unfiltered, loaded counts when filtered
+        is_filtered = bool(self._filter_text or self._epic_filter or self._hidden_statuses)
+        if is_filtered or not self._true_status_counts:
+            counts = {s: len(self._tasks_by_status.get(s, [])) for s in STATUS_ORDER}
+        else:
+            # Normalize raw DB statuses through aliases
+            counts = dict.fromkeys(STATUS_ORDER, 0)
+            for raw_status, cnt in self._true_status_counts.items():
+                normalized = STATUS_ALIASES.get(raw_status, raw_status)
+                counts[normalized] = counts.get(normalized, 0) + cnt
         parts: list[str] = []
 
         if counts["open"]:
@@ -1713,6 +1762,7 @@ class TaskView(Widget):
                         if epic_id in self._collapsed:
                             self._collapsed.discard(epic_id)
                             self._expanded.add(epic_id)
+                            self._ensure_done_tasks_loaded(epic_id)
                         else:
                             self._collapsed.add(epic_id)
                             self._expanded.discard(epic_id)
@@ -1723,6 +1773,7 @@ class TaskView(Widget):
                             self._done_folds_expanded.discard(epic_id)
                         else:
                             self._done_folds_expanded.add(epic_id)
+                            self._ensure_done_tasks_loaded(epic_id)
                     self._render_task_table()
                     return
         except (IndexError, AttributeError, ValueError):

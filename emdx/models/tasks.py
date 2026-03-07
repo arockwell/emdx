@@ -223,6 +223,13 @@ def resolve_task_id(identifier: TaskRef) -> int | None:
     return None
 
 
+def count_tasks_by_status() -> dict[str, int]:
+    """Return {status: count} for all tasks, with no limit."""
+    with db.get_connection() as conn:
+        rows = conn.execute("SELECT status, COUNT(*) FROM tasks GROUP BY status").fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
 def list_tasks(
     status: list[str] | None = None,
     gameplan_id: int | None = None,
