@@ -21,6 +21,7 @@ from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import DataTable, Input, RichLog, Static
 
+from emdx.models.task import Task, TaskLogEntry
 from emdx.models.tasks import (
     count_tasks_by_status,
     get_dependencies,
@@ -31,7 +32,6 @@ from emdx.models.tasks import (
     list_tasks,
     update_task,
 )
-from emdx.models.types import EpicTaskDict, TaskDict, TaskLogEntryDict
 from emdx.ui.link_helpers import extract_urls as _extract_urls
 from emdx.ui.link_helpers import linkify_text as _linkify_text
 
@@ -77,13 +77,15 @@ DONE_FOLD_PREFIX = "done-fold:"
 
 
 def _format_time_ago(dt_str: str | datetime | None) -> str:
-    """Format a datetime string as relative time, or absolute date if > 7 days."""
+    """Format a datetime string (or datetime) as relative time, or absolute date if > 7 days."""
     if not dt_str:
         return ""
     if isinstance(dt_str, datetime):
         dt_str = dt_str.isoformat()
     try:
-        if "T" in dt_str:
+        if isinstance(dt_str, datetime):
+            dt = dt_str
+        elif "T" in dt_str:
             dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
         else:
             dt = datetime.fromisoformat(dt_str)
@@ -115,8 +117,8 @@ def _format_time_ago(dt_str: str | datetime | None) -> str:
         return ""
 
 
-def _format_time_short(dt_str: str | None) -> str:
-    """Format a datetime string as a compact relative time (no 'ago')."""
+def _format_time_short(dt_str: str | datetime | None) -> str:
+    """Format a datetime string (or datetime) as a compact relative time (no 'ago')."""
     if not dt_str:
         return ""
     result = _format_time_ago(dt_str)
@@ -150,18 +152,18 @@ def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -
     return title
 
 
-def _task_badge(task: TaskDict) -> str:
+def _task_badge(task: Task) -> str:
     """Return the KEY-N badge for a task, or empty string if unavailable."""
     epic_key = task.get("epic_key")
     epic_seq = task.get("epic_seq")
     if epic_key and epic_seq:
         return f"{epic_key}-{epic_seq}"
     if epic_key:
-        return epic_key
+        return str(epic_key)
     return ""
 
 
-def _task_label(task: TaskDict) -> str:
+def _task_label(task: Task) -> str:
     """Build a plain text label for tests and fallback display."""
     icon = STATUS_ICONS.get(task["status"], "?")
     title = task["title"]
@@ -314,10 +316,10 @@ class TaskView(Widget):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._tasks: list[TaskDict] = []
-        self._tasks_by_status: dict[str, list[TaskDict]] = defaultdict(list)
-        self._row_key_to_task: dict[str, TaskDict] = {}
-        self._epics: dict[int, EpicTaskDict] = {}  # keyed by epic task ID
+        self._tasks: list[Task] = []
+        self._tasks_by_status: dict[str, list[Task]] = defaultdict(list)
+        self._row_key_to_task: dict[str, Task] = {}
+        self._epics: dict[int, Task] = {}  # keyed by epic task ID
         self._filter_text: str = ""
         self._debounce_timer: Timer | None = None
         self._hidden_statuses: set[str] = set()  # statuses to hide (empty = show all)
@@ -329,7 +331,7 @@ class TaskView(Widget):
         self._done_folds_expanded: set[int] = set()  # Epic IDs with done-fold open
         self._zoomed: bool = False
         self._sidebar_visible: bool = True
-        self._current_task: TaskDict | None = None
+        self._current_task: Task | None = None
         self._refresh_in_progress: bool = False
         self._data_fingerprint: str = ""  # skip no-op refreshes
         self._true_status_counts: dict[str, int] = {}  # accurate DB counts
@@ -464,7 +466,7 @@ class TaskView(Widget):
         except Exception as e:
             logger.warning(f"Failed to sync title column width: {e}")
 
-    def _compute_fingerprint(self, tasks: list[TaskDict]) -> str:
+    def _compute_fingerprint(self, tasks: list[Task]) -> str:
         """Fast fingerprint of task data to detect changes."""
         # id:status:updated_at for each task, sorted by id
         parts = sorted(f"{t['id']}:{t['status']}:{t.get('updated_at', '')}" for t in tasks)
@@ -535,7 +537,7 @@ class TaskView(Widget):
             # Invalidate fingerprint so next auto-refresh doesn't discard them
             self._data_fingerprint = ""
 
-    def _row_key_for_task(self, task: TaskDict) -> str:
+    def _row_key_for_task(self, task: Task) -> str:
         """Generate a stable row key for a task."""
         return f"task:{task['id']}"
 
@@ -586,7 +588,7 @@ class TaskView(Widget):
     def _render_task_row(
         self,
         table: "DataTable[str | Text]",
-        task: TaskDict,
+        task: Task,
         indent: bool = False,
         tree_prefix: str = "",
     ) -> None:
@@ -687,10 +689,10 @@ class TaskView(Widget):
             # together with tree connectors (cross-group siblings).
             # Tasks with no parent render normally.
             epic_ids_in_group = {t["id"] for t in tasks if t.get("type") == "epic"}
-            children_by_parent: dict[int, list[TaskDict]] = defaultdict(list)
-            cross_group_by_parent: dict[int, list[TaskDict]] = defaultdict(list)
-            true_orphans: list[TaskDict] = []
-            epics_in_order: list[TaskDict] = []
+            children_by_parent: dict[int, list[Task]] = defaultdict(list)
+            cross_group_by_parent: dict[int, list[Task]] = defaultdict(list)
+            true_orphans: list[Task] = []
+            epics_in_order: list[Task] = []
 
             for task in tasks:
                 parent_id = task.get("parent_task_id")
@@ -754,7 +756,7 @@ class TaskView(Widget):
 
         # Group children by parent_task_id.
         # First pass: collect all tasks and find which IDs are parents.
-        all_loaded: dict[int, TaskDict] = {}
+        all_loaded: dict[int, Task] = {}
         referenced_parents: set[int] = set()
         for status in STATUS_ORDER:
             for task in self._tasks_by_status.get(status, []):
@@ -765,10 +767,10 @@ class TaskView(Widget):
 
         # Second pass: separate parents from children.
         parent_types = {"epic", "group"}
-        children_by_parent: dict[int | None, list[TaskDict]] = defaultdict(
+        children_by_parent: dict[int | None, list[Task]] = defaultdict(
             list,
         )
-        epic_task_by_id: dict[int, TaskDict] = {}
+        epic_task_by_id: dict[int, Task] = {}
         for task in all_loaded.values():
             is_parent = task.get("type") in parent_types or task["id"] in referenced_parents
             if is_parent:
@@ -889,7 +891,7 @@ class TaskView(Widget):
                     # Epic not in loaded tasks — use _epics data
                     epic_data = self._epics.get(pid)
                     if epic_data:
-                        epic = epic_data  # EpicTaskDict extends TaskDict
+                        epic = epic_data
                 if epic:
                     self._render_task_row(table, epic)
                 else:
@@ -917,8 +919,8 @@ class TaskView(Widget):
                 continue
 
             # Split children into active and done groups
-            active_kids: list[TaskDict] = []
-            done_kids: list[TaskDict] = []
+            active_kids: list[Task] = []
+            done_kids: list[Task] = []
             for task in kids:
                 normalized = STATUS_ALIASES.get(task["status"], task["status"])
                 if normalized in finished:
@@ -1147,7 +1149,7 @@ class TaskView(Widget):
     # Filter logic
     # ------------------------------------------------------------------
 
-    def _task_matches_filter(self, task: TaskDict, query: str) -> bool:
+    def _task_matches_filter(self, task: Task, query: str) -> bool:
         """Check if a task matches the filter query (case-insensitive substring)."""
         q = query.lower()
         fields = [
@@ -1157,7 +1159,7 @@ class TaskView(Widget):
         ]
         return any(q in f.lower() for f in fields)
 
-    def _task_passes_filters(self, task: TaskDict) -> bool:
+    def _task_passes_filters(self, task: Task) -> bool:
         """Check if a task passes text, status, and epic filters."""
         if task["status"] in self._hidden_statuses:
             return False
@@ -1324,7 +1326,7 @@ class TaskView(Widget):
 
         self._debounce_timer = self.set_timer(0.2, do_filter)
 
-    def _get_selected_task(self) -> TaskDict | None:
+    def _get_selected_task(self) -> Task | None:
         """Get the currently highlighted task."""
         table = self.query_one("#task-table", DataTable)
         try:
@@ -1441,7 +1443,7 @@ class TaskView(Widget):
                 prefixed.overflow = "fold"
                 detail_log.write(prefixed)
 
-    def _render_task_detail(self, task: TaskDict) -> None:
+    def _render_task_detail(self, task: Task) -> None:
         """Render full task detail — routes metadata to sidebar or inline."""
         self._current_task = task
 
@@ -1488,7 +1490,7 @@ class TaskView(Widget):
 
         self._render_task_content(detail_log, task)
 
-    def _render_task_metadata(self, target: RichLog, task: TaskDict) -> None:
+    def _render_task_metadata(self, target: RichLog, task: Task) -> None:
         """Write task metadata (status, deps, blocks) to a RichLog target.
 
         Works for both the sidebar (30 cols) and the detail pane (full width).
@@ -1552,7 +1554,7 @@ class TaskView(Widget):
         except Exception as e:
             logger.debug(f"Error loading dependents: {e}")
 
-    def _render_task_content(self, target: RichLog, task: TaskDict) -> None:
+    def _render_task_content(self, target: RichLog, task: Task) -> None:
         """Write task content (description, error, work log) to a RichLog target."""
         content_w = self._detail_content_width(target)
 
@@ -1565,7 +1567,7 @@ class TaskView(Widget):
 
         # Work log
         try:
-            log_entries: list[TaskLogEntryDict] = get_task_log(task["id"], limit=20)
+            log_entries: list[TaskLogEntry] = get_task_log(task["id"], limit=20)
             if log_entries:
                 target.write("")
                 target.write("[bold]Work Log:[/bold]")
@@ -1574,7 +1576,7 @@ class TaskView(Widget):
                 last = len(log_entries) - 1
                 for i, entry in enumerate(log_entries):
                     raw_ts = entry.get("created_at")
-                    time_str = _format_time_ago(str(raw_ts) if raw_ts is not None else None)
+                    time_str = _format_time_ago(raw_ts)
                     ts_part = f" {time_str}" if time_str else ""
                     target.write(f"  [bold cyan]●[/bold cyan] [dim]{ts_part}[/dim]")
                     self._write_markdown_guttered(
@@ -1591,7 +1593,7 @@ class TaskView(Widget):
         except Exception as e:
             logger.debug(f"Error loading task log: {e}")
 
-    def _render_epic_detail(self, task: TaskDict) -> None:
+    def _render_epic_detail(self, task: Task) -> None:
         """Render epic detail with child task listing in the right pane."""
         detail_log = self.query_one("#task-detail-log", RichLog)
         header = self.query_one("#task-detail-header", Static)

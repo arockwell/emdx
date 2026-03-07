@@ -884,7 +884,7 @@ def _find_keyword_search(
 
             # Combine: only show documents that match both criteria
             results: list[dict[str, Any]] = [
-                dict(doc) for doc in search_results if doc["id"] in tag_doc_ids
+                dict(doc) for doc in search_results if doc.id in tag_doc_ids
             ][:limit]
 
             if not results:

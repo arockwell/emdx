@@ -26,6 +26,17 @@ class SearchHit:
     snippet: str | None = None
     rank: float = 0.0
 
+    # ── Attribute forwarding ──────────────────────────────────────────
+
+    def __getattr__(self, name: str) -> Any:
+        """Forward attribute access to the inner Document."""
+        try:
+            return getattr(self.doc, name)
+        except AttributeError:
+            raise AttributeError(
+                f"'{type(self).__name__}' object has no attribute '{name}'"
+            ) from None
+
     # ── Dict-compatibility layer ──────────────────────────────────────
 
     def __getitem__(self, key: str) -> Any:
