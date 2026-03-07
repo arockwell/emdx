@@ -2,11 +2,10 @@
 Search functionality for emdx documents using FTS5
 """
 
-from typing import Any, cast
+from __future__ import annotations
 
-from ..utils.datetime_utils import parse_datetime
+from ..models.search import SearchHit
 from .connection import db_connection
-from .types import SearchResult
 
 
 def escape_fts5_query(query: str) -> str:
@@ -48,7 +47,7 @@ def search_documents(
     modified_after: str | None = None,
     modified_before: str | None = None,
     doc_type: str | None = "user",
-) -> list[SearchResult]:
+) -> list[SearchHit]:
     """Search documents using FTS5
 
     Args:
@@ -59,7 +58,7 @@ def search_documents(
         doc_type: Filter by document type. 'user' (default), 'wiki', or None for all types.
 
     Returns:
-        List of document dictionaries with search results including snippets and ranking
+        List of SearchHit objects with document data, snippets, and ranking
     """
     with db_connection.get_connection() as conn:
         # Build dynamic query with date filters
@@ -130,12 +129,4 @@ def search_documents(
 
         cursor = conn.execute(base_query, params)
 
-        # Convert rows and parse datetime strings
-        docs: list[SearchResult] = []
-        for row in cursor.fetchall():
-            raw: dict[str, Any] = dict(row)
-            for field in ["created_at", "updated_at", "last_accessed"]:
-                if field in raw and isinstance(raw[field], str):
-                    raw[field] = parse_datetime(raw[field])
-            docs.append(cast(SearchResult, raw))
-        return docs
+        return [SearchHit.from_row(row) for row in cursor.fetchall()]

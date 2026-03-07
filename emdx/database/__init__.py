@@ -16,6 +16,8 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any, Union, cast
 
+from ..models.document import Document
+from ..models.search import SearchHit
 from .connection import DatabaseConnection, db_connection
 from .documents import (
     delete_document,
@@ -32,11 +34,6 @@ from .documents import (
 from .search import search_documents
 from .types import (
     DatabaseStats,
-    DeletedDocumentItem,
-    DocumentListItem,
-    DocumentRow,
-    RecentDocumentItem,
-    SearchResult,
 )
 
 
@@ -136,7 +133,7 @@ class SQLiteDatabase:
 
             return doc_id
 
-    def get_document(self, identifier: Union[str, int]) -> DocumentRow | None:
+    def get_document(self, identifier: Union[str, int]) -> Document | None:
         """Get a document by ID or title."""
         if not self._uses_custom_path:
             return get_document(identifier)
@@ -167,9 +164,9 @@ class SQLiteDatabase:
                 )
             conn.commit()
             row = cursor.fetchone()
-            return cast(DocumentRow, dict(row)) if row else None
+            return Document.from_row(row) if row else None
 
-    def list_documents(self, project: str | None = None, limit: int = 50) -> list[DocumentListItem]:
+    def list_documents(self, project: str | None = None, limit: int = 50) -> list[Document]:
         """List documents with optional filters."""
         if not self._uses_custom_path:
             return list_documents(project, limit)
@@ -189,7 +186,7 @@ class SQLiteDatabase:
                 f"FROM documents WHERE {where_clause} ORDER BY id DESC LIMIT ?",
                 params,
             )
-            return [cast(DocumentListItem, dict(row)) for row in cursor.fetchall()]
+            return [Document.from_partial_row(row) for row in cursor.fetchall()]
 
     def update_document(self, doc_id: int, title: str, content: str) -> bool:
         """Update a document."""
@@ -240,7 +237,7 @@ class SQLiteDatabase:
             conn.commit()
             return bool(cursor.rowcount > 0)
 
-    def get_recent_documents(self, limit: int = 10) -> list[RecentDocumentItem]:
+    def get_recent_documents(self, limit: int = 10) -> list[Document]:
         """Get recently accessed documents."""
         if not self._uses_custom_path:
             return get_recent_documents(limit)
@@ -252,7 +249,7 @@ class SQLiteDatabase:
                 "FROM documents WHERE is_deleted = FALSE ORDER BY accessed_at DESC LIMIT ?",
                 (limit,),
             )
-            return [cast(RecentDocumentItem, dict(row)) for row in cursor.fetchall()]
+            return [Document.from_partial_row(row) for row in cursor.fetchall()]
 
     def get_stats(self, project: str | None = None) -> DatabaseStats:
         """Get database statistics."""
@@ -280,7 +277,7 @@ class SQLiteDatabase:
         self,
         days: int | None = None,
         limit: int = 50,
-    ) -> list[DeletedDocumentItem]:
+    ) -> list[Document]:
         """List soft-deleted documents."""
         if not self._uses_custom_path:
             return list_deleted_documents(days, limit)
@@ -300,7 +297,7 @@ class SQLiteDatabase:
                     "WHERE is_deleted = TRUE ORDER BY deleted_at DESC LIMIT ?",
                     (limit,),
                 )
-            return [cast(DeletedDocumentItem, dict(row)) for row in cursor.fetchall()]
+            return [Document.from_partial_row(row) for row in cursor.fetchall()]
 
     def restore_document(self, identifier: Union[str, int]) -> bool:
         """Restore a soft-deleted document."""
@@ -353,7 +350,7 @@ class SQLiteDatabase:
         created_before: str | None = None,
         modified_after: str | None = None,
         modified_before: str | None = None,
-    ) -> list[SearchResult]:
+    ) -> list[SearchHit]:
         """Search documents using FTS."""
         if not self._uses_custom_path:
             return search_documents(
@@ -384,7 +381,7 @@ class SQLiteDatabase:
                     f"FROM documents d WHERE {where_clause} ORDER BY d.id DESC LIMIT ?",
                     params,
                 )
-                return [cast(SearchResult, dict(row)) for row in cursor.fetchall()]
+                return [SearchHit.from_row(row) for row in cursor.fetchall()]
 
             conditions = ["d.is_deleted = FALSE"]
             params = []
@@ -405,7 +402,7 @@ class SQLiteDatabase:
                 f"WHERE fts.documents_fts MATCH ? AND {where_clause} ORDER BY rank LIMIT ?",
                 [safe_query] + params + [limit],
             )
-            return [cast(SearchResult, dict(row)) for row in cursor.fetchall()]
+            return [SearchHit.from_row(row) for row in cursor.fetchall()]
 
 
 # Create global instance for backward compatibility
