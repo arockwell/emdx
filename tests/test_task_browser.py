@@ -188,15 +188,26 @@ def mock_task_data() -> Generator[MockDict, None, None]:
     with (
         patch(f"{_MOCK_BASE}.list_tasks") as m_list,
         patch(f"{_MOCK_BASE}.list_epics", return_value=[]) as m_epics,
+        patch(f"{_MOCK_BASE}.count_tasks_by_status") as m_counts,
         patch(f"{_MOCK_BASE}.get_dependencies", return_value=[]) as m_deps,
         patch(f"{_MOCK_BASE}.get_dependents", return_value=[]) as m_depts,
         patch(f"{_MOCK_BASE}.get_task_log", return_value=[]) as m_log,
     ):
         m_list.return_value = []
         m_list.side_effect = _make_list_tasks_side_effect(m_list)
+
+        def _count_side_effect() -> dict[str, int]:
+            counts: dict[str, int] = {}
+            for t in m_list.return_value:
+                s = t["status"]
+                counts[s] = counts.get(s, 0) + 1
+            return counts
+
+        m_counts.side_effect = _count_side_effect
         yield {
             "list_tasks": m_list,
             "list_epics": m_epics,
+            "count_tasks_by_status": m_counts,
             "get_dependencies": m_deps,
             "get_dependents": m_depts,
             "get_task_log": m_log,
@@ -1652,7 +1663,7 @@ class TestEpicGrouping:
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=300, epic_key="MIX"),
+            make_epic(id=300, epic_key="MIX", child_count=3, children_done=2, children_open=1),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
