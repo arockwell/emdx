@@ -29,36 +29,36 @@ def create_task(
     parent_task_id: int | None = None,
     task_type: str = "single",
     status: str = "open",
-    epic_key: str | None = None,
+    cat_key: str | None = None,
 ) -> int:
     """Create task and return its ID.
 
-    When epic_key is set:
+    When cat_key is set:
       - Auto-creates category if needed
-      - Assigns next epic_seq (epics and tasks share one sequence)
+      - Assigns next cat_seq (epics and tasks share one sequence)
       - Prepends "KEY-N: " to title for non-epic tasks only
     """
-    epic_seq_val = None
+    cat_seq_val = None
 
-    if epic_key:
+    if cat_key:
         from emdx.models.categories import ensure_category
 
-        epic_key = ensure_category(epic_key.upper())
+        cat_key = ensure_category(cat_key.upper())
 
     with db.get_connection() as conn:
         cursor = conn.cursor()
 
         # Auto-number tasks within a category (epics and regular tasks share one sequence)
-        if epic_key:
+        if cat_key:
             cursor.execute(
-                "SELECT COALESCE(MAX(epic_seq), 0) + 1 FROM tasks WHERE epic_key = ?",
-                (epic_key,),
+                "SELECT COALESCE(MAX(cat_seq), 0) + 1 FROM tasks WHERE cat_key = ?",
+                (cat_key,),
             )
             seq_result = cursor.fetchone()
-            epic_seq_val = seq_result[0] if seq_result else 1
+            cat_seq_val = seq_result[0] if seq_result else 1
             # Prepend KEY-N: prefix to non-epic tasks only (epics use their title as-is)
             if task_type != "epic":
-                prefix = f"{epic_key}-{epic_seq_val}: "
+                prefix = f"{cat_key}-{cat_seq_val}: "
                 if not title.startswith(prefix):
                     title = f"{prefix}{title}"
 
@@ -67,7 +67,7 @@ def create_task(
             INSERT INTO tasks (
                 title, description, priority, gameplan_id, project, status,
                 type, source_doc_id, output_doc_id, parent_task_id,
-                epic_key, epic_seq
+                cat_key, cat_seq
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
@@ -82,8 +82,8 @@ def create_task(
                 source_doc_id,
                 output_doc_id,
                 parent_task_id,
-                epic_key,
-                epic_seq_val,
+                cat_key,
+                cat_seq_val,
             ),
         )
         task_id = cursor.lastrowid
@@ -105,7 +105,7 @@ def create_epic(name: str, category_key: str, description: str = "") -> int:
         title=name,
         description=description,
         task_type="epic",
-        epic_key=category_key.upper(),
+        cat_key=category_key.upper(),
     )
 
 
@@ -175,12 +175,12 @@ def resolve_task_id(identifier: TaskRef) -> int | None:
     """Resolve a task identifier to a database ID.
 
     Accepts:
-      - Category-prefixed IDs like "TOOL-12" (looks up by epic_key + epic_seq)
+      - Category-prefixed IDs like "TOOL-12" (looks up by cat_key + cat_seq)
       - Raw integer IDs like "42" or "#42"
 
     For bare integers, first checks if a task with that database ID exists.
-    If not, falls back to searching by epic_seq (e.g. "49" might match TOOL-49).
-    When the epic_seq fallback finds exactly one match, returns it.
+    If not, falls back to searching by cat_seq (e.g. "49" might match TOOL-49).
+    When the cat_seq fallback finds exactly one match, returns it.
 
     Returns the database ID, or None if the format is invalid or task not found.
     """
@@ -194,8 +194,8 @@ def resolve_task_id(identifier: TaskRef) -> int | None:
             cursor = conn.execute("SELECT id FROM tasks WHERE id = ?", (int_id,))
             if cursor.fetchone():
                 return int_id
-            # Fall back: look for a task with this epic_seq number
-            cursor = conn.execute("SELECT id FROM tasks WHERE epic_seq = ?", (int_id,))
+            # Fall back: look for a task with this cat_seq number
+            cursor = conn.execute("SELECT id FROM tasks WHERE cat_seq = ?", (int_id,))
             rows = cursor.fetchall()
             if len(rows) == 1:
                 return int(rows[0][0])
@@ -204,12 +204,12 @@ def resolve_task_id(identifier: TaskRef) -> int | None:
     # Try category-prefixed format (e.g. TOOL-12)
     match = _PREFIXED_ID_RE.match(identifier)
     if match:
-        epic_key = match.group(1).upper()
-        epic_seq = int(match.group(2))
+        cat_key = match.group(1).upper()
+        cat_seq = int(match.group(2))
         with db.get_connection() as conn:
             cursor = conn.execute(
-                "SELECT id FROM tasks WHERE epic_key = ? AND epic_seq = ?",
-                (epic_key, epic_seq),
+                "SELECT id FROM tasks WHERE cat_key = ? AND cat_seq = ?",
+                (cat_key, cat_seq),
             )
             row = cursor.fetchone()
             if row:
@@ -230,14 +230,14 @@ def list_tasks(
     gameplan_id: int | None = None,
     project: str | None = None,
     limit: int = DEFAULT_BROWSE_LIMIT,
-    epic_key: str | None = None,
+    cat_key: str | None = None,
     parent_task_id: int | None = None,
     since: str | None = None,
 ) -> list[Task]:
     """List tasks with filters.
 
     Args:
-        epic_key: Filter by category key.
+        cat_key: Filter by category key.
         parent_task_id: Filter by parent task (epic) ID.
         since: ISO date string (YYYY-MM-DD). Filter to tasks completed on or after this date.
     """
@@ -253,9 +253,9 @@ def list_tasks(
     if project:
         conditions.append("project = ?")
         params.append(project)
-    if epic_key:
-        conditions.append("epic_key = ?")
-        params.append(epic_key.upper())
+    if cat_key:
+        conditions.append("cat_key = ?")
+        params.append(cat_key.upper())
     if parent_task_id is not None:
         conditions.append("parent_task_id = ?")
         params.append(parent_task_id)
@@ -304,8 +304,8 @@ ALLOWED_UPDATE_COLUMNS = frozenset(
         "source_doc_id",
         "output_doc_id",
         "parent_task_id",
-        "epic_key",
-        "epic_seq",
+        "cat_key",
+        "cat_seq",
     }
 )
 
@@ -395,12 +395,12 @@ def get_dependents(task_id: int) -> list[Task]:
 
 def get_ready_tasks(
     gameplan_id: int | None = None,
-    epic_key: str | None = None,
+    cat_key: str | None = None,
 ) -> list[Task]:
     """Get tasks ready to work (open + all deps done).
 
     Args:
-        epic_key: Filter by category key.
+        cat_key: Filter by category key.
     """
     conditions = ["t.status = 'open'"]
     params: list[str | int | None] = []
@@ -408,9 +408,9 @@ def get_ready_tasks(
     if gameplan_id:
         conditions.append("t.gameplan_id = ?")
         params.append(gameplan_id)
-    if epic_key:
-        conditions.append("t.epic_key = ?")
-        params.append(epic_key.upper())
+    if cat_key:
+        conditions.append("t.cat_key = ?")
+        params.append(cat_key.upper())
 
     with db.get_connection() as conn:
         cursor = conn.execute(
@@ -529,7 +529,7 @@ def list_epics(
     params = []
 
     if category_key:
-        conditions.append("t.epic_key = ?")
+        conditions.append("t.cat_key = ?")
         params.append(category_key.upper())
     if status:
         conditions.append(f"t.status IN ({','.join('?' * len(status))})")
@@ -572,7 +572,7 @@ def get_epic_view(epic_id: int) -> Task | None:
             """
             SELECT * FROM tasks
             WHERE parent_task_id = ?
-            ORDER BY epic_seq, id
+            ORDER BY cat_seq, id
         """,
             (epic_id,),
         )
@@ -585,7 +585,7 @@ def attach_to_epic(task_ids: list[int], epic_id: int) -> int:
     """Attach existing tasks to an epic.
 
     Sets parent_task_id and inherits the epic's category key.
-    Assigns next epic_seq for tasks that don't already have one in this category.
+    Assigns next cat_seq for tasks that don't already have one in this category.
 
     Returns the number of tasks attached.
     Raises ValueError if the epic doesn't exist or isn't an epic.
@@ -599,7 +599,7 @@ def attach_to_epic(task_ids: list[int], epic_id: int) -> int:
         if not epic_row:
             raise ValueError(f"Epic #{epic_id} not found or is not an epic")
 
-        epic_key = epic_row["epic_key"]
+        cat_key = epic_row["cat_key"]
         attached = 0
 
         for tid in task_ids:
@@ -614,15 +614,15 @@ def attach_to_epic(task_ids: list[int], epic_id: int) -> int:
 
             updates = {"parent_task_id": epic_id}
 
-            # Assign epic_key and next epic_seq if needed
-            if epic_key and task_row["epic_key"] != epic_key:
+            # Assign cat_key and next cat_seq if needed
+            if cat_key and task_row["cat_key"] != cat_key:
                 seq_cursor = conn.execute(
-                    "SELECT COALESCE(MAX(epic_seq), 0) + 1 FROM tasks WHERE epic_key = ?",
-                    (epic_key,),
+                    "SELECT COALESCE(MAX(cat_seq), 0) + 1 FROM tasks WHERE cat_key = ?",
+                    (cat_key,),
                 )
                 next_seq = seq_cursor.fetchone()[0]
-                updates["epic_key"] = epic_key
-                updates["epic_seq"] = next_seq
+                updates["cat_key"] = cat_key
+                updates["cat_seq"] = next_seq
 
             set_clause = ", ".join(f"{k} = ?" for k in updates)
             params = list(updates.values()) + [tid]

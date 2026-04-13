@@ -74,8 +74,8 @@ class TestListCategories:
     def test_list_categories_with_counts(self):
         categories.ensure_category("LCNT")
         # Create some tasks in this category
-        tasks.create_task("LCNT-1: First task", epic_key="LCNT")
-        tasks.create_task("LCNT-2: Second task", epic_key="LCNT", status="done")
+        tasks.create_task("LCNT-1: First task", cat_key="LCNT")
+        tasks.create_task("LCNT-2: Second task", cat_key="LCNT", status="done")
 
         cats = categories.list_categories()
         lcnt = next((c for c in cats if c.key == "LCNT"), None)
@@ -97,29 +97,29 @@ class TestDeleteCategory:
 
     def test_delete_category_with_done_tasks(self):
         categories.create_category("DDNE", "Done Tasks")
-        t1 = tasks.create_task("Task 1", epic_key="DDNE", status="done")
+        t1 = tasks.create_task("Task 1", cat_key="DDNE", status="done")
         result = categories.delete_category("DDNE")
         assert result["tasks_cleared"] == 1
-        # Task still exists but epic_key is cleared
+        # Task still exists but cat_key is cleared
         task = tasks.get_task(t1)
         assert task is not None
-        assert task.epic_key is None
-        assert task.epic_seq is None
+        assert task.cat_key is None
+        assert task.cat_seq is None
 
     def test_delete_category_refuses_open_tasks(self):
         categories.create_category("DREF", "Has Open Tasks")
-        tasks.create_task("Open task", epic_key="DREF")
+        tasks.create_task("Open task", cat_key="DREF")
         with pytest.raises(ValueError, match="open/active task"):
             categories.delete_category("DREF")
 
     def test_delete_category_force_with_open_tasks(self):
         categories.create_category("DFRC", "Force Delete")
-        t1 = tasks.create_task("Open task", epic_key="DFRC")
+        t1 = tasks.create_task("Open task", cat_key="DFRC")
         result = categories.delete_category("DFRC", force=True)
         assert result["tasks_cleared"] == 1
         assert categories.get_category("DFRC") is None
         task = tasks.get_task(t1)
-        assert task.epic_key is None
+        assert task.cat_key is None
 
     def test_delete_category_clears_epics(self):
         categories.create_category("DEPC", "With Epics")
@@ -129,7 +129,7 @@ class TestDeleteCategory:
         assert result["epics_cleared"] == 1
         epic = tasks.get_task(epic_id)
         assert epic is not None
-        assert epic.epic_key is None
+        assert epic.cat_key is None
 
     def test_delete_category_not_found(self):
         with pytest.raises(ValueError, match="not found"):
@@ -146,7 +146,7 @@ class TestAdoptCategory:
     """Tests for adopt_category."""
 
     def test_adopt_backfills(self):
-        # Create tasks with KEY-N: pattern in their title (no epic_key set)
+        # Create tasks with KEY-N: pattern in their title (no cat_key set)
         t1 = tasks.create_task("ADPT-1: First adopted task")
         t2 = tasks.create_task("ADPT-2: Second adopted task")
 
@@ -154,18 +154,18 @@ class TestAdoptCategory:
         assert result["adopted"] == 2
         assert result["skipped"] == 0
 
-        # Verify tasks now have epic_key/epic_seq
+        # Verify tasks now have cat_key/cat_seq
         task1 = tasks.get_task(t1)
-        assert task1.epic_key == "ADPT"
-        assert task1.epic_seq == 1
+        assert task1.cat_key == "ADPT"
+        assert task1.cat_seq == 1
 
         task2 = tasks.get_task(t2)
-        assert task2.epic_key == "ADPT"
-        assert task2.epic_seq == 2
+        assert task2.cat_key == "ADPT"
+        assert task2.cat_seq == 2
 
     def test_adopt_skips_already_adopted(self):
-        # Create a task that already has epic_key
-        tasks.create_task("SKIP-1: Already adopted", epic_key="SKIP")
+        # Create a task that already has cat_key
+        tasks.create_task("SKIP-1: Already adopted", cat_key="SKIP")
 
         # Adopt should not try to re-adopt
         result = categories.adopt_category("SKIP")
@@ -184,8 +184,8 @@ class TestRenameCategory:
     def test_rename_simple(self):
         """Rename with no target existing — creates target, moves tasks, deletes source."""
         categories.create_category("RNOLD", "Old Name")
-        t1 = tasks.create_task("Task 1", epic_key="RNOLD")
-        t2 = tasks.create_task("Task 2", epic_key="RNOLD")
+        t1 = tasks.create_task("Task 1", cat_key="RNOLD")
+        t2 = tasks.create_task("Task 2", cat_key="RNOLD")
 
         result = categories.rename_category("RNOLD", "RNNEW")
         assert result["tasks_moved"] == 2
@@ -199,37 +199,37 @@ class TestRenameCategory:
 
         # Tasks moved and retitled
         task1 = tasks.get_task(t1)
-        assert task1.epic_key == "RNNEW"
+        assert task1.cat_key == "RNNEW"
         assert "RNNEW-" in task1.title
 
         task2 = tasks.get_task(t2)
-        assert task2.epic_key == "RNNEW"
+        assert task2.cat_key == "RNNEW"
         assert "RNNEW-" in task2.title
 
     def test_rename_merge_renumbers(self):
         """Merge into existing category — renumbers to avoid seq conflicts."""
         categories.create_category("MROLD", "Old")
         categories.create_category("MRNEW", "New")
-        t_old = tasks.create_task("Task A", epic_key="MROLD")
-        t_new = tasks.create_task("Task B", epic_key="MRNEW")
+        t_old = tasks.create_task("Task A", cat_key="MROLD")
+        t_new = tasks.create_task("Task B", cat_key="MRNEW")
 
         # t_new should have seq 1, t_old should get seq 2 after merge
         result = categories.rename_category("MROLD", "MRNEW")
         assert result["tasks_moved"] == 1
 
         task_old = tasks.get_task(t_old)
-        assert task_old.epic_key == "MRNEW"
-        assert task_old.epic_seq == 2  # after existing seq 1
+        assert task_old.cat_key == "MRNEW"
+        assert task_old.cat_seq == 2  # after existing seq 1
 
         # Original target task unchanged
         task_new = tasks.get_task(t_new)
-        assert task_new.epic_key == "MRNEW"
-        assert task_new.epic_seq == 1
+        assert task_new.cat_key == "MRNEW"
+        assert task_new.cat_seq == 1
 
     def test_rename_with_name_override(self):
         """--name overrides the target category name."""
         categories.create_category("NMOLD", "Old Name")
-        tasks.create_task("Task", epic_key="NMOLD")
+        tasks.create_task("Task", cat_key="NMOLD")
 
         categories.rename_category("NMOLD", "NMNEW", name="Better Name")
         cat = categories.get_category("NMNEW")
@@ -239,14 +239,14 @@ class TestRenameCategory:
         """Epics are moved along with regular tasks."""
         categories.create_category("EPOLD", "Old")
         epic_id = tasks.create_epic("Test Epic", "EPOLD")
-        tasks.create_task("Task 1", epic_key="EPOLD")
+        tasks.create_task("Task 1", cat_key="EPOLD")
 
         result = categories.rename_category("EPOLD", "EPNEW")
         assert result["epics_moved"] == 1
         assert result["tasks_moved"] == 1
 
         epic = tasks.get_task(epic_id)
-        assert epic.epic_key == "EPNEW"
+        assert epic.cat_key == "EPNEW"
 
     def test_rename_same_key_raises(self):
         categories.create_category("SAME", "Same")
@@ -264,7 +264,7 @@ class TestRenameCategory:
 
     def test_rename_case_insensitive(self):
         categories.create_category("CSOLD", "Case Test")
-        tasks.create_task("Task", epic_key="CSOLD")
+        tasks.create_task("Task", cat_key="CSOLD")
         result = categories.rename_category("csold", "csnew")
         assert result["tasks_moved"] == 1
         assert categories.get_category("CSNEW") is not None
@@ -304,14 +304,14 @@ class TestCategoriesCLI:
 
     def test_delete_command_refuses_open(self):
         categories.create_category("CDRJ", "CLI Refuse")
-        tasks.create_task("Open task", epic_key="CDRJ")
+        tasks.create_task("Open task", cat_key="CDRJ")
         result = runner.invoke(app, ["delete", "CDRJ"])
         assert result.exit_code == 1
         assert "open/active" in _out(result)
 
     def test_delete_command_force(self):
         categories.create_category("CDFF", "CLI Force")
-        tasks.create_task("Open task", epic_key="CDFF")
+        tasks.create_task("Open task", cat_key="CDFF")
         result = runner.invoke(app, ["delete", "CDFF", "--force"])
         assert result.exit_code == 0
         assert "Deleted" in _out(result)
@@ -325,7 +325,7 @@ class TestCategoriesCLI:
 
     def test_rename_command(self):
         categories.create_category("CRNO", "CLI Rename Old")
-        tasks.create_task("Task", epic_key="CRNO")
+        tasks.create_task("Task", cat_key="CRNO")
         result = runner.invoke(app, ["rename", "CRNO", "CRNN"])
         assert result.exit_code == 0
         out = _out(result)

@@ -47,17 +47,17 @@ def _ensure_category(conn: sqlite3.Connection, key: str = "TEST") -> None:
 def _create_epic(
     conn: sqlite3.Connection,
     title: str,
-    epic_key: str = "TEST",
+    cat_key: str = "TEST",
     status: str = "open",
 ) -> int:
     """Helper to create an epic task directly via SQL."""
-    _ensure_category(conn, epic_key)
+    _ensure_category(conn, cat_key)
     cursor = conn.execute(
         """
-        INSERT INTO tasks (title, type, epic_key, status)
+        INSERT INTO tasks (title, type, cat_key, status)
         VALUES (?, 'epic', ?, ?)
         """,
-        (title, epic_key, status),
+        (title, cat_key, status),
     )
     conn.commit()
     assert cursor.lastrowid is not None
@@ -69,17 +69,17 @@ def _create_task(
     title: str,
     parent_task_id: int | None = None,
     status: str = "open",
-    epic_key: str | None = None,
+    cat_key: str | None = None,
     days_ago: int = 0,
     source_doc_id: int | None = None,
 ) -> int:
     """Helper to create a task directly via SQL."""
-    if epic_key:
-        _ensure_category(conn, epic_key)
+    if cat_key:
+        _ensure_category(conn, cat_key)
     cursor = conn.execute(
         """
         INSERT INTO tasks (
-            title, parent_task_id, status, epic_key,
+            title, parent_task_id, status, cat_key,
             created_at, updated_at,
             source_doc_id
         )
@@ -94,7 +94,7 @@ def _create_task(
             title,
             parent_task_id,
             status,
-            epic_key,
+            cat_key,
             f"-{days_ago}",
             f"-{days_ago}",
             source_doc_id,

@@ -61,14 +61,14 @@ def _ensure_category(conn: sqlite3.Connection, key: str = "TEST") -> None:
 def _create_epic(
     conn: sqlite3.Connection,
     title: str,
-    epic_key: str = "TEST",
+    cat_key: str = "TEST",
     status: str = "open",
 ) -> int:
     """Create an epic task directly via SQL."""
-    _ensure_category(conn, epic_key)
+    _ensure_category(conn, cat_key)
     cursor = conn.execute(
-        "INSERT INTO tasks (title, type, epic_key, status) VALUES (?, 'epic', ?, ?)",
-        (title, epic_key, status),
+        "INSERT INTO tasks (title, type, cat_key, status) VALUES (?, 'epic', ?, ?)",
+        (title, cat_key, status),
     )
     conn.commit()
     assert cursor.lastrowid is not None
@@ -80,17 +80,17 @@ def _create_task(
     title: str,
     parent_task_id: int | None = None,
     status: str = "open",
-    epic_key: str | None = None,
+    cat_key: str | None = None,
     days_ago: int = 0,
     source_doc_id: int | None = None,
 ) -> int:
     """Create a task directly via SQL."""
-    if epic_key:
-        _ensure_category(conn, epic_key)
+    if cat_key:
+        _ensure_category(conn, cat_key)
     cursor = conn.execute(
         """
         INSERT INTO tasks (
-            title, parent_task_id, status, epic_key,
+            title, parent_task_id, status, cat_key,
             created_at, updated_at,
             source_doc_id
         )
@@ -105,7 +105,7 @@ def _create_task(
             title,
             parent_task_id,
             status,
-            epic_key,
+            cat_key,
             f"-{days_ago}",
             f"-{days_ago}",
             source_doc_id,
@@ -150,7 +150,7 @@ class TestIntelligenceLifecycle:
 
         # Step 2: Create stale epic with old task
         with db.get_connection() as conn:
-            epic_id = _create_epic(conn, "Lifecycle Epic", epic_key="LIFE")
+            epic_id = _create_epic(conn, "Lifecycle Epic", cat_key="LIFE")
             _create_task(
                 conn,
                 "Old task under lifecycle epic",
@@ -452,7 +452,7 @@ class TestBriefMode:
                 "id": 100,
                 "title": "My Epic",
                 "status": "active",
-                "epic_key": "FEAT",
+                "cat_key": "FEAT",
                 "child_count": 5,
                 "children_done": 2,
             }
@@ -465,8 +465,8 @@ class TestBriefMode:
                 "priority": 5,
                 "status": "open",
                 "source_doc_id": 42,
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         ]
         mock_ip.return_value = []
@@ -508,8 +508,8 @@ class TestBriefMode:
                 "priority": 5,
                 "status": "open",
                 "source_doc_id": 42,
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         ]
         mock_ip.return_value = []
@@ -543,8 +543,8 @@ class TestBriefMode:
                 "priority": 5,
                 "status": "open",
                 "source_doc_id": None,
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         ]
         mock_ip.return_value = []

@@ -63,8 +63,8 @@ export interface Task {
   description: string | null;
   status: TaskStatus;
   priority: number;
-  epic_key: string | null;
-  epic_seq: number | null;
+  cat_key: string | null;
+  cat_seq: number | null;
   source_doc_id: number | null;
   parent_task_id: number | null;
   created_at: string;

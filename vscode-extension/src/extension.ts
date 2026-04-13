@@ -852,7 +852,7 @@ function buildTaskPreviewHtml(
   const meta = [
     `<strong>Status:</strong> ${icon} ${escapeHtml(task.status)}`,
     `<strong>Priority:</strong> ${task.priority}`,
-    task.epic_key ? `<strong>Epic:</strong> ${escapeHtml(task.epic_key)}` : null,
+    task.cat_key ? `<strong>Epic:</strong> ${escapeHtml(task.cat_key)}` : null,
     `<strong>Created:</strong> ${escapeHtml(task.created_at)}`,
     `<strong>Updated:</strong> ${escapeHtml(task.updated_at)}`,
     task.completed_at ? `<strong>Completed:</strong> ${escapeHtml(task.completed_at)}` : null,

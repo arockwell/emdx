@@ -181,7 +181,7 @@ def maybe_seed_onboarding() -> None:
             title=title,
             description=description,
             parent_task_id=epic_id,
-            epic_key="START",
+            cat_key="START",
         )
 
     _set_seeded()

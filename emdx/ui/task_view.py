@@ -143,10 +143,10 @@ def _priority_style(priority: int) -> str:
     return "dim"
 
 
-def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -> str:
+def _strip_epic_prefix(title: str, cat_key: str | None, cat_seq: int | None) -> str:
     """Strip the 'KEY-N: ' prefix from a title if it matches the epic."""
-    if epic_key and epic_seq:
-        prefix = f"{epic_key}-{epic_seq}: "
+    if cat_key and cat_seq:
+        prefix = f"{cat_key}-{cat_seq}: "
         if title.startswith(prefix):
             return title[len(prefix) :]
     return title
@@ -154,12 +154,12 @@ def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -
 
 def _task_badge(task: Task) -> str:
     """Return the KEY-N badge for a task, or empty string if unavailable."""
-    epic_key = task.epic_key
-    epic_seq = task.epic_seq
-    if epic_key and epic_seq:
-        return f"{epic_key}-{epic_seq}"
-    if epic_key:
-        return str(epic_key)
+    cat_key = task.cat_key
+    cat_seq = task.cat_seq
+    if cat_key and cat_seq:
+        return f"{cat_key}-{cat_seq}"
+    if cat_key:
+        return str(cat_key)
     return ""
 
 
@@ -167,7 +167,7 @@ def _task_label(task: Task) -> str:
     """Build a plain text label for tests and fallback display."""
     icon = STATUS_ICONS.get(task.status, "?")
     title = task.title
-    title = _strip_epic_prefix(title, task.epic_key, task.epic_seq)
+    title = _strip_epic_prefix(title, task.cat_key, task.cat_seq)
     if len(title) > 50:
         title = title[:47] + "..."
     return f"{icon} {title}"
@@ -607,24 +607,24 @@ class TaskView(Widget):
         icon = "📋" if is_parent else STATUS_ICONS.get(task.status, "?")
         title = _strip_epic_prefix(
             task.title,
-            task.epic_key,
-            task.epic_seq,
+            task.cat_key,
+            task.cat_seq,
         )
         # Epic badge: parents and children show "KEY-N" colored by status
-        epic_key = task.epic_key
-        epic_seq = task.epic_seq
+        cat_key = task.cat_key
+        cat_seq = task.cat_seq
         badge_color = color or "cyan"
         bold_badge = f"bold {badge_color}" if badge_color else "bold"
-        if is_parent and epic_key and epic_seq:
-            epic_text = Text(f"{epic_key}-{epic_seq}", style=bold_badge)
-        elif is_parent and epic_key:
-            epic_text = Text(epic_key, style=bold_badge)
+        if is_parent and cat_key and cat_seq:
+            epic_text = Text(f"{cat_key}-{cat_seq}", style=bold_badge)
+        elif is_parent and cat_key:
+            epic_text = Text(cat_key, style=bold_badge)
         elif is_parent:
             epic_text = Text("")
-        elif epic_key and epic_seq:
-            epic_text = Text(f"{epic_key}-{epic_seq}", style=badge_color)
-        elif epic_key:
-            epic_text = Text(epic_key, style=badge_color)
+        elif cat_key and cat_seq:
+            epic_text = Text(f"{cat_key}-{cat_seq}", style=badge_color)
+        elif cat_key:
+            epic_text = Text(cat_key, style=badge_color)
         else:
             epic_text = Text("")
 
@@ -719,7 +719,7 @@ class TaskView(Widget):
             for parent_id, children in cross_group_by_parent.items():
                 epic_data = self._epics.get(parent_id)
                 if epic_data:
-                    ek = epic_data.epic_key or ""
+                    ek = epic_data.cat_key or ""
                     done = epic_data.children_done
                     total = epic_data.child_count
                     ref_text = f"{ek} ({done}/{total} done)"
@@ -1152,7 +1152,7 @@ class TaskView(Widget):
         q = query.lower()
         fields = [
             task.title or "",
-            task.epic_key or "",
+            task.cat_key or "",
             task.description or "",
         ]
         return any(q in f.lower() for f in fields)
@@ -1161,7 +1161,7 @@ class TaskView(Widget):
         """Check if a task passes text, status, and epic filters."""
         if task.status in self._hidden_statuses:
             return False
-        if self._epic_filter and task.epic_key != self._epic_filter:
+        if self._epic_filter and task.cat_key != self._epic_filter:
             return False
         if self._filter_text and not self._task_matches_filter(task, self._filter_text):
             return False
@@ -1281,9 +1281,9 @@ class TaskView(Widget):
     def action_filter_epic(self) -> None:
         """Toggle epic filter to the current task's epic."""
         task = self._get_selected_task()
-        epic_key = task.epic_key if task else None
-        if epic_key and self._epic_filter != epic_key:
-            self._epic_filter = epic_key
+        cat_key = task.cat_key if task else None
+        if cat_key and self._epic_filter != cat_key:
+            self._epic_filter = cat_key
         else:
             self._epic_filter = None
         self._apply_filter()
@@ -1465,7 +1465,7 @@ class TaskView(Widget):
         header.update(header_label)
 
         # Title (strip KEY-N prefix since badge already shows it)
-        title = _strip_epic_prefix(task.title, task.epic_key, task.epic_seq)
+        title = _strip_epic_prefix(task.title, task.cat_key, task.cat_seq)
         detail_log.write(f"[bold]{title}[/bold]")
         detail_log.write("")
 
@@ -1503,15 +1503,15 @@ class TaskView(Widget):
             meta_parts.append(f"Priority: [yellow]{pri} !![/yellow]")
         else:
             meta_parts.append(f"Priority: {pri}")
-        if task.epic_key:
+        if task.cat_key:
             parent_id = task.parent_task_id
             epic = self._epics.get(parent_id) if parent_id else None
             if epic:
                 done = epic.children_done
                 total = epic.child_count
-                meta_parts.append(f"Epic: [cyan]{task.epic_key}[/cyan] ({done}/{total} done)")
+                meta_parts.append(f"Epic: [cyan]{task.cat_key}[/cyan] ({done}/{total} done)")
             else:
-                meta_parts.append(f"Epic: [cyan]{task.epic_key}[/cyan]")
+                meta_parts.append(f"Epic: [cyan]{task.cat_key}[/cyan]")
         target.write("  ".join(meta_parts))
 
         # Timestamps
@@ -1603,12 +1603,12 @@ class TaskView(Widget):
         header.update(epic_header)
 
         # Title (strip KEY-N prefix since badge already shows it)
-        title = _strip_epic_prefix(task.title, task.epic_key, task.epic_seq)
+        title = _strip_epic_prefix(task.title, task.cat_key, task.cat_seq)
         detail_log.write(f"[bold]{title}[/bold]")
         detail_log.write("")
 
         # Progress summary from cached epic data
-        epic_key = task.epic_key
+        cat_key = task.cat_key
         epic_data = self._epics.get(task.id)
         if epic_data:
             done = epic_data.children_done
@@ -1642,9 +1642,9 @@ class TaskView(Widget):
                 for child in epic_view.children:
                     c_icon = STATUS_ICONS.get(child.status, "?")
                     c_color = STATUS_COLORS.get(child.status, "")
-                    c_title = _strip_epic_prefix(child.title, child.epic_key, child.epic_seq)[:55]
-                    seq = child.epic_seq
-                    prefix = f"{epic_key}-{seq}" if epic_key and seq else ""
+                    c_title = _strip_epic_prefix(child.title, child.cat_key, child.cat_seq)[:55]
+                    seq = child.cat_seq
+                    prefix = f"{cat_key}-{seq}" if cat_key and seq else ""
                     if c_color:
                         detail_log.write(
                             f"  [{c_color}]{c_icon}[/{c_color}] "
