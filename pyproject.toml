@@ -31,7 +31,7 @@ rich = "^14.3.0"
 textual = "^8.0.0"
 psutil = "^7.0.0"
 pyyaml = ">=6.0"
-google-api-python-client = "^2.100.0"
+google-api-python-client = "^2.194.0"
 google-auth-httplib2 = "^0.3.0"
 google-auth-oauthlib = "^1.2.0"
 
