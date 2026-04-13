@@ -61,8 +61,8 @@ def _blocker_summary(task_id: int) -> str:
 
 def _display_id(task: Task) -> str:
     """Return KEY-N display ID if available, otherwise #id."""
-    if task.epic_key and task.epic_seq:
-        return f"{task.epic_key}-{task.epic_seq}"
+    if task.cat_key and task.cat_seq:
+        return f"{task.cat_key}-{task.cat_seq}"
     return f"#{task.id}"
 
 
@@ -91,7 +91,15 @@ def add(
     title: str = typer.Argument(..., help="Task title"),
     doc: int | None = typer.Option(None, "-d", "--doc", help="Link to document ID"),
     description: str | None = typer.Option(None, "-D", "--description", help="Task description"),
-    epic: TaskRef | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
+    parent: TaskRef | None = typer.Option(
+        None, "-p", "--parent", help="Parent task ID (e.g. 510 or SEC-1)"
+    ),
+    epic: TaskRef | None = typer.Option(
+        None,
+        "--epic",
+        hidden=True,
+        help="Deprecated: use --parent",
+    ),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Category key (e.g. SEC)"),
     after: list[int] | None = typer.Option(
         None, "--after", help="Task IDs this depends on (repeatable)"
@@ -103,8 +111,8 @@ def add(
         emdx task add "Fix the auth bug"
         emdx task add "Implement this" --doc 42
         emdx task add "Refactor tests" -D "Split into unit and integration"
-        emdx task add "Test task" --epic 510
-        emdx task add "Test task" --epic SEC-1
+        emdx task add "Test task" --parent 510
+        emdx task add "Test task" --parent SEC-1
         emdx task add "Another task" --cat SEC
         emdx task add "Deploy" --after 10 --after 11
     """
@@ -112,19 +120,22 @@ def add(
         console.print("[red]Error: Task title cannot be empty[/red]")
         raise typer.Exit(1)
 
-    parent_task_id = None
-    epic_key = cat.upper() if cat else None
+    # --epic is a deprecated alias for --parent
+    parent_ref = parent or epic
 
-    if epic:
-        epic_id = _resolve_id(epic, label="Epic")
+    parent_task_id = None
+    cat_key = cat.upper() if cat else None
+
+    if parent_ref:
+        epic_id = _resolve_id(parent_ref, label="Parent")
         parent_task = tasks.get_task(epic_id)
         if not parent_task:
-            console.print(f"[red]Epic {epic} not found[/red]")
+            console.print(f"[red]Parent task {parent_ref} not found[/red]")
             raise typer.Exit(1)
         parent_task_id = epic_id
-        # Inherit epic_key from the parent epic if not explicitly set
-        if not epic_key and parent_task.epic_key:
-            epic_key = parent_task.epic_key
+        # Inherit cat_key from the parent task if not explicitly set
+        if not cat_key and parent_task.cat_key:
+            cat_key = parent_task.cat_key
 
     depends_on = after if after else None
 
@@ -133,7 +144,7 @@ def add(
         description=description or "",
         source_doc_id=doc,
         parent_task_id=parent_task_id,
-        epic_key=epic_key,
+        cat_key=cat_key,
         depends_on=depends_on,
     )
 
@@ -154,7 +165,7 @@ def add(
 
 @app.command()
 def plan(
-    parent: str = typer.Argument(..., help="Parent task epic_key (e.g. FEAT-25)"),
+    parent: str = typer.Argument(..., help="Parent task ID (e.g. FEAT-25 or 42)"),
     titles: list[str] = typer.Argument(..., help="Subtask titles (at least one)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Category for all subtasks"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -185,9 +196,9 @@ def plan(
             console.print(f"[red]{msg}[/red]")
         raise typer.Exit(1)
 
-    epic_key = cat.upper() if cat else None
-    if not epic_key and parent_task.epic_key:
-        epic_key = parent_task.epic_key
+    cat_key = cat.upper() if cat else None
+    if not cat_key and parent_task.cat_key:
+        cat_key = parent_task.cat_key
 
     created: list[dict[str, str | int]] = []
     prev_id: int | None = None
@@ -198,12 +209,12 @@ def plan(
             title,
             description="",
             parent_task_id=parent_id,
-            epic_key=epic_key,
+            cat_key=cat_key,
             depends_on=depends_on,
         )
         task_data = tasks.get_task(task_id)
         display = _display_id(task_data) if task_data else f"#{task_id}"
-        created.append({"id": task_id, "epic_key": display, "title": title})
+        created.append({"id": task_id, "cat_key": display, "title": title})
         prev_id = task_id
 
     parent_display = _display_id(parent_task)
@@ -213,7 +224,7 @@ def plan(
     else:
         print(f"Created {len(created)} subtasks under {parent_display}:")
         for sub in created:
-            print(f"  {sub['epic_key']}  {sub['title']}")
+            print(f"  {sub['cat_key']}  {sub['title']}")
 
 
 @app.command()
@@ -237,12 +248,20 @@ def ready(
         console.print("[yellow]No ready tasks[/yellow]")
         return
 
+    # Build parent ID set for quick lookup
+    ready_ids = {t.id for t in ready_tasks}
+
     table = Table(title=f"Ready ({len(ready_tasks)})")
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Title")
 
     for t in ready_tasks:
-        table.add_row(_task_label(t), _display_title(t))
+        label = _task_label(t)
+        title = _display_title(t)
+        # Indent subtasks whose parent is also in the ready list
+        if t.parent_task_id is not None and t.parent_task_id in ready_ids:
+            title = f"  [dim]↳[/dim] {title}"
+        table.add_row(label, title)
 
     console.print(table)
 
@@ -394,12 +413,12 @@ def view(
 
     # Metadata line
     meta = [f"Status: {task.status}"]
-    if task.epic_key:
-        meta.append(f"Category: {task.epic_key}")
+    if task.cat_key:
+        meta.append(f"Category: {task.cat_key}")
     parent_task_id: int | None = task.parent_task_id
     if parent_task_id:
         parent = tasks.get_task(parent_task_id)
-        epic_label = _display_id(parent) if parent else (task.epic_key or "?")
+        epic_label = _display_id(parent) if parent else (task.cat_key or "?")
         meta.append(f"Epic: {epic_label}")
     if task.priority and task.priority != 3:
         meta.append(f"Priority: {task.priority}")
@@ -612,7 +631,7 @@ def _assemble_brief(
         "title": _display_title(task),
         "status": task.status,
         "priority": task.priority,
-        "category": task.epic_key,
+        "category": task.cat_key,
         "description": task.description or "",
     }
 
@@ -887,7 +906,7 @@ def list_cmd(
     task_list = tasks.list_tasks(
         status=status_list,
         limit=limit,
-        epic_key=cat,
+        cat_key=cat,
         parent_task_id=resolved_epic,
         since=since_date,
     )
@@ -919,20 +938,20 @@ def list_cmd(
 
 def _task_label(task: Task) -> str:
     """Format task label: DEBT-13 if epic, else #id."""
-    epic_key = task.epic_key
-    epic_seq = task.epic_seq
-    if epic_key and epic_seq:
-        return f"{epic_key}-{epic_seq}"
+    cat_key = task.cat_key
+    cat_seq = task.cat_seq
+    if cat_key and cat_seq:
+        return f"{cat_key}-{cat_seq}"
     return f"#{task.id}"
 
 
 def _display_title(task: Task) -> str:
     """Strip redundant KEY-N: prefix from title since the ID column has it."""
     title: str = task.title
-    epic_key = task.epic_key
-    epic_seq = task.epic_seq
-    if epic_key and epic_seq:
-        prefix = f"{epic_key}-{epic_seq}: "
+    cat_key = task.cat_key
+    cat_seq = task.cat_seq
+    if cat_key and cat_seq:
+        prefix = f"{cat_key}-{cat_seq}: "
         if title.startswith(prefix):
             return title[len(prefix) :]
     return title

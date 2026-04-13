@@ -40,15 +40,15 @@ def list_categories() -> list[Category]:
         cursor = conn.execute("""
             SELECT
                 c.key, c.name, c.description, c.created_at,
-                COUNT(CASE WHEN t.epic_seq IS NOT NULL
+                COUNT(CASE WHEN t.cat_seq IS NOT NULL
                     AND t.status IN ('open', 'active', 'blocked')
                     THEN 1 END) as open_count,
-                COUNT(CASE WHEN t.epic_seq IS NOT NULL
+                COUNT(CASE WHEN t.cat_seq IS NOT NULL
                     AND t.status = 'done' THEN 1 END) as done_count,
                 COUNT(CASE WHEN t.type = 'epic' THEN 1 END) as epic_count,
-                COUNT(CASE WHEN t.epic_seq IS NOT NULL THEN 1 END) as total_count
+                COUNT(CASE WHEN t.cat_seq IS NOT NULL THEN 1 END) as total_count
             FROM categories c
-            LEFT JOIN tasks t ON t.epic_key = c.key
+            LEFT JOIN tasks t ON t.cat_key = c.key
             GROUP BY c.key
             ORDER BY c.key
         """)
@@ -77,7 +77,7 @@ def delete_category(key: str, force: bool = False) -> dict[str, int]:
     """Delete a category and handle orphaned tasks.
 
     If force=False (default), refuses to delete if open/active tasks exist.
-    If force=True, clears epic_key/epic_seq on all associated tasks, then deletes.
+    If force=True, clears cat_key/cat_seq on all associated tasks, then deletes.
 
     Returns dict with counts: tasks_cleared, epics_cleared.
     Raises ValueError if category not found or has open tasks (when not forced).
@@ -90,7 +90,7 @@ def delete_category(key: str, force: bool = False) -> dict[str, int]:
     with db.get_connection() as conn:
         # Count open/active tasks in this category
         cursor = conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE epic_key = ? AND status IN ('open', 'active')",
+            "SELECT COUNT(*) FROM tasks WHERE cat_key = ? AND status IN ('open', 'active')",
             (key,),
         )
         open_count = cursor.fetchone()[0]
@@ -103,20 +103,20 @@ def delete_category(key: str, force: bool = False) -> dict[str, int]:
 
         # Count tasks and epics that will be affected
         cursor = conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE epic_key = ? AND type != 'epic'",
+            "SELECT COUNT(*) FROM tasks WHERE cat_key = ? AND type != 'epic'",
             (key,),
         )
         tasks_cleared = cursor.fetchone()[0]
 
         cursor = conn.execute(
-            "SELECT COUNT(*) FROM tasks WHERE epic_key = ? AND type = 'epic'",
+            "SELECT COUNT(*) FROM tasks WHERE cat_key = ? AND type = 'epic'",
             (key,),
         )
         epics_cleared = cursor.fetchone()[0]
 
-        # Clear epic_key/epic_seq on all associated tasks (don't delete the tasks)
+        # Clear cat_key/cat_seq on all associated tasks (don't delete the tasks)
         conn.execute(
-            "UPDATE tasks SET epic_key = NULL, epic_seq = NULL WHERE epic_key = ?",
+            "UPDATE tasks SET cat_key = NULL, cat_seq = NULL WHERE cat_key = ?",
             (key,),
         )
 
@@ -130,8 +130,8 @@ def delete_category(key: str, force: bool = False) -> dict[str, int]:
 def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
     """Backfill existing tasks with KEY-N: titles into the category system.
 
-    Scans tasks where title matches '{KEY}-N:' pattern and sets epic_key/epic_seq.
-    Also detects parent epic tasks titled 'EPIC: ...' and sets their type/epic_key.
+    Scans tasks where title matches '{KEY}-N:' pattern and sets cat_key/cat_seq.
+    Also detects parent epic tasks titled 'EPIC: ...' and sets their type/cat_key.
 
     Returns dict with counts: adopted, skipped, epics_found.
     """
@@ -156,7 +156,7 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
 
     with db.get_connection() as conn:
         # Find tasks matching KEY-N: pattern that aren't already adopted
-        cursor = conn.execute("SELECT id, title, parent_task_id FROM tasks WHERE epic_key IS NULL")
+        cursor = conn.execute("SELECT id, title, parent_task_id FROM tasks WHERE cat_key IS NULL")
         rows = cursor.fetchall()
 
         for row in rows:
@@ -165,14 +165,14 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
                 seq = int(m.group(1))
                 # Check for conflicts
                 conflict = conn.execute(
-                    "SELECT id FROM tasks WHERE epic_key = ? AND epic_seq = ?",
+                    "SELECT id FROM tasks WHERE cat_key = ? AND cat_seq = ?",
                     (key, seq),
                 ).fetchone()
                 if conflict:
                     skipped += 1
                     continue
                 conn.execute(
-                    "UPDATE tasks SET epic_key = ?, epic_seq = ? WHERE id = ?",
+                    "UPDATE tasks SET cat_key = ?, cat_seq = ? WHERE id = ?",
                     (key, seq, row["id"]),
                 )
                 adopted += 1
@@ -180,18 +180,18 @@ def adopt_category(key: str, name: str | None = None) -> dict[str, int]:
         # Find parent epic tasks (title starts with "EPIC:")
         epic_cursor = conn.execute(
             "SELECT DISTINCT parent_task_id FROM tasks "
-            "WHERE epic_key = ? AND parent_task_id IS NOT NULL",
+            "WHERE cat_key = ? AND parent_task_id IS NOT NULL",
             (key,),
         )
         parent_ids = [r["parent_task_id"] for r in epic_cursor.fetchall()]
 
         for pid in parent_ids:
             parent = conn.execute(
-                "SELECT id, type, epic_key FROM tasks WHERE id = ?", (pid,)
+                "SELECT id, type, cat_key FROM tasks WHERE id = ?", (pid,)
             ).fetchone()
-            if parent and parent["epic_key"] is None:
+            if parent and parent["cat_key"] is None:
                 conn.execute(
-                    "UPDATE tasks SET type = 'epic', epic_key = ? WHERE id = ?",
+                    "UPDATE tasks SET type = 'epic', cat_key = ? WHERE id = ?",
                     (key, pid),
                 )
                 epics_found += 1
@@ -239,16 +239,16 @@ def rename_category(
     title_pattern = re.compile(rf"^{re.escape(old_key)}-(\d+):\s*")
 
     with db.get_connection() as conn:
-        # Find the max existing epic_seq in the target category
+        # Find the max existing cat_seq in the target category
         cursor = conn.execute(
-            "SELECT COALESCE(MAX(epic_seq), 0) FROM tasks WHERE epic_key = ?",
+            "SELECT COALESCE(MAX(cat_seq), 0) FROM tasks WHERE cat_key = ?",
             (new_key,),
         )
         next_seq = cursor.fetchone()[0] + 1
 
         # Get all tasks in the old category (epics and regular tasks)
         cursor = conn.execute(
-            "SELECT id, title, type FROM tasks WHERE epic_key = ? ORDER BY epic_seq",
+            "SELECT id, title, type FROM tasks WHERE cat_key = ? ORDER BY cat_seq",
             (old_key,),
         )
         rows = cursor.fetchall()
@@ -267,7 +267,7 @@ def rename_category(
                 new_title = f"{new_key}-{seq}: {new_title[m.end() :]}"
 
             conn.execute(
-                "UPDATE tasks SET epic_key = ?, epic_seq = ?, title = ? WHERE id = ?",
+                "UPDATE tasks SET cat_key = ?, cat_seq = ?, title = ? WHERE id = ?",
                 (new_key, seq, new_title, row["id"]),
             )
 

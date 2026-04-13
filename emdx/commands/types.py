@@ -16,7 +16,7 @@ class EpicInfo(TypedDict):
     id: int
     title: str
     status: str
-    epic_key: str | None
+    cat_key: str | None
     child_count: int
     children_done: int
 
@@ -30,8 +30,8 @@ class ReadyTask(TypedDict):
     priority: int
     status: str
     source_doc_id: int | None
-    epic_key: str | None
-    epic_seq: int | None
+    cat_key: str | None
+    cat_seq: int | None
 
 
 class InProgressTask(TypedDict):
@@ -41,8 +41,8 @@ class InProgressTask(TypedDict):
     title: str
     description: str | None
     priority: int
-    epic_key: str | None
-    epic_seq: int | None
+    cat_key: str | None
+    cat_seq: int | None
 
 
 class RecentDoc(TypedDict):

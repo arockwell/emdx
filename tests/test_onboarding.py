@@ -80,8 +80,8 @@ def _make_test_db(db_path: Path) -> sqlite3.Connection:
             source_doc_id INTEGER REFERENCES documents(id),
             output_doc_id INTEGER REFERENCES documents(id),
             parent_task_id INTEGER REFERENCES tasks(id),
-            epic_key TEXT REFERENCES categories(key),
-            epic_seq INTEGER
+            cat_key TEXT REFERENCES categories(key),
+            cat_seq INTEGER
         )
     """)
     conn.execute("""

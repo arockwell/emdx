@@ -284,10 +284,10 @@ def _output_text(
 
 def _task_label(task: ReadyTask | InProgressTask) -> str:
     """Format a task label: use epic key (e.g. DEBT-10) if available, else #id."""
-    epic_key = task.get("epic_key")
-    epic_seq = task.get("epic_seq")
-    if epic_key and epic_seq:
-        label = f"{epic_key}-{epic_seq}"
+    cat_key = task.get("cat_key")
+    cat_seq = task.get("cat_seq")
+    if cat_key and cat_seq:
+        label = f"{cat_key}-{cat_seq}"
     else:
         label = f"#{task['id']}"
     # Pad to 13 chars for alignment (supports 8-char keys like SECURITY-999)
@@ -298,7 +298,7 @@ def _format_epic_line(epic: EpicInfo) -> str:
     """Format an epic line with progress bar."""
     done = epic["children_done"]
     total = epic["child_count"]
-    cat = epic.get("epic_key") or ""
+    cat = epic.get("cat_key") or ""
 
     # Progress bar: 5 chars wide
     if total > 0:
@@ -318,7 +318,7 @@ def _format_epic_brief(epic: EpicInfo) -> str:
     """Format an epic as a compact one-liner for brief mode."""
     done = epic["children_done"]
     total = epic["child_count"]
-    cat = epic.get("epic_key") or ""
+    cat = epic.get("cat_key") or ""
     prefix = f"{cat}: " if cat else ""
     return f"  {prefix}{epic['title']} — {done}/{total} done"
 
@@ -333,7 +333,7 @@ def _get_active_epics() -> list[EpicInfo]:
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT t.id, t.title, t.status, t.epic_key,
+            SELECT t.id, t.title, t.status, t.cat_key,
                 COUNT(c.id) as child_count,
                 COUNT(CASE WHEN c.status IN ('done', 'duplicate')
                     THEN 1 END) as children_done
@@ -349,7 +349,7 @@ def _get_active_epics() -> list[EpicInfo]:
                 id=r[0],
                 title=r[1],
                 status=r[2],
-                epic_key=r[3],
+                cat_key=r[3],
                 child_count=r[4],
                 children_done=r[5],
             )
@@ -363,7 +363,7 @@ def _get_ready_tasks() -> list[ReadyTask]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT t.id, t.title, t.description, t.priority, t.status,
-                   t.source_doc_id, t.epic_key, t.epic_seq
+                   t.source_doc_id, t.cat_key, t.cat_seq
             FROM tasks t
             WHERE t.status = 'open'
             AND NOT EXISTS (
@@ -384,8 +384,8 @@ def _get_ready_tasks() -> list[ReadyTask]:
                 priority=r[3],
                 status=r[4],
                 source_doc_id=r[5],
-                epic_key=r[6],
-                epic_seq=r[7],
+                cat_key=r[6],
+                cat_seq=r[7],
             )
             for r in rows
         ]
@@ -396,7 +396,7 @@ def _get_in_progress_tasks() -> list[InProgressTask]:
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT id, title, description, priority, epic_key, epic_seq
+            SELECT id, title, description, priority, cat_key, cat_seq
             FROM tasks
             WHERE status = 'active'
             ORDER BY updated_at DESC
@@ -409,8 +409,8 @@ def _get_in_progress_tasks() -> list[InProgressTask]:
                 title=r[1],
                 description=r[2],
                 priority=r[3],
-                epic_key=r[4],
-                epic_seq=r[5],
+                cat_key=r[4],
+                cat_seq=r[5],
             )
             for r in rows
         ]

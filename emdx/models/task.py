@@ -45,8 +45,8 @@ class Task:
     source_doc_id: int | None = None
     output_doc_id: int | None = None
     parent_task_id: int | None = None
-    epic_key: str | None = None
-    epic_seq: int | None = None
+    cat_key: str | None = None
+    cat_seq: int | None = None
 
     # Epic-specific fields (populated by epic queries, default to 0)
     child_count: int = 0
