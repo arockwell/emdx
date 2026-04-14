@@ -7,7 +7,9 @@ enabling semantic search without API costs.
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -30,6 +32,47 @@ logger = logging.getLogger(__name__)
 # Lazy load - model is ~90MB, loads in ~2 seconds
 _model: SentenceTransformer | None = None
 
+# Loggers that emit noise during model loading
+_NOISY_LOGGERS = (
+    "huggingface_hub",
+    "transformers",
+    "sentence_transformers",
+    "filelock",
+)
+
+
+def _load_model_silently(cls: type) -> SentenceTransformer:
+    """Load the SentenceTransformer model while suppressing all stdout/stderr noise.
+
+    HuggingFace libraries emit tqdm progress bars for weight loading and an
+    unauthenticated-request warning to stdout/stderr. These corrupt CLI output
+    and break pipes. Suppress them for the duration of the load only.
+    """
+    # Silence noisy loggers temporarily
+    saved_levels: dict[str, int] = {}
+    for name in _NOISY_LOGGERS:
+        lg = logging.getLogger(name)
+        saved_levels[name] = lg.level
+        lg.setLevel(logging.ERROR)
+
+    # Also disable transformers progress bars via its own API if available
+    try:
+        import transformers.utils.logging as tfl
+
+        tfl.set_verbosity_error()
+    except Exception:
+        pass
+
+    # Redirect stdout and stderr to /dev/null to catch any remaining tqdm output
+    devnull = open(os.devnull, "w")
+    try:
+        with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+            return cls("all-MiniLM-L6-v2")
+    finally:
+        devnull.close()
+        for name, level in saved_levels.items():
+            logging.getLogger(name).setLevel(level)
+
 
 def _get_model() -> SentenceTransformer:
     """Lazy load the embedding model."""
@@ -49,7 +92,9 @@ def _get_model() -> SentenceTransformer:
 
         # all-MiniLM-L6-v2: Good balance of speed/quality
         # ~90MB download, ~80ms per doc, 384 dimensions
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+        # Suppress HuggingFace/transformers noise (tqdm progress bars, HF_TOKEN warning)
+        # that would otherwise leak to stdout/stderr during CLI and pipe usage.
+        _model = _load_model_silently(SentenceTransformer)
         logger.info("Loaded embedding model: all-MiniLM-L6-v2")
     return _model
 
