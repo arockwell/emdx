@@ -62,6 +62,11 @@ emdx = "emdx.main:run"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
+
 [tool.ruff]
 line-length = 100
 
@@ -97,6 +102,8 @@ module = [
     "datasketch.*",
     "sentence_transformers",
     "sentence_transformers.*",
+    "transformers",
+    "transformers.*",
     "psutil",
     "psutil.*",
     "watchdog",
