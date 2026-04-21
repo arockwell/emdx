@@ -38,7 +38,7 @@ google-auth-oauthlib = "^1.2.0"
 [tool.poetry.group.ml.dependencies]
 scikit-learn = "^1.6.0"
 datasketch = "^1.6.0"
-sentence-transformers = "^5.2.2"
+sentence-transformers = "^5.4.0"
 numpy = "^2.4.2"
 
 [tool.poetry.group.dev.dependencies]
