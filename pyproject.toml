@@ -36,7 +36,7 @@ google-auth-httplib2 = "^0.3.0"
 google-auth-oauthlib = "^1.2.0"
 
 [tool.poetry.group.ml.dependencies]
-scikit-learn = "^1.6.0"
+scikit-learn = "^1.8.0"
 datasketch = "^1.6.0"
 sentence-transformers = "^5.2.2"
 numpy = "^2.4.2"
