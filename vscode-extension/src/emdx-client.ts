@@ -358,7 +358,7 @@ class EmdxClient {
     const key = `tasks:${status ?? "all"}:${epicKey ?? "all"}`;
     const params: Record<string, unknown> = {};
     if (status) params.status = status;
-    if (epicKey) params.epic_key = epicKey;
+    if (epicKey) params.cat_key = epicKey;
     return this.rpcCached<Task[]>(key, "task.list", params);
   }
 

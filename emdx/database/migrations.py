@@ -3121,6 +3121,23 @@ def migration_20260302_160000_add_wiki_quality_index(
     conn.commit()
 
 
+def migration_20260413_000000_rename_epic_key_to_cat_key(
+    conn: sqlite3.Connection,
+) -> None:
+    """Rename epic_key/epic_seq columns to cat_key/cat_seq in tasks table.
+
+    These columns represent category namespacing (e.g. SEC-1), not epic hierarchy.
+    The rename aligns the column names with their actual purpose.
+    """
+    conn.execute("ALTER TABLE tasks RENAME COLUMN epic_key TO cat_key")
+    conn.execute("ALTER TABLE tasks RENAME COLUMN epic_seq TO cat_seq")
+    conn.execute("DROP INDEX IF EXISTS idx_tasks_epic_key")
+    conn.execute("DROP INDEX IF EXISTS idx_tasks_epic_seq")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_cat_key ON tasks(cat_key)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_cat_seq ON tasks(cat_seq)")
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("0", "Create documents table", migration_000_create_documents_table),
@@ -3206,6 +3223,11 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
         "20260302_160000",
         "Add index on wiki_articles.quality_score",
         migration_20260302_160000_add_wiki_quality_index,
+    ),
+    (
+        "20260413_000000",
+        "Rename epic_key/epic_seq to cat_key/cat_seq",
+        migration_20260413_000000_rename_epic_key_to_cat_key,
     ),
 ]
 

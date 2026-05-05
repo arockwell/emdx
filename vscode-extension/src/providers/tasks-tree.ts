@@ -45,7 +45,7 @@ export class TaskTreeItem extends vscode.TreeItem {
     const prioritySuffix = priority ? ` ${priority}` : "";
 
     this.label = `${icon} ${task.title}${prioritySuffix}`;
-    this.description = task.epic_key ?? undefined;
+    this.description = task.cat_key ?? undefined;
     this.tooltip = new vscode.MarkdownString(
       [
         `**${task.title}**`,
@@ -53,7 +53,7 @@ export class TaskTreeItem extends vscode.TreeItem {
         `ID: ${task.id}`,
         `Status: ${task.status}`,
         `Priority: ${task.priority}`,
-        task.epic_key ? `Epic: ${task.epic_key}` : null,
+        task.cat_key ? `Epic: ${task.cat_key}` : null,
         task.description ? `\n---\n${task.description}` : null,
       ]
         .filter(Boolean)

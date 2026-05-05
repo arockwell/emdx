@@ -7,8 +7,8 @@ export interface Task {
   description: string | null;
   status: TaskStatus;
   priority: number;
-  epic_key: string | null;
-  epic_seq: number | null;
+  cat_key: string | null;
+  cat_seq: number | null;
   source_doc_id: number | null;
   parent_task_id: number | null;
   created_at: string;
@@ -253,8 +253,8 @@ export function TaskView() {
                             {task.priority > 0 ? `P${task.priority}` : ""}
                           </span>
                           <span className="task-title">{task.title}</span>
-                          {task.epic_key && (
-                            <span className="badge badge-category">{task.epic_key}</span>
+                          {task.cat_key && (
+                            <span className="badge badge-category">{task.cat_key}</span>
                           )}
                         </div>
                       );
@@ -304,8 +304,8 @@ function TaskDetail({ task, onStatusChange }: TaskDetailProps) {
           {task.priority > 0 && (
             <span className="meta-item">Priority: P{task.priority}</span>
           )}
-          {task.epic_key && (
-            <span className="meta-item">Epic: {task.epic_key}</span>
+          {task.cat_key && (
+            <span className="meta-item">Epic: {task.cat_key}</span>
           )}
         </div>
       </header>

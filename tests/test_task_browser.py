@@ -26,13 +26,13 @@ def make_task(
     status: str = "open",
     priority: int = 5,
     description: str | None = None,
-    epic_key: str | None = None,
+    cat_key: str | None = None,
     created_at: str | None = "2025-01-01T12:00:00",
     updated_at: str | None = None,
     completed_at: str | None = None,
     parent_task_id: int | None = None,
     type: str = "manual",
-    epic_seq: int | None = None,
+    cat_seq: int | None = None,
     **kwargs: object,
 ) -> Task:
     return Task.from_row(
@@ -42,7 +42,7 @@ def make_task(
             "status": status,
             "priority": priority,
             "description": description,
-            "epic_key": epic_key,
+            "cat_key": cat_key,
             "created_at": created_at,
             "updated_at": updated_at,
             "completed_at": completed_at,
@@ -52,29 +52,29 @@ def make_task(
             "type": type,
             "source_doc_id": None,
             "parent_task_id": parent_task_id,
-            "epic_seq": epic_seq,
+            "cat_seq": cat_seq,
         }
     )
 
 
 def make_epic(
     id: int = 1,
-    epic_key: str = "AUTH",
+    cat_key: str = "AUTH",
     status: str = "open",
     child_count: int = 10,
     children_done: int = 7,
     children_open: int = 3,
-    epic_seq: int = 1,
+    cat_seq: int = 1,
     **kwargs: object,
 ) -> Task:
     return Task.from_row(
         {
             "id": id,
-            "title": f"Epic: {epic_key}",
+            "title": f"Epic: {cat_key}",
             "status": status,
-            "epic_key": epic_key,
+            "cat_key": cat_key,
             "type": "epic",
-            "epic_seq": epic_seq,
+            "cat_seq": cat_seq,
             "priority": 5,
             "description": None,
             "created_at": "2025-01-01T12:00:00",
@@ -414,7 +414,7 @@ class TestKeyboardNavigation:
     async def test_highlighting_task_updates_detail_header(self, mock_task_data: MockDict) -> None:
         """Highlighting a task updates the detail header."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=42, title="My task", status="open", epic_key="AUTH", epic_seq=1),
+            make_task(id=42, title="My task", status="open", cat_key="AUTH", cat_seq=1),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -493,10 +493,10 @@ class TestDetailPane:
     async def test_shows_epic_info_with_progress(self, mock_task_data: MockDict) -> None:
         """Detail pane shows epic info with done/total progress."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=2, status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=2, status="open", cat_key="AUTH", parent_task_id=100),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH", child_count=10, children_done=7),
+            make_epic(id=100, cat_key="AUTH", child_count=10, children_done=7),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -775,7 +775,7 @@ class TestEdgeCases:
                 id=1,
                 status="open",
                 description=None,
-                epic_key=None,
+                cat_key=None,
                 created_at=None,
                 updated_at=None,
                 completed_at=None,
@@ -977,11 +977,11 @@ class TestFilterBar:
             assert any("auth" in t.lower() for t in titles)
 
     @pytest.mark.asyncio
-    async def test_filter_by_epic_key(self, mock_task_data: MockDict) -> None:
-        """Filter matches against epic_key."""
+    async def test_filter_by_cat_key(self, mock_task_data: MockDict) -> None:
+        """Filter matches against cat_key."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Task A", status="open", epic_key="AUTH"),
-            make_task(id=2, title="Task B", status="open", epic_key="TUI"),
+            make_task(id=1, title="Task A", status="open", cat_key="AUTH"),
+            make_task(id=2, title="Task B", status="open", cat_key="TUI"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1486,12 +1486,12 @@ class TestEpicGrouping:
     async def test_g_toggles_to_status_grouping(self, mock_task_data: MockDict) -> None:
         """Pressing g switches from epic grouping (default) to status grouping."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Auth task", status="open", epic_key="AUTH", parent_task_id=100),
-            make_task(id=2, title="TUI task", status="open", epic_key="TUI", parent_task_id=101),
+            make_task(id=1, title="Auth task", status="open", cat_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="TUI task", status="open", cat_key="TUI", parent_task_id=101),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH"),
-            make_epic(id=101, epic_key="TUI"),
+            make_epic(id=100, cat_key="AUTH"),
+            make_epic(id=101, cat_key="TUI"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1515,7 +1515,7 @@ class TestEpicGrouping:
     async def test_g_toggles_back_to_epic(self, mock_task_data: MockDict) -> None:
         """Pressing g twice returns to epic grouping (default)."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Auth task", status="open", epic_key="AUTH"),
+            make_task(id=1, title="Auth task", status="open", cat_key="AUTH"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1535,11 +1535,11 @@ class TestEpicGrouping:
     async def test_epic_grouping_shows_ungrouped(self, mock_task_data: MockDict) -> None:
         """Tasks without an epic appear under UNGROUPED (default view)."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Epic task", status="open", epic_key="AUTH", parent_task_id=100),
-            make_task(id=2, title="Loose task", status="open", epic_key=None),
+            make_task(id=1, title="Epic task", status="open", cat_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Loose task", status="open", cat_key=None),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH"),
+            make_epic(id=100, cat_key="AUTH"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1554,10 +1554,10 @@ class TestEpicGrouping:
     async def test_epic_grouping_shows_progress(self, mock_task_data: MockDict) -> None:
         """Epic headers show done/total progress in the age column."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Task", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=1, title="Task", status="open", cat_key="AUTH", parent_task_id=100),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH", child_count=10, children_done=7),
+            make_epic(id=100, cat_key="AUTH", child_count=10, children_done=7),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1586,13 +1586,13 @@ class TestEpicGrouping:
     async def test_epic_grouping_composes_with_filters(self, mock_task_data: MockDict) -> None:
         """Epic grouping (default) works together with status hide filters."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Fix auth", status="open", epic_key="AUTH", parent_task_id=100),
-            make_task(id=2, title="Fix deploy", status="open", epic_key="AUTH", parent_task_id=100),
-            make_task(id=3, title="Fix TUI", status="active", epic_key="TUI", parent_task_id=101),
+            make_task(id=1, title="Fix auth", status="open", cat_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Fix deploy", status="open", cat_key="AUTH", parent_task_id=100),
+            make_task(id=3, title="Fix TUI", status="active", cat_key="TUI", parent_task_id=101),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH"),
-            make_epic(id=101, epic_key="TUI"),
+            make_epic(id=100, cat_key="AUTH"),
+            make_epic(id=101, cat_key="TUI"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1630,16 +1630,16 @@ class TestEpicGrouping:
         """Done epics appear at bottom under COMPLETED, children hidden."""
         mock_task_data["list_tasks"].return_value = [
             make_task(
-                id=1, title="Active work", status="open", epic_key="LIVE", parent_task_id=200
+                id=1, title="Active work", status="open", cat_key="LIVE", parent_task_id=200
             ),
-            make_task(id=2, title="Old stuff", status="done", epic_key="DEAD", parent_task_id=201),
-            make_task(id=3, title="Also old", status="failed", epic_key="DEAD", parent_task_id=201),
+            make_task(id=2, title="Old stuff", status="done", cat_key="DEAD", parent_task_id=201),
+            make_task(id=3, title="Also old", status="failed", cat_key="DEAD", parent_task_id=201),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=200, epic_key="LIVE"),
+            make_epic(id=200, cat_key="LIVE"),
             make_epic(
                 id=201,
-                epic_key="DEAD",
+                cat_key="DEAD",
                 status="done",
                 child_count=2,
                 children_done=2,
@@ -1665,16 +1665,16 @@ class TestEpicGrouping:
     async def test_epic_grouping_hides_done_in_mixed_group(self, mock_task_data: MockDict) -> None:
         """Done/failed children are hidden behind a fold in active epics."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Open work", status="open", epic_key="MIX", parent_task_id=300),
+            make_task(id=1, title="Open work", status="open", cat_key="MIX", parent_task_id=300),
             make_task(
-                id=2, title="Finished work", status="done", epic_key="MIX", parent_task_id=300
+                id=2, title="Finished work", status="done", cat_key="MIX", parent_task_id=300
             ),
             make_task(
-                id=3, title="Failed work", status="failed", epic_key="MIX", parent_task_id=300
+                id=3, title="Failed work", status="failed", cat_key="MIX", parent_task_id=300
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=300, epic_key="MIX", child_count=3, children_done=2, children_open=1),
+            make_epic(id=300, cat_key="MIX", child_count=3, children_done=2, children_open=1),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1694,12 +1694,12 @@ class TestEpicGrouping:
     async def test_done_fold_expands_on_enter(self, mock_task_data: MockDict) -> None:
         """Pressing Enter on the done-fold row reveals completed tasks."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Open work", status="open", epic_key="MIX", parent_task_id=300),
+            make_task(id=1, title="Open work", status="open", cat_key="MIX", parent_task_id=300),
             make_task(
                 id=2,
                 title="Finished work",
                 status="done",
-                epic_key="MIX",
+                cat_key="MIX",
                 parent_task_id=300,
                 completed_at="2026-03-05 12:00:00",
             ),
@@ -1707,13 +1707,13 @@ class TestEpicGrouping:
                 id=3,
                 title="Old finish",
                 status="done",
-                epic_key="MIX",
+                cat_key="MIX",
                 parent_task_id=300,
                 completed_at="2026-03-01 12:00:00",
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=300, epic_key="MIX"),
+            make_epic(id=300, cat_key="MIX"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1748,7 +1748,7 @@ class TestEpicGrouping:
                 id=1,
                 title="Old child",
                 status="open",
-                epic_key="STALE",
+                cat_key="STALE",
                 parent_task_id=500,
                 updated_at="2025-01-01T00:00:00",
             ),
@@ -1756,14 +1756,14 @@ class TestEpicGrouping:
                 id=2,
                 title="Recent child",
                 status="open",
-                epic_key="FRESH",
+                cat_key="FRESH",
                 parent_task_id=501,
                 updated_at="2025-06-15T12:00:00",
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=500, epic_key="STALE"),
-            make_epic(id=501, epic_key="FRESH"),
+            make_epic(id=500, cat_key="STALE"),
+            make_epic(id=501, cat_key="FRESH"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1783,7 +1783,7 @@ class TestEpicGrouping:
                 id=1,
                 title="Idle child",
                 status="open",
-                epic_key="IDLE",
+                cat_key="IDLE",
                 parent_task_id=600,
                 updated_at="2025-06-15T12:00:00",
             ),
@@ -1791,14 +1791,14 @@ class TestEpicGrouping:
                 id=2,
                 title="Active child",
                 status="active",
-                epic_key="BUSY",
+                cat_key="BUSY",
                 parent_task_id=601,
                 updated_at="2025-01-01T00:00:00",
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=600, epic_key="IDLE"),
-            make_epic(id=601, epic_key="BUSY"),
+            make_epic(id=600, cat_key="IDLE"),
+            make_epic(id=601, cat_key="BUSY"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1818,7 +1818,7 @@ class TestEpicGrouping:
                 id=1,
                 title="Newest task",
                 status="open",
-                epic_key="Q",
+                cat_key="Q",
                 parent_task_id=700,
                 created_at="2025-03-01T00:00:00",
             ),
@@ -1826,7 +1826,7 @@ class TestEpicGrouping:
                 id=2,
                 title="Middle task",
                 status="open",
-                epic_key="Q",
+                cat_key="Q",
                 parent_task_id=700,
                 created_at="2025-02-01T00:00:00",
             ),
@@ -1834,13 +1834,13 @@ class TestEpicGrouping:
                 id=3,
                 title="Oldest task",
                 status="open",
-                epic_key="Q",
+                cat_key="Q",
                 parent_task_id=700,
                 created_at="2025-01-01T00:00:00",
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=700, epic_key="Q"),
+            make_epic(id=700, cat_key="Q"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -1925,15 +1925,15 @@ class TestWontdoStatus:
         """Epics where all tasks are wontdo appear collapsed under COMPLETED."""
         mock_task_data["list_tasks"].return_value = [
             make_task(
-                id=1, title="Active work", status="open", epic_key="LIVE", parent_task_id=400
+                id=1, title="Active work", status="open", cat_key="LIVE", parent_task_id=400
             ),
-            make_task(id=2, title="Skipped", status="wontdo", epic_key="SKIP", parent_task_id=401),
+            make_task(id=2, title="Skipped", status="wontdo", cat_key="SKIP", parent_task_id=401),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=400, epic_key="LIVE"),
+            make_epic(id=400, cat_key="LIVE"),
             make_epic(
                 id=401,
-                epic_key="SKIP",
+                cat_key="SKIP",
                 status="done",
                 child_count=1,
                 children_done=1,
@@ -1984,11 +1984,11 @@ class TestCrossGroupEpicClustering:
     async def test_cross_group_children_show_epic_header(self, mock_task_data: MockDict) -> None:
         """Children whose epic is in another status group show a reference header."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Child A", status="open", epic_key="AUTH", parent_task_id=100),
-            make_task(id=2, title="Child B", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=1, title="Child A", status="open", cat_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Child B", status="open", cat_key="AUTH", parent_task_id=100),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH", child_count=5, children_done=3),
+            make_epic(id=100, cat_key="AUTH", child_count=5, children_done=3),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -2006,11 +2006,11 @@ class TestCrossGroupEpicClustering:
     ) -> None:
         """Children under a cross-group epic use tree connectors."""
         mock_task_data["list_tasks"].return_value = [
-            make_task(id=1, title="Child A", status="open", epic_key="AUTH", parent_task_id=100),
-            make_task(id=2, title="Child B", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=1, title="Child A", status="open", cat_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Child B", status="open", cat_key="AUTH", parent_task_id=100),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH"),
+            make_epic(id=100, cat_key="AUTH"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -2027,15 +2027,15 @@ class TestCrossGroupEpicClustering:
     ) -> None:
         """Children whose epic IS in the same status group cluster normally."""
         epic_task = make_task(
-            id=100, title="Auth Epic", status="open", epic_key="AUTH", type="epic"
+            id=100, title="Auth Epic", status="open", cat_key="AUTH", type="epic"
         )
         mock_task_data["list_tasks"].return_value = [
             epic_task,
-            make_task(id=1, title="Child A", status="open", epic_key="AUTH", parent_task_id=100),
-            make_task(id=2, title="Child B", status="open", epic_key="AUTH", parent_task_id=100),
+            make_task(id=1, title="Child A", status="open", cat_key="AUTH", parent_task_id=100),
+            make_task(id=2, title="Child B", status="open", cat_key="AUTH", parent_task_id=100),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH"),
+            make_epic(id=100, cat_key="AUTH"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -2268,12 +2268,12 @@ class TestCollapseExpand:
                 id=1,
                 title="Child task",
                 status="open",
-                epic_key="EPIC",
+                cat_key="EPIC",
                 parent_task_id=100,
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="EPIC"),
+            make_epic(id=100, cat_key="EPIC"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -2305,12 +2305,12 @@ class TestCollapseExpand:
                 id=1,
                 title="Child task",
                 status="open",
-                epic_key="EPIC",
+                cat_key="EPIC",
                 parent_task_id=100,
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="EPIC"),
+            make_epic(id=100, cat_key="EPIC"),
         ]
         app = TaskTestApp()
         async with app.run_test() as pilot:
@@ -2338,22 +2338,22 @@ class TestCollapseExpand:
                 id=1,
                 title="Active work",
                 status="open",
-                epic_key="LIVE",
+                cat_key="LIVE",
                 parent_task_id=200,
             ),
             make_task(
                 id=2,
                 title="Done child",
                 status="done",
-                epic_key="DEAD",
+                cat_key="DEAD",
                 parent_task_id=201,
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=200, epic_key="LIVE"),
+            make_epic(id=200, cat_key="LIVE"),
             make_epic(
                 id=201,
-                epic_key="DEAD",
+                cat_key="DEAD",
                 status="done",
                 child_count=1,
                 children_done=1,
@@ -2449,14 +2449,14 @@ class TestDoneFoldRecency:
                 id=1,
                 title="Active work",
                 status="open",
-                epic_key="LIVE",
+                cat_key="LIVE",
                 parent_task_id=200,
             ),
             make_task(
                 id=2,
                 title="Done child",
                 status="done",
-                epic_key="DEAD",
+                cat_key="DEAD",
                 parent_task_id=201,
                 completed_at="2025-01-01T12:00:00",
             ),
@@ -2464,16 +2464,16 @@ class TestDoneFoldRecency:
                 id=3,
                 title="Also done",
                 status="done",
-                epic_key="DEAD",
+                cat_key="DEAD",
                 parent_task_id=201,
                 completed_at="2025-01-02T12:00:00",
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=200, epic_key="LIVE"),
+            make_epic(id=200, cat_key="LIVE"),
             make_epic(
                 id=201,
-                epic_key="DEAD",
+                cat_key="DEAD",
                 status="done",
                 child_count=2,
                 children_done=2,
@@ -2498,24 +2498,24 @@ class TestDoneFoldRecency:
                 id=1,
                 title="Active work",
                 status="open",
-                epic_key="LIVE",
+                cat_key="LIVE",
                 parent_task_id=200,
             ),
             make_task(
                 id=2,
                 title="Done child",
                 status="done",
-                epic_key="DEAD",
+                cat_key="DEAD",
                 parent_task_id=201,
                 completed_at=None,
                 updated_at="2025-01-01T12:00:00",
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=200, epic_key="LIVE"),
+            make_epic(id=200, cat_key="LIVE"),
             make_epic(
                 id=201,
-                epic_key="DEAD",
+                cat_key="DEAD",
                 status="done",
                 child_count=1,
                 children_done=1,
@@ -2540,14 +2540,14 @@ class TestDoneFoldRecency:
                 id=1,
                 title="Active work",
                 status="open",
-                epic_key="LIVE",
+                cat_key="LIVE",
                 parent_task_id=200,
             ),
             make_task(
                 id=2,
                 title="Done child",
                 status="done",
-                epic_key="DEAD",
+                cat_key="DEAD",
                 parent_task_id=201,
                 completed_at=None,
                 updated_at=None,
@@ -2555,10 +2555,10 @@ class TestDoneFoldRecency:
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=200, epic_key="LIVE"),
+            make_epic(id=200, cat_key="LIVE"),
             make_epic(
                 id=201,
-                epic_key="DEAD",
+                cat_key="DEAD",
                 status="done",
                 child_count=1,
                 children_done=1,
@@ -2630,19 +2630,19 @@ class TestContextSensitiveFooter:
                 id=100,
                 title="Epic: AUTH",
                 status="open",
-                epic_key="AUTH",
+                cat_key="AUTH",
                 type="epic",
             ),
             make_task(
                 id=1,
                 title="Child task",
                 status="open",
-                epic_key="AUTH",
+                cat_key="AUTH",
                 parent_task_id=100,
             ),
         ]
         mock_task_data["list_epics"].return_value = [
-            make_epic(id=100, epic_key="AUTH"),
+            make_epic(id=100, cat_key="AUTH"),
         ]
 
         class FooterApp(App[None]):
@@ -2693,28 +2693,28 @@ class TestContextSensitiveFooter:
                 id=1,
                 title="Open task",
                 status="open",
-                epic_key="AUTH",
+                cat_key="AUTH",
                 parent_task_id=100,
             ),
             make_task(
                 id=2,
                 title="Done task 1",
                 status="done",
-                epic_key="AUTH",
+                cat_key="AUTH",
                 parent_task_id=100,
             ),
             make_task(
                 id=3,
                 title="Done task 2",
                 status="done",
-                epic_key="AUTH",
+                cat_key="AUTH",
                 parent_task_id=100,
             ),
         ]
         mock_task_data["list_epics"].return_value = [
             make_epic(
                 id=100,
-                epic_key="AUTH",
+                cat_key="AUTH",
                 child_count=3,
                 children_done=2,
                 children_open=1,

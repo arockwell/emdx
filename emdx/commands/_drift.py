@@ -23,7 +23,7 @@ class StaleEpicDict(TypedDict):
 
     id: int
     title: str
-    epic_key: str | None
+    cat_key: str | None
     status: str
     open_tasks: int
     last_activity: str | None
@@ -36,7 +36,7 @@ class OrphanedTaskDict(TypedDict):
     id: int
     title: str
     status: str
-    epic_key: str | None
+    cat_key: str | None
     parent_task_id: int | None
     updated_at: str | None
     days_idle: int
@@ -58,7 +58,7 @@ class BurstEpicDict(TypedDict):
 
     id: int
     title: str
-    epic_key: str | None
+    cat_key: str | None
     total_tasks: int
     burst_days: int
     silent_days: int
@@ -81,7 +81,7 @@ def _find_stale_epics(days: int) -> list[StaleEpicDict]:
             SELECT
                 e.id,
                 e.title,
-                e.epic_key,
+                e.cat_key,
                 e.status,
                 COUNT(c.id) AS open_tasks,
                 MAX(
@@ -118,7 +118,7 @@ def _find_orphaned_active_tasks(days: int) -> list[OrphanedTaskDict]:
                 t.id,
                 t.title,
                 t.status,
-                t.epic_key,
+                t.cat_key,
                 t.parent_task_id,
                 t.updated_at,
                 CAST(
@@ -202,7 +202,7 @@ def _find_burst_epics(days: int) -> list[BurstEpicDict]:
             SELECT
                 e.id,
                 e.title,
-                e.epic_key,
+                e.cat_key,
                 COUNT(c.id) AS total_tasks,
                 CAST(
                     julianday(MAX(c.created_at))
@@ -264,7 +264,7 @@ def _format_plain(report: DriftReport, days: int) -> str:
         lines.append(f"Stale Epics ({len(report['stale_epics'])})")
         lines.append("-" * 30)
         for epic in report["stale_epics"]:
-            key = epic.get("epic_key") or "?"
+            key = epic.get("cat_key") or "?"
             lines.append(
                 f"  #{epic['id']} {epic['title']} "
                 f"[{key}] -- went silent "
@@ -278,7 +278,7 @@ def _format_plain(report: DriftReport, days: int) -> str:
         lines.append(f"Orphaned Active Tasks ({len(report['orphaned_tasks'])})")
         lines.append("-" * 30)
         for task in report["orphaned_tasks"]:
-            key = task.get("epic_key") or ""
+            key = task.get("cat_key") or ""
             prefix = f"[{key}] " if key else ""
             lines.append(
                 f"  #{task['id']} {prefix}{task['title']} -- idle {task['days_idle']} days"
@@ -305,7 +305,7 @@ def _format_plain(report: DriftReport, days: int) -> str:
         lines.append(f"Burst-Then-Stop Epics ({len(report['burst_epics'])})")
         lines.append("-" * 30)
         for burst in report["burst_epics"]:
-            key = burst.get("epic_key") or "?"
+            key = burst.get("cat_key") or "?"
             lines.append(
                 f"  #{burst['id']} {burst['title']} "
                 f"[{key}] -- "

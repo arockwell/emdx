@@ -123,10 +123,10 @@ def _tag_list(params: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _task_list(params: dict[str, Any]) -> list[dict[str, Any]]:
     status = params.get("status")
-    epic_key = params.get("epic_key")
+    cat_key = params.get("cat_key")
     limit = params.get("limit", 200)
     status_list = [status] if status else None
-    rows = list_tasks(status=status_list, epic_key=epic_key, limit=limit)
+    rows = list_tasks(status=status_list, cat_key=cat_key, limit=limit)
     return [r.to_dict() for r in rows]
 
 

@@ -79,7 +79,7 @@ def delete(
 ) -> None:
     """Delete a category and unlink associated tasks.
 
-    Tasks are NOT deleted — their epic_key/epic_seq are cleared.
+    Tasks are NOT deleted — their cat_key/cat_seq are cleared.
     Refuses to delete if open/active tasks exist unless --force is used.
 
     Examples:
@@ -105,7 +105,7 @@ def adopt(
 ) -> None:
     """Backfill existing tasks with KEY-N: titles into the category system.
 
-    Scans tasks matching the KEY-N: pattern and sets their epic_key/epic_seq.
+    Scans tasks matching the KEY-N: pattern and sets their cat_key/cat_seq.
     Also detects parent EPIC tasks and marks them.
 
     Examples:

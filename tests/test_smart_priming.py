@@ -29,8 +29,8 @@ def _make_task(
     priority=5,
     status="open",
     source_doc_id=None,
-    epic_key=None,
-    epic_seq=None,
+    cat_key=None,
+    cat_seq=None,
 ):
     return {
         "id": id,
@@ -39,8 +39,8 @@ def _make_task(
         "priority": priority,
         "status": status,
         "source_doc_id": source_doc_id,
-        "epic_key": epic_key,
-        "epic_seq": epic_seq,
+        "cat_key": cat_key,
+        "cat_seq": cat_seq,
     }
 
 

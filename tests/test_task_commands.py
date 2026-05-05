@@ -31,8 +31,8 @@ class TestTaskAdd:
             {
                 "id": 1,
                 "title": "Fix the auth bug",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         result = runner.invoke(app, ["add", "Fix the auth bug"])
@@ -45,7 +45,7 @@ class TestTaskAdd:
             description="",
             source_doc_id=None,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=None,
         )
 
@@ -60,14 +60,14 @@ class TestTaskAdd:
         assert "cannot be empty" in _out(result)
 
     @patch("emdx.commands.tasks.tasks")
-    def test_add_task_shows_epic_key(self, mock_tasks):
+    def test_add_task_shows_cat_key(self, mock_tasks):
         mock_tasks.create_task.return_value = 10
         mock_tasks.get_task.return_value = Task.from_row(
             {
                 "id": 10,
                 "title": "FEAT-3: Add auth",
-                "epic_key": "FEAT",
-                "epic_seq": 3,
+                "cat_key": "FEAT",
+                "cat_seq": 3,
             }
         )
         result = runner.invoke(app, ["add", "Add auth", "--cat", "FEAT"])
@@ -83,8 +83,8 @@ class TestTaskAdd:
             {
                 "id": 2,
                 "title": "Implement this",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         result = runner.invoke(app, ["add", "Implement this", "--doc", "42"])
@@ -98,7 +98,7 @@ class TestTaskAdd:
             description="",
             source_doc_id=42,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=None,
         )
 
@@ -109,8 +109,8 @@ class TestTaskAdd:
             {
                 "id": 3,
                 "title": "Another task",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         result = runner.invoke(app, ["add", "Another task", "-d", "99"])
@@ -123,7 +123,7 @@ class TestTaskAdd:
             description="",
             source_doc_id=99,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=None,
         )
 
@@ -134,8 +134,8 @@ class TestTaskAdd:
             {
                 "id": 4,
                 "title": "Refactor tests",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         result = runner.invoke(
@@ -150,7 +150,7 @@ class TestTaskAdd:
             description="Split into unit and integration",
             source_doc_id=None,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=None,
         )
 
@@ -161,8 +161,8 @@ class TestTaskAdd:
             {
                 "id": 5,
                 "title": "Task",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         result = runner.invoke(app, ["add", "Task", "-D", "Details here"])
@@ -172,7 +172,7 @@ class TestTaskAdd:
             description="Details here",
             source_doc_id=None,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=None,
         )
 
@@ -183,8 +183,8 @@ class TestTaskAdd:
             {
                 "id": 6,
                 "title": "Full task",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         result = runner.invoke(app, ["add", "Full task", "-d", "10", "-D", "Full description"])
@@ -197,17 +197,17 @@ class TestTaskAdd:
             description="Full description",
             source_doc_id=10,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=None,
         )
 
     @patch("emdx.commands.tasks.tasks")
     def test_add_task_nonexistent_epic_says_epic_not_found(self, mock_tasks):
         mock_tasks.resolve_task_id.return_value = None
-        result = runner.invoke(app, ["add", "Test task", "--epic", "999999"])
+        result = runner.invoke(app, ["add", "Test task", "--parent", "999999"])
         assert result.exit_code == 1
         out = _out(result)
-        assert "Epic not found" in out
+        assert "Parent not found" in out
         assert "Task not found" not in out
 
     def test_add_task_requires_title(self):
@@ -228,8 +228,8 @@ class TestTaskReady:
     @patch("emdx.commands.tasks.tasks")
     def test_ready_shows_tasks(self, mock_tasks):
         mock_tasks.get_ready_tasks.return_value = [
-            Task.from_row({"id": 1, "title": "First task", "epic_key": None, "epic_seq": None}),
-            Task.from_row({"id": 2, "title": "Second task", "epic_key": "SEC", "epic_seq": 1}),
+            Task.from_row({"id": 1, "title": "First task", "cat_key": None, "cat_seq": None}),
+            Task.from_row({"id": 2, "title": "Second task", "cat_key": "SEC", "cat_seq": 1}),
         ]
         result = runner.invoke(app, ["ready"])
         assert result.exit_code == 0
@@ -243,7 +243,7 @@ class TestTaskReady:
     @patch("emdx.commands.tasks.tasks")
     def test_ready_shows_epic_label(self, mock_tasks):
         mock_tasks.get_ready_tasks.return_value = [
-            Task.from_row({"id": 1, "title": "QW-3: Task", "epic_key": "QW", "epic_seq": 3}),
+            Task.from_row({"id": 1, "title": "QW-3: Task", "cat_key": "QW", "cat_seq": 3}),
         ]
         result = runner.invoke(app, ["ready"])
         out = _out(result)
@@ -362,8 +362,8 @@ class TestTaskList:
                     "id": 1,
                     "title": "Open task",
                     "status": "open",
-                    "epic_key": None,
-                    "epic_seq": None,
+                    "cat_key": None,
+                    "cat_seq": None,
                 }
             ),
             Task.from_row(
@@ -371,8 +371,8 @@ class TestTaskList:
                     "id": 2,
                     "title": "Active task",
                     "status": "active",
-                    "epic_key": None,
-                    "epic_seq": None,
+                    "cat_key": None,
+                    "cat_seq": None,
                 }
             ),
             Task.from_row(
@@ -380,8 +380,8 @@ class TestTaskList:
                     "id": 3,
                     "title": "Blocked task",
                     "status": "blocked",
-                    "epic_key": None,
-                    "epic_seq": None,
+                    "cat_key": None,
+                    "cat_seq": None,
                 }
             ),
         ]
@@ -398,7 +398,7 @@ class TestTaskList:
     def test_list_shows_status_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
             Task.from_row(
-                {"id": 1, "title": "Task", "status": "active", "epic_key": None, "epic_seq": None}
+                {"id": 1, "title": "Task", "status": "active", "cat_key": None, "cat_seq": None}
             ),
         ]
         result = runner.invoke(app, ["list"])
@@ -413,8 +413,8 @@ class TestTaskList:
                     "id": 1,
                     "title": "SEC-1: Harden auth",
                     "status": "open",
-                    "epic_key": "SEC",
-                    "epic_seq": 1,
+                    "cat_key": "SEC",
+                    "cat_seq": 1,
                 }
             ),
         ]
@@ -432,7 +432,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -445,7 +445,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -458,7 +458,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=None,
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -471,7 +471,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=None,
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -484,7 +484,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -497,7 +497,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -510,7 +510,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=5,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -523,7 +523,7 @@ class TestTaskList:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
             limit=10,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -532,16 +532,16 @@ class TestTaskList:
     def test_list_displays_status_as_text(self, mock_tasks):
         mock_tasks.list_tasks.return_value = [
             Task.from_row(
-                {"id": 1, "title": "Open", "status": "open", "epic_key": None, "epic_seq": None}
+                {"id": 1, "title": "Open", "status": "open", "cat_key": None, "cat_seq": None}
             ),
             Task.from_row(
-                {"id": 2, "title": "Active", "status": "active", "epic_key": None, "epic_seq": None}
+                {"id": 2, "title": "Active", "status": "active", "cat_key": None, "cat_seq": None}
             ),
             Task.from_row(
-                {"id": 3, "title": "Done", "status": "done", "epic_key": None, "epic_seq": None}
+                {"id": 3, "title": "Done", "status": "done", "cat_key": None, "cat_seq": None}
             ),
             Task.from_row(
-                {"id": 4, "title": "Failed", "status": "failed", "epic_key": None, "epic_seq": None}
+                {"id": 4, "title": "Failed", "status": "failed", "cat_key": None, "cat_seq": None}
             ),
         ]
         result = runner.invoke(app, ["list"])
@@ -557,7 +557,7 @@ class TestTaskList:
         long_title = "This is a very long task title that exceeds fifty characters by quite a bit"
         mock_tasks.list_tasks.return_value = [
             Task.from_row(
-                {"id": 1, "title": long_title, "status": "open", "epic_key": None, "epic_seq": None}
+                {"id": 1, "title": long_title, "status": "open", "cat_key": None, "cat_seq": None}
             ),
         ]
         result = runner.invoke(app, ["list"])
@@ -576,7 +576,7 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since="2026-01-15",
         )
@@ -589,7 +589,7 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since="2026-01-15",
         )
@@ -604,7 +604,7 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since="2026-02-25",
         )
@@ -623,7 +623,7 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done", "wontdo"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since="2026-01-01",
         )
@@ -636,7 +636,7 @@ class TestTaskListDateFilters:
         mock_tasks.list_tasks.assert_called_once_with(
             status=["done"],
             limit=20,
-            epic_key=None,
+            cat_key=None,
             parent_task_id=None,
             since=None,
         )
@@ -726,8 +726,8 @@ class TestTaskView:
                 "title": "Fix auth bug",
                 "status": "open",
                 "description": "The auth middleware has a race condition",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
                 "parent_task_id": None,
                 "source_doc_id": None,
                 "priority": 3,
@@ -755,8 +755,8 @@ class TestTaskView:
                 "title": "SEC-1: Harden auth",
                 "status": "active",
                 "description": "",
-                "epic_key": "SEC",
-                "epic_seq": 1,
+                "cat_key": "SEC",
+                "cat_seq": 1,
                 "parent_task_id": 500,
                 "source_doc_id": 99,
                 "output_doc_id": None,
@@ -770,8 +770,8 @@ class TestTaskView:
                 "title": "Security epic",
                 "status": "open",
                 "description": "",
-                "epic_key": "SEC",
-                "epic_seq": 49,
+                "cat_key": "SEC",
+                "cat_seq": 49,
                 "parent_task_id": None,
                 "source_doc_id": None,
                 "priority": 3,
@@ -804,8 +804,8 @@ class TestTaskView:
                 "title": "Task with deps",
                 "status": "blocked",
                 "description": "",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
                 "parent_task_id": None,
                 "source_doc_id": None,
                 "priority": 3,
@@ -838,8 +838,8 @@ class TestTaskView:
                 "title": "Some task",
                 "status": "active",
                 "description": "",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
                 "parent_task_id": None,
                 "source_doc_id": None,
                 "priority": 3,
@@ -1221,8 +1221,8 @@ class TestTaskAddWithAfter:
     @patch("emdx.commands.tasks.tasks")
     def test_add_with_single_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 10
-        task_10 = Task.from_row({"id": 10, "title": "Deploy", "epic_key": None, "epic_seq": None})
-        task_5 = Task.from_row({"id": 5, "title": "Build", "epic_key": None, "epic_seq": None})
+        task_10 = Task.from_row({"id": 10, "title": "Deploy", "cat_key": None, "cat_seq": None})
+        task_5 = Task.from_row({"id": 5, "title": "Build", "cat_key": None, "cat_seq": None})
         mock_tasks.get_task.side_effect = lambda tid: task_10 if tid == 10 else task_5
         result = runner.invoke(app, ["add", "Deploy", "--after", "5"])
         assert result.exit_code == 0
@@ -1234,7 +1234,7 @@ class TestTaskAddWithAfter:
             description="",
             source_doc_id=None,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=[5],
         )
 
@@ -1242,9 +1242,9 @@ class TestTaskAddWithAfter:
     def test_add_with_multiple_after(self, mock_tasks):
         mock_tasks.create_task.return_value = 20
         tasks_by_id = {
-            20: Task.from_row({"id": 20, "title": "Release", "epic_key": None, "epic_seq": None}),
-            10: Task.from_row({"id": 10, "title": "Build", "epic_key": None, "epic_seq": None}),
-            11: Task.from_row({"id": 11, "title": "Test", "epic_key": None, "epic_seq": None}),
+            20: Task.from_row({"id": 20, "title": "Release", "cat_key": None, "cat_seq": None}),
+            10: Task.from_row({"id": 10, "title": "Build", "cat_key": None, "cat_seq": None}),
+            11: Task.from_row({"id": 11, "title": "Test", "cat_key": None, "cat_seq": None}),
         }
         mock_tasks.get_task.side_effect = lambda tid: tasks_by_id.get(tid)
         result = runner.invoke(app, ["add", "Release", "--after", "10", "--after", "11"])
@@ -1258,7 +1258,7 @@ class TestTaskAddWithAfter:
             description="",
             source_doc_id=None,
             parent_task_id=None,
-            epic_key=None,
+            cat_key=None,
             depends_on=[10, 11],
         )
 
@@ -1270,8 +1270,8 @@ class TestTaskDepAdd:
     def test_dep_add_success(self, mock_tasks):
         mock_tasks.resolve_task_id.side_effect = lambda x: int(x)
         tasks_by_id = {
-            5: Task.from_row({"id": 5, "title": "Task A", "epic_key": None, "epic_seq": None}),
-            3: Task.from_row({"id": 3, "title": "Task B", "epic_key": None, "epic_seq": None}),
+            5: Task.from_row({"id": 5, "title": "Task A", "cat_key": None, "cat_seq": None}),
+            3: Task.from_row({"id": 3, "title": "Task B", "cat_key": None, "cat_seq": None}),
         }
         mock_tasks.get_task.side_effect = lambda tid: tasks_by_id.get(tid)
         mock_tasks.add_dependency.return_value = True
@@ -1289,8 +1289,8 @@ class TestTaskDepAdd:
             {
                 "id": tid,
                 "title": "Task",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         mock_tasks.add_dependency.return_value = False
@@ -1321,8 +1321,8 @@ class TestTaskDepRm:
             {
                 "id": tid,
                 "title": "Task",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         mock_tasks.remove_dependency.return_value = True
@@ -1340,8 +1340,8 @@ class TestTaskDepRm:
             {
                 "id": tid,
                 "title": "Task",
-                "epic_key": None,
-                "epic_seq": None,
+                "cat_key": None,
+                "cat_seq": None,
             }
         )
         mock_tasks.remove_dependency.return_value = False
@@ -1508,8 +1508,8 @@ class TestPrefixedTaskId:
                 "title": "TOOL-12: Build widget",
                 "status": "open",
                 "description": "",
-                "epic_key": "TOOL",
-                "epic_seq": 12,
+                "cat_key": "TOOL",
+                "cat_seq": 12,
                 "parent_task_id": None,
                 "source_doc_id": None,
                 "priority": 3,
@@ -1650,15 +1650,15 @@ class TestResolveTaskId:
     def test_prefixed_id_found(self):
         from emdx.models.tasks import create_task, resolve_task_id
 
-        task_id = create_task("Prefixed test", epic_key="RSLV")
+        task_id = create_task("Prefixed test", cat_key="RSLV")
         assert resolve_task_id("RSLV-1") == task_id
 
-    def test_bare_integer_falls_back_to_epic_seq(self):
-        """When bare integer doesn't match a DB ID, try epic_seq."""
+    def test_bare_integer_falls_back_to_cat_seq(self):
+        """When bare integer doesn't match a DB ID, try cat_seq."""
         from emdx.models.tasks import create_task, resolve_task_id
 
-        task_id = create_task("Epic seq test", epic_key="SEQT")
-        # task_id is the DB id, but epic_seq is 1
+        task_id = create_task("Epic seq test", cat_key="SEQT")
+        # task_id is the DB id, but cat_seq is 1
         # If no task with DB id=1 exists (or it does but matches), test the seq
         result = resolve_task_id("SEQT-1")
         assert result == task_id
@@ -1676,7 +1676,7 @@ class TestResolveTaskId:
 
         assert resolve_task_id("sec-3") == 55
         mock_conn.execute.assert_called_once_with(
-            "SELECT id FROM tasks WHERE epic_key = ? AND epic_seq = ?",
+            "SELECT id FROM tasks WHERE cat_key = ? AND cat_seq = ?",
             ("SEC", 3),
         )
 

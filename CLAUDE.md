@@ -176,7 +176,7 @@ emdx status   # Quick overview
    ```
    This gives the user real-time visibility into progress, especially for longer tasks.
 3. **Save significant outputs** to emdx: `echo "findings" | emdx save --title "Title" --tags "analysis,active"`
-4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --epic <id> --cat FEAT`
+4. **Create tasks** for discovered work: `emdx task add "Title" -D "Details" --parent <id> --cat FEAT`
 5. **Update task status as you work** — mark tasks done when complete, create new tasks for discovered work
 
 #### For Agent/Subagent Sessions
@@ -205,9 +205,15 @@ emdx status   # Quick overview
 **Status:** `active` (working), `done` (completed), `blocked` (stuck)
 **Outcome:** `success`, `failed`, `partial`
 
-**Tasks** use categories and epics (NOT tags):
-- `--cat FEAT` / `--cat FIX` / `--cat ARCH` etc. — assigns a category
-- `--epic <id>` — groups task under a parent epic
+**Tasks** use two orthogonal mechanisms for organization (NOT tags):
+
+| Flag | Purpose | Example |
+|------|---------|---------|
+| `--cat CAT` | Namespace: assigns category prefix (SEC-1, PROP-2) | `--cat SEC` |
+| `--parent 42` | Hierarchy: sets parent task for subtask relationship | `--parent 42` |
+
+- `--cat FEAT` / `--cat FIX` / `--cat ARCH` etc. — assigns a category key that generates numbered IDs
+- `--parent <id>` — sets the parent task, creating a subtask hierarchy
 - Use `emdx task cat list` to see available categories
 - Use `emdx task epic list` to see active epics
 
@@ -235,8 +241,8 @@ emdx view 42                           # View document content
 emdx view 42 --links                   # Show document's link graph
 emdx view 42 --review                  # Adversarial review of the document
 
-# Tasks (use --epic and --cat, NOT --tags)
-emdx task add "Title" -D "Details" --epic 898 --cat FEAT
+# Tasks (use --parent and --cat, NOT --tags)
+emdx task add "Title" -D "Details" --parent 898 --cat FEAT
 emdx task plan <parent> "Step 1" "Step 2" "Step 3"  # Batch create subtasks
 emdx task brief <id>                   # Agent-ready task context
 emdx task brief <id> --json            # Structured for programmatic use

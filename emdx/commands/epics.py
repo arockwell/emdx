@@ -46,7 +46,7 @@ def create(
     try:
         epic_id = tasks.create_epic(name, cat, description or "")
         epic = tasks.get_task(epic_id)
-        seq = epic.epic_seq if epic else None
+        seq = epic.cat_seq if epic else None
         key_label = f"{cat.upper()}-{seq}" if seq else f"#{epic_id}"
         id_suffix = f" (#{epic_id})" if seq else ""
         console.print(f"[green]Created epic {key_label}{id_suffix}: {name}[/green]")
@@ -83,9 +83,9 @@ def list_cmd(
     table.add_column("Total", justify="right", width=6)
 
     for e in epics:
-        epic_key = e.epic_key or ""
-        epic_seq = e.epic_seq
-        key_label = f"{epic_key}-{epic_seq}" if epic_key and epic_seq else str(e.id)
+        cat_key = e.cat_key or ""
+        cat_seq = e.cat_seq
+        key_label = f"{cat_key}-{cat_seq}" if cat_key and cat_seq else str(e.id)
         table.add_row(
             key_label,
             e.title[:40],
@@ -114,7 +114,7 @@ def view(
         console.print(f"[red]Epic #{epic_id} not found[/red]")
         raise typer.Exit(1)
 
-    cat_label = f" ({epic.epic_key})" if epic.epic_key else ""
+    cat_label = f" ({epic.cat_key})" if epic.cat_key else ""
     console.print(f"\n[bold]Epic #{epic.id}: {epic.title}{cat_label}[/bold] — {epic.status}")
     if epic.description:
         console.print(f"[dim]{epic.description}[/dim]")
@@ -126,7 +126,7 @@ def view(
         done_count = 0
         for c in children:
             icon = ICONS.get(c.status, "?")
-            seq_label = f"{c.epic_key}-{c.epic_seq}" if c.epic_seq else f"#{c.id}"
+            seq_label = f"{c.cat_key}-{c.cat_seq}" if c.cat_seq else f"#{c.id}"
             console.print(f"  {icon}  {seq_label}  {c.title}")
             if c.status == "done":
                 done_count += 1
@@ -237,7 +237,7 @@ def attach(
 
     epic_task = tasks.get_task(epic_id)
     epic_label = f"#{epic_id}"
-    if epic_task and epic_task.epic_key and epic_task.epic_seq:
-        epic_label = f"{epic_task.epic_key}-{epic_task.epic_seq}"
+    if epic_task and epic_task.cat_key and epic_task.cat_seq:
+        epic_label = f"{epic_task.cat_key}-{epic_task.cat_seq}"
 
     console.print(f"[green]✅ Attached {count} task(s) to epic {epic_label}[/green]")

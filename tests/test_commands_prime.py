@@ -31,8 +31,8 @@ def _make_task(
     priority=5,
     status="open",
     source_doc_id=None,
-    epic_key=None,
-    epic_seq=None,
+    cat_key=None,
+    cat_seq=None,
 ):
     return {
         "id": id,
@@ -41,19 +41,19 @@ def _make_task(
         "priority": priority,
         "status": status,
         "source_doc_id": source_doc_id,
-        "epic_key": epic_key,
-        "epic_seq": epic_seq,
+        "cat_key": cat_key,
+        "cat_seq": cat_seq,
     }
 
 
 def _make_epic(
-    id=100, title="My Epic", status="active", epic_key="SEC", child_count=5, children_done=2
+    id=100, title="My Epic", status="active", cat_key="SEC", child_count=5, children_done=2
 ):
     return {
         "id": id,
         "title": title,
         "status": status,
-        "epic_key": epic_key,
+        "cat_key": cat_key,
         "child_count": child_count,
         "children_done": children_done,
     }
@@ -70,11 +70,11 @@ class TestTaskLabel:
         assert label.strip() == "#42"
 
     def test_epic_task_shows_key_seq(self):
-        label = _task_label(_make_task(id=449, epic_key="DEBT", epic_seq=10))
+        label = _task_label(_make_task(id=449, cat_key="DEBT", cat_seq=10))
         assert label.strip() == "DEBT-10"
 
-    def test_epic_key_without_seq_falls_back_to_id(self):
-        label = _task_label(_make_task(id=500, epic_key="SEC", epic_seq=None))
+    def test_cat_key_without_seq_falls_back_to_id(self):
+        label = _task_label(_make_task(id=500, cat_key="SEC", cat_seq=None))
         assert label.strip() == "#500"
 
     def test_label_is_padded(self):
@@ -164,7 +164,7 @@ class TestPrimeDefault:
         mock_epics.return_value = []
         mock_ready.return_value = [
             _make_task(id=10, title="Fix the bug"),
-            _make_task(id=449, title="DEBT-10: Fix type safety", epic_key="DEBT", epic_seq=10),
+            _make_task(id=449, title="DEBT-10: Fix type safety", cat_key="DEBT", cat_seq=10),
         ]
         mock_ip.return_value = []
 
@@ -195,7 +195,7 @@ class TestPrimeDefault:
     @patch("emdx.commands.prime.get_git_project")
     def test_shows_active_epics(self, mock_project, mock_ip, mock_ready, mock_epics):
         mock_project.return_value = None
-        mock_epics.return_value = [_make_epic(epic_key="SEC", title="Security Hardening")]
+        mock_epics.return_value = [_make_epic(cat_key="SEC", title="Security Hardening")]
         mock_ready.return_value = []
         mock_ip.return_value = []
 
@@ -659,13 +659,13 @@ class TestPrimeWithKeyDocs:
 class TestFormatEpicBrief:
     def test_shows_key_and_progress(self):
         line = _format_epic_brief(
-            _make_epic(epic_key="FEAT", title="Next Intelligence", child_count=18, children_done=3)
+            _make_epic(cat_key="FEAT", title="Next Intelligence", child_count=18, children_done=3)
         )
         assert "FEAT: Next Intelligence" in line
         assert "3/18 done" in line
 
-    def test_no_epic_key(self):
-        epic = _make_epic(epic_key=None, title="Cleanup", child_count=5, children_done=2)
+    def test_no_cat_key(self):
+        epic = _make_epic(cat_key=None, title="Cleanup", child_count=5, children_done=2)
         line = _format_epic_brief(epic)
         assert "Cleanup" in line
         assert "2/5 done" in line
@@ -705,7 +705,7 @@ class TestPrimeBrief:
         mock_project.return_value = None
         mock_epics.return_value = [
             _make_epic(
-                epic_key="FEAT",
+                cat_key="FEAT",
                 title="Next Intelligence",
                 child_count=18,
                 children_done=3,
