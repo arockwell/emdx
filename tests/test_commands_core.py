@@ -65,6 +65,43 @@ class TestGetInputContent:
         assert result.content == "piped content"
         assert result.source_type == "stdin"
 
+    @patch("sys.stdin")
+    def test_positional_skips_stdin_probe(self, mock_stdin):
+        """Positional arg must never touch stdin, even open non-TTY stdin (GH #1034)."""
+        mock_stdin.isatty.return_value = False
+        mock_stdin.read.side_effect = AssertionError("stdin.read() must not be called")
+
+        result = get_input_content("hello world")
+        assert result.content == "hello world"
+        assert result.source_type == "direct"
+        mock_stdin.read.assert_not_called()
+
+    @patch("sys.stdin")
+    def test_file_skips_stdin_probe(self, mock_stdin, tmp_path):
+        """--file must never touch stdin, even open non-TTY stdin (GH #1034)."""
+        mock_stdin.isatty.return_value = False
+        mock_stdin.read.side_effect = AssertionError("stdin.read() must not be called")
+        f = tmp_path / "note.md"
+        f.write_text("file content")
+
+        result = get_input_content(None, file_path=str(f))
+        assert result.content == "file content"
+        mock_stdin.read.assert_not_called()
+
+    @patch("emdx.commands.core._stdin_ready", return_value=False)
+    @patch("sys.stdin")
+    def test_idle_stdin_errors_instead_of_hanging(self, mock_stdin, mock_ready):
+        """Open non-TTY stdin with no data errors out instead of blocking (GH #1034)."""
+        import pytest
+        from click.exceptions import Exit
+
+        mock_stdin.isatty.return_value = False
+        mock_stdin.read.side_effect = AssertionError("stdin.read() must not be called")
+
+        with pytest.raises(Exit):
+            get_input_content(None)
+        mock_stdin.read.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # generate_title helper

@@ -11,15 +11,31 @@ from emdx.commands.core import get_input_content
 
 
 class TestStdinInput:
-    """Stdin takes highest priority when it has content."""
+    """Stdin is the fallback source when no explicit content is given."""
 
-    def test_stdin_with_content_wins_over_positional_arg(self):
-        stdin_content = "# From stdin\n\nShould take priority."
-        mock_stdin = io.StringIO(stdin_content)
+    def test_positional_arg_wins_over_stdin(self):
+        """Explicit positional content skips stdin entirely (#1034).
+
+        Probing an open non-TTY stdin with no data blocks forever under
+        backgrounded/tool-invoked callers, so a positional arg must never
+        touch stdin.
+        """
+        mock_stdin = io.StringIO("# From stdin\n\nMust be ignored.")
 
         with patch("sys.stdin", mock_stdin):
             with patch("sys.stdin.isatty", return_value=False):
                 result = get_input_content("positional text")
+
+        assert result.source_type == "direct"
+        assert result.content == "positional text"
+
+    def test_stdin_used_when_no_other_source(self):
+        stdin_content = "# From stdin\n\nOnly source available."
+        mock_stdin = io.StringIO(stdin_content)
+
+        with patch("sys.stdin", mock_stdin):
+            with patch("sys.stdin.isatty", return_value=False):
+                result = get_input_content(None)
 
         assert result.source_type == "stdin"
         assert "From stdin" in result.content
@@ -41,13 +57,13 @@ class TestStdinInput:
         finally:
             Path(fpath).unlink()
 
-    def test_whitespace_only_stdin_falls_through(self):
+    def test_whitespace_only_stdin_errors_when_sole_source(self):
+        import typer
+
         with patch("sys.stdin", io.StringIO("   \n\t  \n  ")):
             with patch("sys.stdin.isatty", return_value=False):
-                result = get_input_content("direct text")
-
-        assert result.source_type == "direct"
-        assert result.content == "direct text"
+                with pytest.raises(typer.Exit):
+                    get_input_content(None)
 
 
 class TestFileInput:

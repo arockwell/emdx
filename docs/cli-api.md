@@ -11,7 +11,7 @@ emdx [OPTIONS] COMMAND [ARGS]...
 ## 📚 **Document Management**
 
 ### **emdx save**
-Save content to the knowledge base. Content sources in priority order: stdin > `--file` > positional argument.
+Save content to the knowledge base. Content sources in priority order: `--file` > positional argument > stdin.
 
 ```bash
 # Save inline content (positional arg is always content, never a file path)

@@ -65,13 +65,35 @@ class DocumentMetadata:
     project: str | None = None
 
 
+# How long to wait for data on an open non-TTY stdin before treating it as
+# empty. Only applies when stdin is the sole possible content source; a
+# wedged harness that holds stdin open forever gets a clean error instead
+# of hanging the process (see #1034).
+STDIN_PROBE_TIMEOUT = 5.0
+
+
+def _stdin_ready(timeout: float) -> bool:
+    """Return True if stdin has data (or EOF) available within timeout."""
+    import select
+    import sys
+
+    try:
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+    except (OSError, ValueError, TypeError):
+        # Unprobeable stdin (e.g. Windows non-socket, test doubles):
+        # fall back to the blocking read rather than dropping input.
+        return True
+    return bool(ready)
+
+
 def get_input_content(input_arg: str | None, file_path: str | None = None) -> InputContent:
     """Handle input from stdin, --file, or positional content argument.
 
-    Priority: --file > stdin > positional content arg.
+    Priority: --file > positional content arg > stdin.
 
-    When --file is explicitly provided, stdin is skipped entirely to avoid
-    blocking on non-TTY stdin that has no data (see #732).
+    When --file or a positional argument is provided, stdin is never read:
+    probing an open non-TTY stdin that has no data blocks forever under
+    backgrounded/tool-invoked callers (see #732, #1034).
     """
     import sys
 
@@ -88,16 +110,16 @@ def get_input_content(input_arg: str | None, file_path: str | None = None) -> In
             console.print(f"[red]Error reading file: {e}[/red]")
             raise typer.Exit(1) from e
 
-    # Priority 2: Check if stdin has data
-    if not sys.stdin.isatty():
+    # Priority 2: Positional argument (skip stdin — content already in hand)
+    if input_arg:
+        return InputContent(content=input_arg, source_type="direct")
+
+    # Priority 3: stdin, guarded so an open-but-idle stdin can't wedge us
+    if not sys.stdin.isatty() and _stdin_ready(STDIN_PROBE_TIMEOUT):
         content = sys.stdin.read()
         if content.strip():  # Only use stdin if it has actual content
             return InputContent(content=content, source_type="stdin")
         # Fall through if stdin is empty
-
-    # Priority 3: Positional argument is always treated as content
-    if input_arg:
-        return InputContent(content=input_arg, source_type="direct")
 
     # No input provided
     console.print(
@@ -214,7 +236,7 @@ def save(
 ) -> None:
     """Save content to the knowledge base.
 
-    Content sources (in priority order): --file > stdin > positional argument.
+    Content sources (in priority order): --file > positional argument > stdin.
     """
     # Validate --done requires --task
     if mark_done and task is None:
