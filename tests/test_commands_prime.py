@@ -47,13 +47,20 @@ def _make_task(
 
 
 def _make_epic(
-    id=100, title="My Epic", status="active", epic_key="SEC", child_count=5, children_done=2
+    id=100,
+    title="My Epic",
+    status="active",
+    epic_key="SEC",
+    epic_seq=1,
+    child_count=5,
+    children_done=2,
 ):
     return {
         "id": id,
         "title": title,
         "status": status,
         "epic_key": epic_key,
+        "epic_seq": epic_seq,
         "child_count": child_count,
         "children_done": children_done,
     }
@@ -90,6 +97,19 @@ class TestFormatEpicLine:
         assert "2/5 done" in line
         assert "\u25a0" in line
         assert "\u25a1" in line
+
+    def test_shows_full_epic_id(self):
+        """Banner rows show KEY-SEQ, not just the key prefix (GH #1029)."""
+        line = _format_epic_line(_make_epic(epic_key="FOO", epic_seq=12))
+        assert "FOO-12" in line
+
+    def test_missing_seq_falls_back_to_key(self):
+        line = _format_epic_line(_make_epic(epic_key="FOO", epic_seq=None))
+        assert "FOO" in line
+
+    def test_missing_key_falls_back_to_id(self):
+        line = _format_epic_line(_make_epic(id=321, epic_key=None, epic_seq=None))
+        assert "#321" in line
 
     def test_complete_epic_shows_checkmark(self):
         line = _format_epic_line(_make_epic(child_count=3, children_done=3))
@@ -659,9 +679,15 @@ class TestPrimeWithKeyDocs:
 class TestFormatEpicBrief:
     def test_shows_key_and_progress(self):
         line = _format_epic_brief(
-            _make_epic(epic_key="FEAT", title="Next Intelligence", child_count=18, children_done=3)
+            _make_epic(
+                epic_key="FEAT",
+                epic_seq=7,
+                title="Next Intelligence",
+                child_count=18,
+                children_done=3,
+            )
         )
-        assert "FEAT: Next Intelligence" in line
+        assert "FEAT-7: Next Intelligence" in line
         assert "3/18 done" in line
 
     def test_no_epic_key(self):
@@ -706,6 +732,7 @@ class TestPrimeBrief:
         mock_epics.return_value = [
             _make_epic(
                 epic_key="FEAT",
+                epic_seq=7,
                 title="Next Intelligence",
                 child_count=18,
                 children_done=3,
@@ -716,7 +743,7 @@ class TestPrimeBrief:
 
         result = runner.invoke(app, ["--brief"])
         assert "ACTIVE EPICS" in result.stdout
-        assert "FEAT: Next Intelligence" in result.stdout
+        assert "FEAT-7: Next Intelligence" in result.stdout
         assert "3/18 done" in result.stdout
 
     @patch("emdx.commands.prime._get_active_epics")
