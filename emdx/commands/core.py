@@ -42,6 +42,11 @@ from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Core CRUD operations for documents")
 
+# Marks the end of the instructional header in `emdx edit` temp files.
+# Only lines above (and including) this are stripped on save, so Markdown
+# headings in the document body survive round-trips through the editor.
+EDIT_PREAMBLE_SENTINEL = "# ---- edit below this line; this marker and lines above are removed ----"
+
 
 @dataclass
 class InputContent:
@@ -1478,11 +1483,10 @@ def edit(
             tmp_file.write(f"# Editing: {doc.title} (ID: {doc.id})\n")
             tmp_file.write(f"# Project: {doc.project or 'None'}\n")
             tmp_file.write(f"# Created: {str(doc.created_at or '')[:16]}\n")
-            tmp_file.write("# Lines starting with '#' will be removed\n")
             tmp_file.write("#\n")
-            tmp_file.write("# First line (after comments) will be used as the title\n")
-            tmp_file.write("# The rest will be the content\n")
-            tmp_file.write("#\n")
+            tmp_file.write("# First line below the marker is the title\n")
+            tmp_file.write("# The rest is the content (saved verbatim, headings included)\n")
+            tmp_file.write(f"{EDIT_PREAMBLE_SENTINEL}\n")
 
             # Write title and content
             tmp_file.write(f"{doc.title}\n\n")
@@ -1502,8 +1506,19 @@ def edit(
             with open(tmp_file_path) as f:
                 lines = f.readlines()
 
-            # Remove comment lines
-            lines = [line for line in lines if not line.strip().startswith("#")]
+            # Strip only the instructional preamble, never the body: everything
+            # up to and including the sentinel line is discarded. If the user
+            # deleted the sentinel, fall back to dropping the leading comment
+            # block so Markdown headings in the body survive either way.
+            sentinel_idx = next(
+                (i for i, line in enumerate(lines) if line.strip() == EDIT_PREAMBLE_SENTINEL),
+                None,
+            )
+            if sentinel_idx is not None:
+                lines = lines[sentinel_idx + 1 :]
+            else:
+                while lines and lines[0].strip().startswith("#"):
+                    lines.pop(0)
 
             # Extract title and content
             if not lines:

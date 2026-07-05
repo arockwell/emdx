@@ -3,7 +3,7 @@
 import json
 import re
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -458,6 +458,81 @@ class TestEditCommand:
         """Edit with no ID should fail."""
         result = runner.invoke(app, ["edit"])
         assert result.exit_code != 0
+
+    def _doc_with_headings(self):
+        return Document.from_row(
+            {
+                "id": 7,
+                "title": "My Doc",
+                "content": "intro\n\n## Section A\n\nbody a\n\n## Section B\n\nbody b",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+
+    @patch("emdx.commands.core.subprocess.run")
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_unchanged_is_noop(self, mock_get_doc, mock_update, mock_run):
+        """Saving the buffer untouched must not change the document (GH #1035)."""
+        mock_get_doc.return_value = self._doc_with_headings()
+        mock_run.return_value = MagicMock(returncode=0)  # editor saves unchanged
+
+        result = runner.invoke(app, ["edit", "7"])
+        assert result.exit_code == 0
+        assert "No changes made" in _out(result)
+        mock_update.assert_not_called()
+
+    @patch("emdx.commands.core.subprocess.run")
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_preserves_markdown_headings(self, mock_get_doc, mock_update, mock_run):
+        """Lines starting with # in the body survive an edit (GH #1035)."""
+        mock_get_doc.return_value = self._doc_with_headings()
+        mock_update.return_value = True
+
+        def fake_editor(cmd, *args, **kwargs):
+            path = cmd[1]
+            with open(path) as f:
+                buffer = f.read()
+            with open(path, "w") as f:
+                f.write(buffer + "\n\n## Section C\n\nsee #42 for details\n")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = fake_editor
+
+        result = runner.invoke(app, ["edit", "7"])
+        assert result.exit_code == 0
+        mock_update.assert_called_once()
+        _, new_title, new_content = mock_update.call_args[0]
+        assert new_title == "My Doc"
+        assert "## Section A" in new_content
+        assert "## Section B" in new_content
+        assert "## Section C" in new_content
+        assert "#42 for details" in new_content
+
+    @patch("emdx.commands.core.subprocess.run")
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_sentinel_deleted_falls_back(self, mock_get_doc, mock_update, mock_run):
+        """If the user deletes the whole preamble, body headings still survive."""
+        mock_get_doc.return_value = self._doc_with_headings()
+        mock_update.return_value = True
+
+        def fake_editor(cmd, *args, **kwargs):
+            path = cmd[1]
+            with open(path, "w") as f:
+                f.write("My Doc\n\nnew intro\n\n## Kept Heading\n\nbody\n")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = fake_editor
+
+        result = runner.invoke(app, ["edit", "7"])
+        assert result.exit_code == 0
+        mock_update.assert_called_once()
+        _, new_title, new_content = mock_update.call_args[0]
+        assert new_title == "My Doc"
+        assert "## Kept Heading" in new_content
 
 
 # ---------------------------------------------------------------------------
