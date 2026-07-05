@@ -496,6 +496,139 @@ class TestEditCommand:
         result = runner.invoke(app, ["edit"])
         assert result.exit_code != 0
 
+    @patch("emdx.commands.core.subprocess.run")
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_content_flag(self, mock_get_doc, mock_update, mock_run):
+        """--content replaces the body without launching an editor (GH #1036)."""
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 3,
+                "title": "Doc",
+                "content": "old body",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+        mock_update.return_value = True
+
+        result = runner.invoke(app, ["edit", "3", "--content", "new body"])
+        assert result.exit_code == 0
+        mock_update.assert_called_once_with(3, "Doc", "new body")
+        mock_run.assert_not_called()
+
+    @patch("emdx.commands.core.subprocess.run")
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_file_flag(self, mock_get_doc, mock_update, mock_run, tmp_path):
+        """--file replaces the body from a file without launching an editor."""
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 3,
+                "title": "Doc",
+                "content": "old body",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+        mock_update.return_value = True
+        f = tmp_path / "body.md"
+        f.write_text("# Heading\n\nfrom file")
+
+        result = runner.invoke(app, ["edit", "3", "--file", str(f)])
+        assert result.exit_code == 0
+        mock_update.assert_called_once_with(3, "Doc", "# Heading\n\nfrom file")
+        mock_run.assert_not_called()
+
+    @patch("emdx.commands.core.get_document")
+    def test_edit_file_missing_errors(self, mock_get_doc):
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 3,
+                "title": "Doc",
+                "content": "c",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+        result = runner.invoke(app, ["edit", "3", "--file", "/nonexistent/x.md"])
+        assert result.exit_code != 0
+
+    @patch("emdx.commands.core.subprocess.run")
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_file_dash_reads_stdin(self, mock_get_doc, mock_update, mock_run):
+        """--file - replaces the body from stdin."""
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 3,
+                "title": "Doc",
+                "content": "old",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+        mock_update.return_value = True
+
+        result = runner.invoke(app, ["edit", "3", "--file", "-"], input="stdin body\n")
+        assert result.exit_code == 0
+        mock_update.assert_called_once_with(3, "Doc", "stdin body\n")
+        mock_run.assert_not_called()
+
+    @patch("emdx.commands.core.subprocess.run")
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_piped_stdin(self, mock_get_doc, mock_update, mock_run):
+        """Piping content into edit updates the body without an editor."""
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 3,
+                "title": "Doc",
+                "content": "old",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+        mock_update.return_value = True
+
+        result = runner.invoke(app, ["edit", "3"], input="piped body\n")
+        assert result.exit_code == 0
+        mock_update.assert_called_once_with(3, "Doc", "piped body\n")
+        mock_run.assert_not_called()
+
+    @patch("emdx.commands.core.update_document")
+    @patch("emdx.commands.core.get_document")
+    def test_edit_content_with_title_updates_both(self, mock_get_doc, mock_update):
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 3,
+                "title": "Old Title",
+                "content": "old",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+        mock_update.return_value = True
+
+        result = runner.invoke(app, ["edit", "3", "--title", "New Title", "--content", "new"])
+        assert result.exit_code == 0
+        mock_update.assert_called_once_with(3, "New Title", "new")
+
+    @patch("emdx.commands.core.get_document")
+    def test_edit_file_and_content_conflict(self, mock_get_doc):
+        mock_get_doc.return_value = Document.from_row(
+            {
+                "id": 3,
+                "title": "Doc",
+                "content": "c",
+                "project": None,
+                "created_at": datetime(2024, 1, 1),
+            }
+        )
+        result = runner.invoke(app, ["edit", "3", "--file", "x.md", "--content", "y"])
+        assert result.exit_code != 0
+        assert "mutually exclusive" in _out(result)
+
     def _doc_with_headings(self):
         return Document.from_row(
             {

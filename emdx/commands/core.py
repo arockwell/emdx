@@ -1455,17 +1455,73 @@ def _print_related_docs(
         print(f"Related: {', '.join(parts)}")
 
 
+def _flag_wiki_staleness(doc_id: int) -> None:
+    """Flag wiki articles sourced from this doc as stale (non-critical)."""
+    try:
+        from emdx.services.wiki_staleness_service import check_doc_staleness
+
+        check_doc_staleness(doc_id)
+    except Exception:
+        pass  # Wiki tables may not exist; non-critical
+
+
+def _resolve_edit_body(file: str | None, content: str | None) -> str | None:
+    """Resolve a non-interactive content source for `edit`, if one was given.
+
+    Sources, mirroring `save`: --file (with '-' meaning stdin), --content,
+    or piped stdin. Returns None when no source is present (interactive
+    editor should launch).
+    """
+    import sys
+
+    if file is not None and content is not None:
+        console.print("[red]Error: --file and --content are mutually exclusive[/red]")
+        raise typer.Exit(1)
+
+    if file == "-":
+        return sys.stdin.read()
+    if file is not None:
+        fp = Path(file)
+        if not fp.exists() or not fp.is_file():
+            console.print(f"[red]Error: File not found: {file}[/red]")
+            raise typer.Exit(1)
+        try:
+            return fp.read_text(encoding="utf-8")
+        except Exception as e:
+            console.print(f"[red]Error reading file: {e}[/red]")
+            raise typer.Exit(1) from e
+    if content is not None:
+        return content
+
+    # Piped stdin (guarded like save: never block on an open-but-idle stdin)
+    if not sys.stdin.isatty() and _stdin_ready(STDIN_PROBE_TIMEOUT):
+        piped = sys.stdin.read()
+        if piped.strip():
+            return piped
+
+    return None
+
+
 @app.command()
 def edit(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     title: str | None = typer.Option(
         None, "--title", "-t", help="Update title without editing content"
     ),
+    file: str | None = typer.Option(
+        None, "--file", "-f", help="Replace content from a file path ('-' reads stdin)"
+    ),
+    content: str | None = typer.Option(None, "--content", help="Replace content from a string"),
     editor: str | None = typer.Option(
         None, "--editor", "-e", help="Editor to use (default: $EDITOR)"
     ),
 ) -> None:
-    """Edit a document in the knowledge base"""
+    """Edit a document in the knowledge base.
+
+    Non-interactive updates: --file PATH, --file - (stdin), --content TEXT,
+    or pipe new content via stdin. Combine with --title to update both at
+    once. With no content source, opens $EDITOR as before.
+    """
     try:
         # Fetch document
         doc = get_document(identifier)
@@ -1474,6 +1530,22 @@ def edit(
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
 
+        # Non-interactive content update (--file / --content / piped stdin)
+        new_body = _resolve_edit_body(file, content)
+        if new_body is not None:
+            new_title = title or doc.title
+            success = update_document(doc.id, new_title, new_body)
+            if success:
+                console.print(f"[green]✅ Updated #{doc.id}:[/green] [cyan]{new_title}[/cyan]")
+                if title and title != doc.title:
+                    console.print(f"   [dim]Title changed from:[/dim] {doc.title}")
+                console.print("   [dim]Content updated[/dim]")
+                _flag_wiki_staleness(doc.id)
+            else:
+                console.print("[red]Error updating document[/red]")
+                raise typer.Exit(1)
+            return
+
         # Quick title update without editing content
         if title:
             success = update_document(doc.id, title, doc.content)
@@ -1481,15 +1553,7 @@ def edit(
                 console.print(
                     f"[green]✅ Updated title of #{doc.id} to:[/green] [cyan]{title}[/cyan]"
                 )
-                # Flag wiki articles sourced from this doc as stale
-                try:
-                    from emdx.services.wiki_staleness_service import (
-                        check_doc_staleness,
-                    )
-
-                    check_doc_staleness(doc.id)
-                except Exception:
-                    pass  # Wiki tables may not exist; non-critical
+                _flag_wiki_staleness(doc.id)
             else:
                 console.print("[red]Error updating document title[/red]")
                 raise typer.Exit(1)
@@ -1576,16 +1640,7 @@ def edit(
                 if new_title != doc.title:
                     console.print(f"   [dim]Title changed from:[/dim] {doc.title}")
                 console.print("   [dim]Content updated[/dim]")
-
-                # Flag wiki articles sourced from this doc as stale
-                try:
-                    from emdx.services.wiki_staleness_service import (
-                        check_doc_staleness,
-                    )
-
-                    check_doc_staleness(doc.id)
-                except Exception:
-                    pass  # Wiki tables may not exist; non-critical
+                _flag_wiki_staleness(doc.id)
             else:
                 console.print("[red]Error updating document[/red]")
                 raise typer.Exit(1)

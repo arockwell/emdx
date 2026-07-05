@@ -206,7 +206,7 @@ emdx view 42 --review
 ```
 
 ### **emdx edit**
-Edit document in your default editor.
+Edit document in your default editor, or update it non-interactively.
 
 ```bash
 # Edit by ID
@@ -214,6 +214,18 @@ emdx edit 42
 
 # Edit with specific editor
 EDITOR=vim emdx edit 42
+
+# Non-interactive: replace body from a file, string, or stdin
+emdx edit 42 --file body.md
+emdx edit 42 --content "new body text"
+cat body.md | emdx edit 42            # piped stdin
+emdx edit 42 --file -                 # explicit stdin
+
+# Update title and body together
+emdx edit 42 --title "New Title" --content "new body"
+
+# Title only (no editor)
+emdx edit 42 --title "New Title"
 ```
 
 ### **emdx delete**
