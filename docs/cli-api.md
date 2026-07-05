@@ -700,6 +700,14 @@ emdx maintain index --clear
 - `--stats` - Show index statistics
 - `--clear` - Clear all embeddings
 
+**Embedding backend:** emdx embeds with all-MiniLM-L6-v2, preferring the
+fastembed (ONNX) backend when installed — ~0.4s cold start vs ~5.5s for
+torch-based sentence-transformers, which remains the fallback. Set
+`EMDX_EMBEDDING_BACKEND=fastembed|sentence-transformers` to force one.
+Each backend stores vectors under its own `model_name`, so switching
+backends requires one `emdx maintain index` to rebuild (old vectors are
+ignored, not corrupted).
+
 #### **emdx maintain link**
 Create semantic links between related documents (moved from `emdx ai link`).
 

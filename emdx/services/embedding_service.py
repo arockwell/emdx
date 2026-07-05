@@ -1,20 +1,26 @@
 """
 Semantic embedding service for EMDX.
 
-Uses sentence-transformers for local embedding generation,
-enabling semantic search without API costs.
+Generates local embeddings for semantic search without API costs.
+Prefers the fastembed (ONNX) backend — same all-MiniLM-L6-v2 model as
+sentence-transformers but ~0.4s cold start instead of ~5.5s, since it
+avoids importing torch. Falls back to sentence-transformers when
+fastembed is not installed. Override with EMDX_EMBEDDING_BACKEND.
 """
 
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
+    from fastembed import TextEmbedding
     from sentence_transformers import SentenceTransformer
 
 try:
@@ -29,20 +35,78 @@ from ..database import db
 
 logger = logging.getLogger(__name__)
 
-# Lazy load - model is ~90MB, loads in ~2 seconds
-_model: SentenceTransformer | None = None
+_T = TypeVar("_T")
+
+BACKEND_ENV_VAR = "EMDX_EMBEDDING_BACKEND"
+_BACKEND_FASTEMBED = "fastembed"
+_BACKEND_SENTENCE_TRANSFORMERS = "sentence-transformers"
+
+# Lazy load — the model is ~90MB and loading it is the dominant startup cost
+_model: _FastembedModel | _SentenceTransformerModel | None = None
 
 # Loggers that emit noise during model loading
 _NOISY_LOGGERS = (
     "huggingface_hub",
     "transformers",
     "sentence_transformers",
+    "fastembed",
     "filelock",
 )
 
 
-def _load_model_silently(cls: type) -> SentenceTransformer:
-    """Load the SentenceTransformer model while suppressing all stdout/stderr noise.
+def _backend_name() -> str:
+    """Resolve which embedding backend to use.
+
+    EMDX_EMBEDDING_BACKEND wins if set to a known backend; otherwise
+    fastembed is preferred when importable. find_spec keeps this check
+    cheap — resolution must not import either backend.
+    """
+    override = os.environ.get(BACKEND_ENV_VAR)
+    if override in (_BACKEND_FASTEMBED, _BACKEND_SENTENCE_TRANSFORMERS):
+        return override
+    if override:
+        logger.warning("Unknown %s=%r — ignoring", BACKEND_ENV_VAR, override)
+    if importlib.util.find_spec("fastembed") is not None:
+        return _BACKEND_FASTEMBED
+    return _BACKEND_SENTENCE_TRANSFORMERS
+
+
+class _FastembedModel:
+    """Adapter giving fastembed's TextEmbedding an encode() like sentence-transformers.
+
+    Returns L2-normalized float32 vectors: 1-D for a single string,
+    2-D for a list. fastembed already normalizes; it yields float64,
+    so cast to float32 to match the DB blob format.
+    """
+
+    def __init__(self, model: TextEmbedding) -> None:
+        self._model = model
+
+    def encode(self, texts: str | list[str]) -> np.ndarray:
+        single = isinstance(texts, str)
+        inputs = [texts] if isinstance(texts, str) else texts
+        vectors = np.asarray(list(self._model.embed(inputs)), dtype=np.float32)
+        return vectors[0] if single else vectors
+
+
+class _SentenceTransformerModel:
+    """Adapter pinning the encode() options the service relies on."""
+
+    def __init__(self, model: SentenceTransformer) -> None:
+        self._model = model
+
+    def encode(self, texts: str | list[str]) -> np.ndarray:
+        result: np.ndarray = self._model.encode(
+            texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        return result
+
+
+def _load_model_silently(factory: Callable[[], _T]) -> _T:
+    """Run a model-loading factory while suppressing all stdout/stderr noise.
 
     HuggingFace libraries emit tqdm progress bars for weight loading and an
     unauthenticated-request warning to stdout/stderr. These corrupt CLI output
@@ -67,35 +131,49 @@ def _load_model_silently(cls: type) -> SentenceTransformer:
     devnull = open(os.devnull, "w")
     try:
         with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
-            return cls("all-MiniLM-L6-v2")
+            return factory()
     finally:
         devnull.close()
         for name, level in saved_levels.items():
             logging.getLogger(name).setLevel(level)
 
 
-def _get_model() -> SentenceTransformer:
-    """Lazy load the embedding model."""
+def _get_model() -> _FastembedModel | _SentenceTransformerModel:
+    """Lazy load the embedding model on the resolved backend."""
     global _model
     if _model is None:
         if not HAS_NUMPY:
             raise ImportError(
                 "numpy is required for embedding features. Install it with: pip install 'emdx[ai]'"
             ) from None
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
-            raise ImportError(
-                "sentence-transformers is required for embedding features. "
-                "Install it with: pip install 'emdx[ai]'"
-            ) from None
 
-        # all-MiniLM-L6-v2: Good balance of speed/quality
+        # all-MiniLM-L6-v2: good balance of speed/quality
         # ~90MB download, ~80ms per doc, 384 dimensions
-        # Suppress HuggingFace/transformers noise (tqdm progress bars, HF_TOKEN warning)
-        # that would otherwise leak to stdout/stderr during CLI and pipe usage.
-        _model = _load_model_silently(SentenceTransformer)
-        logger.info("Loaded embedding model: all-MiniLM-L6-v2")
+        backend = _backend_name()
+        if backend == _BACKEND_FASTEMBED:
+            try:
+                from fastembed import TextEmbedding
+            except ImportError:
+                raise ImportError(
+                    "fastembed is required for embedding features "
+                    f"(requested via {BACKEND_ENV_VAR} or auto-detected). "
+                    "Install it with: pip install fastembed"
+                ) from None
+            _model = _load_model_silently(
+                lambda: _FastembedModel(TextEmbedding("sentence-transformers/all-MiniLM-L6-v2"))
+            )
+        else:
+            try:
+                from sentence_transformers import SentenceTransformer
+            except ImportError:
+                raise ImportError(
+                    "sentence-transformers is required for embedding features. "
+                    "Install it with: pip install 'emdx[ai]'"
+                ) from None
+            _model = _load_model_silently(
+                lambda: _SentenceTransformerModel(SentenceTransformer("all-MiniLM-L6-v2"))
+            )
+        logger.info("Loaded embedding model: all-MiniLM-L6-v2 (backend: %s)", backend)
     return _model
 
 
@@ -146,14 +224,25 @@ class EmbeddingStats:
 class EmbeddingService:
     """Manages document embeddings for semantic search."""
 
-    MODEL_NAME = "all-MiniLM-L6-v2"
     EMBEDDING_DIM = 384
+
+    @property
+    def MODEL_NAME(self) -> str:
+        """DB partition key for embeddings — historically a class constant.
+
+        The quantized ONNX weights fastembed ships produce slightly different
+        vectors than the torch weights, so each backend gets its own key to
+        keep the two vector spaces from mixing. Switching backends therefore
+        requires one re-index (emdx maintain index).
+        """
+        if _backend_name() == _BACKEND_FASTEMBED:
+            return "all-MiniLM-L6-v2-onnx"
+        return "all-MiniLM-L6-v2"
 
     def embed_text(self, text: str) -> np.ndarray:
         """Embed arbitrary text."""
         model = _get_model()
-        result: np.ndarray = model.encode(text, convert_to_numpy=True, normalize_embeddings=True)
-        return result
+        return model.encode(text)
 
     def embed_document(self, doc_id: int, force: bool = False) -> np.ndarray:
         """Embed a document (cached in database)."""
@@ -253,12 +342,7 @@ class EmbeddingService:
             texts = [f"{title}\n\n{content}" for _, title, content in batch]
 
             # Batch encode
-            embeddings = model.encode(
-                texts,
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-                show_progress_bar=False,
-            )
+            embeddings = model.encode(texts)
 
             # Save all embeddings in batch
             with db.get_connection() as conn:
@@ -509,12 +593,7 @@ class EmbeddingService:
 
             # Embed all chunks for this document
             texts = [chunk.text for chunk in chunks]
-            embeddings = model.encode(
-                texts,
-                convert_to_numpy=True,
-                normalize_embeddings=True,
-                show_progress_bar=False,
-            )
+            embeddings = model.encode(texts)
 
             # Save chunk embeddings
             with db.get_connection() as conn:
