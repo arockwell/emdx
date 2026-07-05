@@ -811,6 +811,77 @@ def backup_command(
 
 app.command(name="backup")(backup_command)
 
+
+def compact_command(
+    json_output: bool = typer.Option(False, "--json", help="Structured JSON output"),
+) -> None:
+    """Compact the database: FTS optimize, PRAGMA optimize, and VACUUM.
+
+    As the knowledge base grows, the SQLite file accumulates free pages and
+    the FTS5 index fragments, growing on-disk size and write/query latency.
+    Run this periodically (e.g. monthly, or after bulk deletes) to keep
+    saves and queries fast.
+
+    Examples:
+        emdx maintain compact
+        emdx maintain compact --json
+    """
+    import json as json_mod
+    import time
+
+    from ..config.settings import get_db_path
+    from ..database import db
+
+    db_path = get_db_path()
+    if not db_path.exists():
+        msg = f"Database not found: {db_path}"
+        if json_output:
+            print(json_mod.dumps({"success": False, "message": msg}))
+        else:
+            print(msg)
+        raise typer.Exit(code=1)
+
+    size_before = db_path.stat().st_size
+    start = time.monotonic()
+
+    with db.get_connection() as conn:
+        # Merge FTS5 b-tree segments into one (defragments the search index)
+        conn.execute("INSERT INTO documents_fts(documents_fts) VALUES('optimize')")
+        conn.commit()
+        # Refresh query-planner statistics
+        conn.execute("PRAGMA optimize")
+        # Reclaim free pages; must run outside a transaction
+        conn.execute("VACUUM")
+        # Fold the WAL back into the main file so the reclaim shows on disk
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    duration = time.monotonic() - start
+    size_after = db_path.stat().st_size
+    reclaimed = size_before - size_after
+
+    if json_output:
+        print(
+            json_mod.dumps(
+                {
+                    "success": True,
+                    "size_before_bytes": size_before,
+                    "size_after_bytes": size_after,
+                    "reclaimed_bytes": reclaimed,
+                    "duration_seconds": round(duration, 2),
+                }
+            )
+        )
+    else:
+        mb = 1024 * 1024
+        print(
+            f"Compacted {db_path.name}: "
+            f"{size_before / mb:.1f}MB -> {size_after / mb:.1f}MB "
+            f"({reclaimed / mb:.1f}MB reclaimed, {duration:.1f}s)"
+        )
+
+
+app.command(name="compact")(compact_command)
+
 # Register index/link commands from maintain_index as direct subcommands
 from emdx.commands.maintain_index import (  # noqa: E402
     create_links,

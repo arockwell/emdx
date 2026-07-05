@@ -434,6 +434,22 @@ emdx maintain backup --json
 
 > **Tip:** Backups can be triggered automatically via Claude Code hooks (e.g., on session start). Use `--quiet` for silent hook-driven backups.
 
+#### **emdx maintain compact**
+Compact the database to keep on-disk size and query latency in check as the knowledge base grows. Runs FTS5 index optimization, `PRAGMA optimize`, `VACUUM`, and a WAL checkpoint.
+
+```bash
+# Compact the database
+emdx maintain compact
+
+# JSON output (sizes before/after, bytes reclaimed)
+emdx maintain compact --json
+```
+
+**Options:**
+- `--json` - Structured JSON output
+
+> **Tip:** Run periodically (e.g. monthly) or after bulk deletes. Safe to run any time — it only reorganizes storage, never changes content.
+
 #### **emdx maintain cloud-backup**
 Upload, list, and download knowledge base backups to cloud providers (GitHub Gists or Google Drive).
 
