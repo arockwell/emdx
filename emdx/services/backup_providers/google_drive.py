@@ -38,6 +38,28 @@ def _set_secure_permissions(path: Path) -> None:
     os.chmod(path, 0o600)
 
 
+def _sanitize_remote_filename(filename: str, backup_id: str) -> str:
+    """Sanitize a remote-controlled Drive filename for safe local use.
+
+    Google Drive allows arbitrary characters in file names, including
+    path separators and traversal sequences. Reduce the name to its
+    basename and fall back to a deterministic name if the result is
+    empty or a dot-name.
+
+    Args:
+        filename: The raw file name from Drive metadata.
+        backup_id: The Drive file ID, used for the fallback name.
+
+    Returns:
+        A safe, non-empty basename.
+    """
+    # Strip both POSIX and Windows separators, then take the basename.
+    safe = Path(filename.replace("\\", "/")).name
+    if not safe or safe in {".", ".."}:
+        safe = f"backup-{backup_id}.db.gz"
+    return safe
+
+
 class GoogleDriveProvider:
     """Cloud backup provider that stores database snapshots in Google Drive.
 
@@ -215,10 +237,16 @@ class GoogleDriveProvider:
         target = Path(target_dir)
         target.mkdir(parents=True, exist_ok=True)
 
-        # Get file metadata for the filename
+        # Get file metadata for the filename.
+        # The name is remote-controlled (Drive allows '/' and '..' in
+        # names), so sanitize it before joining to avoid path traversal.
         file_meta = service.files().get(fileId=backup_id, fields="name").execute()
-        filename = file_meta.get("name", f"backup-{backup_id}.db.gz")
+        filename = _sanitize_remote_filename(
+            file_meta.get("name", f"backup-{backup_id}.db.gz"), backup_id
+        )
         dest_path = target / filename
+        if not dest_path.resolve().is_relative_to(target.resolve()):
+            raise RuntimeError(f"Refusing to write outside target directory: {filename!r}")
 
         request = service.files().get_media(fileId=backup_id)
 
