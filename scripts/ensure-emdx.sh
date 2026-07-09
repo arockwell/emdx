@@ -10,8 +10,6 @@ cat > /dev/null
 if command -v emdx &> /dev/null; then
     version=$(emdx --version 2>/dev/null || echo "unknown")
     echo "● emdx ${version} — knowledge base ready"
-    echo ""
-    emdx prime 2>/dev/null || true
 else
     echo "⚠ emdx CLI not found."
     echo ""
