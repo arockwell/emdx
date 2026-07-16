@@ -39,7 +39,7 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import console, is_non_interactive
+from emdx.utils.output import console, is_non_interactive, print_json
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Core CRUD operations for documents")
@@ -273,6 +273,7 @@ def save(
     mark_done: bool = typer.Option(
         False, "--done", help="Also mark the linked task as done (requires --task)"
     ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Save content to the knowledge base.
 
@@ -280,7 +281,11 @@ def save(
     """
     # Validate --done requires --task
     if mark_done and task is None:
-        console.print("[red]Error: --done requires --task[/red]")
+        msg = "--done requires --task"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]Error: {msg}[/red]")
         raise typer.Exit(1)
 
     # Validate task exists before doing any work
@@ -289,7 +294,11 @@ def save(
 
         linked_task = get_task(task)
         if not linked_task:
-            console.print(f"[red]Error: Task #{task} not found[/red]")
+            msg = f"Task #{task} not found"
+            if json_output:
+                print_json({"error": msg})
+            else:
+                console.print(f"[red]Error: {msg}[/red]")
             raise typer.Exit(1)
 
     # Step 1: Get input content
@@ -328,25 +337,27 @@ def save(
         from emdx.services.wikify_service import title_match_wikify
 
         wikify_result = title_match_wikify(doc_id)
-        if wikify_result.links_created > 0:
+        if wikify_result.links_created > 0 and not json_output:
             console.print(
                 f"   [dim]Wiki-linked to {wikify_result.links_created} doc(s) by title match[/dim]"
             )
     except Exception as e:
-        console.print(f"   [yellow]Wikify skipped: {e}[/yellow]")
+        if not json_output:
+            console.print(f"   [yellow]Wikify skipped: {e}[/yellow]")
 
     # Step 6.55: Entity extraction + entity-match wikification (zero cost)
     try:
         from emdx.services.entity_service import entity_match_wikify
 
         entity_result = entity_match_wikify(doc_id)
-        if entity_result.links_created > 0:
+        if entity_result.links_created > 0 and not json_output:
             console.print(
                 f"   [dim]Entity-linked to {entity_result.links_created}"
                 " doc(s) by shared concepts[/dim]"
             )
     except Exception as e:
-        console.print(f"   [yellow]Entity wikify skipped: {e}[/yellow]")
+        if not json_output:
+            console.print(f"   [yellow]Entity wikify skipped: {e}[/yellow]")
     # Step 6.6: Auto-link to similar documents (default on, use --no-auto-link to skip)
     if auto_link:
         try:
@@ -355,12 +366,13 @@ def save(
             # Scope to same project unless --cross-project is set
             scope_project = None if cross_project else final_project
             link_result = auto_link_document(doc_id, project=scope_project)
-            if link_result.links_created > 0:
+            if link_result.links_created > 0 and not json_output:
                 console.print(f"   [dim]Linked to {link_result.links_created} similar doc(s)[/dim]")
         except ImportError:
             pass  # AI extras not installed — silently skip
         except Exception as e:
-            console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
+            if not json_output:
+                console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
 
     # Step 6.7: Link to task if specified
     if task is not None:
@@ -377,9 +389,24 @@ def save(
         auto_applied = tagger.auto_tag_document(doc_id, confidence_threshold=0.7)
         if auto_applied:
             applied_tags.extend(auto_applied)
-            console.print(f"   [dim]Auto-tagged:[/dim] {format_tags(auto_applied)}")
+            if not json_output:
+                console.print(f"   [dim]Auto-tagged:[/dim] {format_tags(auto_applied)}")
 
     # Step 8: Display result
+    if json_output:
+        result: dict[str, Any] = {
+            "id": doc_id,
+            "title": metadata.title,
+            "project": metadata.project,
+            "tags": applied_tags,
+        }
+        if task is not None:
+            result["task_id"] = task
+        if supersede_target:
+            result["superseded_id"] = supersede_target.id
+        print_json(result)
+        return
+
     display_save_result(doc_id, metadata, applied_tags, supersede_target)
 
     # Step 8.5: Display task link
