@@ -15,7 +15,7 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "Explore|general-purpose|Plan",
+        "matcher": "Explore|general-purpose|Plan|worker|auditor|reviewer|scout|verifier|epic-runner|recorder|pr-reviewer|sentry-issue-investigator",
         "hooks": [
           {
             "type": "command",

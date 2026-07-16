@@ -44,9 +44,26 @@ msg = data.get("last_assistant_message", "")
 if not msg or len(msg) < 200:
     sys.exit(0)
 
-# Only save output from substantive agent types
-allowed_types = {"explore", "plan", "general-purpose"}
+# Agent types whose final output is worth a knowledge-base record.
+# DRIFT CONTRACT: this set must match the SubagentStop matcher in
+# hooks.json — update both together (the /new-agent skill's checklist).
+#   - built-ins:  explore, plan, general-purpose
+#   - role fleet: worker, auditor, reviewer, scout, verifier,
+#                 epic-runner, recorder, pr-reviewer,
+#                 sentry-issue-investigator
+#   - monitor is excluded on purpose: watch/poll output is transient
+allowed_types = {
+    "explore", "plan", "general-purpose",
+    "worker", "auditor", "reviewer", "scout", "verifier",
+    "epic-runner", "recorder", "pr-reviewer", "sentry-issue-investigator",
+}
 if agent_type.lower() not in allowed_types:
+    sys.exit(0)
+
+# Backstop, not duplicator: role-fleet agents are instructed to save
+# their own findings and cite the doc id in their final report. A message
+# that already cites a doc id has its content in emdx — skip.
+if re.search(r"(?:emdx|doc)\s*#\d{3,}", msg):
     sys.exit(0)
 
 # Check emdx is available
