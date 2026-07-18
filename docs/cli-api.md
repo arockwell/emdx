@@ -330,6 +330,8 @@ emdx config unset maintain.auto_link_on_save
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `maintain.auto_link_on_save` | `true` | Run semantic auto-linking synchronously on `emdx save`. Turn off for fast saves on large KBs, then run `emdx maintain index` and `emdx maintain link --all` out of band. The `--auto-link/--no-auto-link` flags override this per call. |
+| `ui.list_height` | `40` | TUI: height % of the top list band in the docs and tasks browsers; the preview/detail pane gets the rest. Clamped to 10–90. Takes effect on next `emdx gui` launch. |
+| `ui.sidebar_width` | `30` | TUI: width % of the right sidebar in the docs and tasks browsers; the list gets the rest. Clamped to 10–90. Takes effect on next `emdx gui` launch. |
 
 ## 🏷️ **Tag Management**
 
@@ -1092,6 +1094,10 @@ emdx gui
 # Launch with a specific theme
 emdx gui --theme emdx-dark
 ```
+
+Panel sizes (list band height, sidebar width) are configurable via
+`emdx config set ui.list_height 55` / `ui.sidebar_width 20` — see
+[emdx config](#emdx-config).
 
 **TUI Key Bindings:**
 

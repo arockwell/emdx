@@ -17,6 +17,8 @@ from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Log, RichLog, Static
 
+from emdx.ui.layout_config import apply_panel_sizes
+
 from ..knowledge_graph_panel import KnowledgeGraphPanel
 from ..modals import HelpMixin
 from .activity_data import ActivityDataLoader
@@ -111,7 +113,9 @@ class ActivityView(HelpMixin, Widget):
         ("g", "toggle_graph_panel", "Graph"),
     ]
 
-    DEFAULT_CSS = """
+    # Panel size tokens (__LIST_HEIGHT__ etc.) come from `emdx config`
+    # settings ui.list_height / ui.sidebar_width — see ui/layout_config.py.
+    DEFAULT_CSS = apply_panel_sizes("""
     ActivityView {
         layout: vertical;
         height: 100%;
@@ -130,17 +134,17 @@ class ActivityView(HelpMixin, Widget):
     /* ── Top band: list + sidebar ─────────────────────── */
 
     #activity-panel {
-        height: 40%;
+        height: __LIST_HEIGHT__;
         width: 100%;
     }
 
-    /* Wide (>=120 cols, default): list 70%, sidebar 30% */
+    /* Wide (>=120 cols, default): list/sidebar split from config */
     #activity-list-section {
-        width: 70%;
+        width: __LIST_WIDTH__;
     }
 
     #context-section {
-        width: 30%;
+        width: __SIDEBAR_WIDTH__;
         border-left: solid $secondary;
     }
 
@@ -170,7 +174,7 @@ class ActivityView(HelpMixin, Widget):
     /* ── Bottom pane: content preview ─────────────────── */
 
     #preview-panel {
-        height: 60%;
+        height: __PREVIEW_HEIGHT__;
         width: 100%;
         border-top: solid $primary;
     }
@@ -265,7 +269,7 @@ class ActivityView(HelpMixin, Widget):
     #main-content.graph-visible #preview-panel {
         height: 40%;
     }
-    """
+    """)
 
     # Doc type filter cycle order
     DOC_TYPE_FILTERS = ("user", "wiki", "all")

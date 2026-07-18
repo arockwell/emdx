@@ -32,6 +32,7 @@ from emdx.models.tasks import (
     list_tasks,
     update_task,
 )
+from emdx.ui.layout_config import apply_panel_sizes
 from emdx.ui.link_helpers import extract_urls as _extract_urls
 from emdx.ui.link_helpers import linkify_text as _linkify_text
 
@@ -202,7 +203,9 @@ class TaskView(Widget):
         Binding("enter", "toggle_collapse", "Expand/Collapse", show=True),
     ]
 
-    DEFAULT_CSS = """
+    # Panel size tokens (__LIST_HEIGHT__ etc.) come from `emdx config`
+    # settings ui.list_height / ui.sidebar_width — see ui/layout_config.py.
+    DEFAULT_CSS = apply_panel_sizes("""
     TaskView {
         layout: vertical;
         height: 100%;
@@ -228,17 +231,17 @@ class TaskView(Widget):
     /* ── Top band: task list (+ future sidebar) ───────── */
 
     #task-list-panel {
-        height: 40%;
+        height: __LIST_HEIGHT__;
         width: 100%;
     }
 
-    /* Wide (>=120 cols, default): list section 70%, sidebar 30% */
+    /* Wide (>=120 cols, default): list/sidebar split from config */
     #task-list-section {
-        width: 70%;
+        width: __LIST_WIDTH__;
     }
 
     #task-sidebar-section {
-        width: 30%;
+        width: __SIDEBAR_WIDTH__;
         border-left: solid $secondary;
     }
 
@@ -254,7 +257,7 @@ class TaskView(Widget):
     /* ── Content pane: task detail ─────────────────────── */
 
     #task-detail-panel {
-        height: 60%;
+        height: __PREVIEW_HEIGHT__;
         width: 100%;
         border-top: solid $primary;
     }
@@ -312,7 +315,7 @@ class TaskView(Widget):
         padding: 0 1;
         scrollbar-gutter: stable;
     }
-    """
+    """)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

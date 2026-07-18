@@ -10,6 +10,8 @@ Known settings:
   runs semantic auto-linking synchronously. Turning this off makes saves
   fast on large knowledge bases; run ``emdx maintain index`` and
   ``emdx maintain link --all`` out of band to catch up (#1038).
+- ``ui.list_height`` / ``ui.sidebar_width`` (int %, defaults 40/30): TUI
+  panel sizes — see ``emdx/ui/layout_config.py`` (#891).
 """
 
 from __future__ import annotations
@@ -26,6 +28,9 @@ ConfigValue = str | int | float | bool | None
 # compatibility) but `emdx config list` shows these even when unset.
 KNOWN_SETTINGS: dict[str, ConfigValue] = {
     "maintain.auto_link_on_save": True,
+    # TUI panel sizes (#891) — percentages, clamped to 10-90 at load
+    "ui.list_height": 40,
+    "ui.sidebar_width": 30,
 }
 
 
