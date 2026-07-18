@@ -86,6 +86,39 @@ def _stdin_ready(timeout: float) -> bool:
     return bool(ready)
 
 
+def _guard_path_like_positional(arg: str) -> None:
+    """Refuse a positional arg that is an existing file path (#1051).
+
+    Callers (usually agents) sometimes pass a file path positionally instead
+    of via -f/--file. The save "succeeds" with the literal path string as the
+    document body, and the real content is lost once the file at that path is
+    cleaned up. Fail loudly instead; the literal-string case survives via
+    stdin (`printf '%s' "/some/path" | emdx save`).
+    """
+    if "\n" in arg:
+        return
+    try:
+        is_file = Path(arg).expanduser().is_file()
+    except (OSError, ValueError):
+        return
+
+    if is_file:
+        console.print(f"[red]Error: positional argument is an existing file path: {arg}[/red]")
+        console.print(
+            "[red]Use -f/--file to save the file's contents, "
+            "or pipe via stdin to save the literal string.[/red]"
+        )
+        raise typer.Exit(1)
+
+    # Path-looking but nonexistent: usually a temp file already cleaned up or
+    # a mistyped path. Warn but proceed with the literal string.
+    if arg.startswith(("/", "~")) and " " not in arg:
+        console.print(
+            f"[yellow]Warning: '{arg}' looks like a file path but no such file exists; "
+            "saving it as literal content. Use -f/--file to save a file's contents.[/yellow]"
+        )
+
+
 def get_input_content(input_arg: str | None, file_path: str | None = None) -> InputContent:
     """Handle input from stdin, --file, or positional content argument.
 
@@ -94,6 +127,10 @@ def get_input_content(input_arg: str | None, file_path: str | None = None) -> In
     When --file or a positional argument is provided, stdin is never read:
     probing an open non-TTY stdin that has no data blocks forever under
     backgrounded/tool-invoked callers (see #732, #1034).
+
+    A positional argument that is an existing file path is refused (#1051):
+    it almost always means the caller meant -f/--file, and accepting it
+    silently records the path string instead of the file's contents.
     """
     import sys
 
@@ -112,6 +149,7 @@ def get_input_content(input_arg: str | None, file_path: str | None = None) -> In
 
     # Priority 2: Positional argument (skip stdin — content already in hand)
     if input_arg:
+        _guard_path_like_positional(input_arg)
         return InputContent(content=input_arg, source_type="direct")
 
     # Priority 3: stdin, guarded so an open-but-idle stdin can't wedge us
