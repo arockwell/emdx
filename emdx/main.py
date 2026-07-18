@@ -59,6 +59,7 @@ register_aliases({"show": "view", "list": "find", "recent": "find"})
 # EAGER IMPORTS - Core KB commands (fast, always needed)
 # Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
+from emdx.commands.config_cmd import app as config_app  # noqa: E402
 from emdx.commands.context import context as context_command  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.db_manage import app as db_app  # noqa: E402
@@ -105,6 +106,9 @@ for command in gist_app.registered_commands:
 
 # Add db as a subcommand group
 app.add_typer(db_app, name="db", help="Database management")
+
+# Add config as a subcommand group
+app.add_typer(config_app, name="config", help="Manage emdx settings")
 
 # Add the context command for graph-aware context assembly
 app.command(name="context")(context_command)
