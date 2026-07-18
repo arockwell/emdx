@@ -274,7 +274,8 @@ emdx status --mirror                   # Reflective KB summary (narrative)
 emdx maintain index                    # Build/update embedding index
 emdx maintain link --all               # Auto-link related documents
 # Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
-# Configure via `maintain.auto_link_on_save` setting.
+# Configure via `emdx config set maintain.auto_link_on_save false` for fast
+# saves on large KBs (then index/link out of band with the commands above).
 emdx maintain backup                   # Create compressed daily backup
 emdx maintain backup --list            # List existing backups
 emdx maintain backup --restore <file>  # Restore from a backup
@@ -313,6 +314,12 @@ emdx diff 42 1                         # Diff current vs version 1
 emdx db status                         # Show active DB path and reason
 emdx db path                           # Print just the path (for scripts)
 emdx db copy-from-prod                 # Copy production DB to dev DB
+
+# Settings
+emdx config list                       # Show all settings
+emdx config set <key> <value>          # Set a setting (e.g. maintain.auto_link_on_save false)
+emdx config get <key>                  # Show a setting's effective value
+emdx config unset <key>                # Revert a setting to its default
 ```
 
 For complete command reference, see [CLI Reference](docs/cli-api.md).

@@ -259,8 +259,11 @@ def save(
     supersede: bool = typer.Option(
         False, "--supersede", help="Auto-link to existing doc with same title (disabled by default)"
     ),
-    auto_link: bool = typer.Option(
-        True, "--auto-link/--no-auto-link", help="Auto-link to semantically similar documents"
+    auto_link: bool | None = typer.Option(
+        None,
+        "--auto-link/--no-auto-link",
+        help="Auto-link to semantically similar documents "
+        "(default: maintain.auto_link_on_save setting, true if unset)",
     ),
     cross_project: bool = typer.Option(
         False, "--cross-project", help="Allow auto-links across projects"
@@ -345,7 +348,14 @@ def save(
             )
     except Exception as e:
         console.print(f"   [yellow]Entity wikify skipped: {e}[/yellow]")
-    # Step 6.6: Auto-link to similar documents (default on, use --no-auto-link to skip)
+    # Step 6.6: Auto-link to similar documents. Flag wins when given;
+    # otherwise the maintain.auto_link_on_save setting decides (default on).
+    # Turning it off keeps saves fast on large KBs (#1038) — run
+    # `emdx maintain index` / `emdx maintain link --all` to catch up.
+    if auto_link is None:
+        from emdx.config.app_config import get_config_value
+
+        auto_link = bool(get_config_value("maintain.auto_link_on_save"))
     if auto_link:
         try:
             from emdx.services.link_service import auto_link_document

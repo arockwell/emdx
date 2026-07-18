@@ -14,7 +14,8 @@ emdx [OPTIONS] COMMAND [ARGS]...
 Save content to the knowledge base. Content sources in priority order: `--file` > positional argument > stdin.
 
 ```bash
-# Save inline content (positional arg is always content, never a file path)
+# Save inline content (positional arg is content — an existing file path
+# passed positionally is refused; use --file for files)
 emdx save "Quick note about the auth module"
 
 # Save from file (explicit --file flag)
@@ -40,7 +41,7 @@ emdx save --file notes.md --auto-link
 - `--title, -t TEXT` - Custom title (auto-detected from filename if not provided)
 - `--tags TEXT` - Comma-separated tags
 - `--project, -p TEXT` - Override project detection
-- `--auto-link/--no-auto-link` - Auto-link to semantically similar documents (default: auto-link)
+- `--auto-link/--no-auto-link` - Auto-link to semantically similar documents (default: the `maintain.auto_link_on_save` setting, true if unset)
 - `--cross-project` - Allow auto-links across projects
 - `--auto-tag` - Automatically apply suggested tags
 - `--suggest-tags` - Show tag suggestions after saving
@@ -297,6 +298,38 @@ emdx db copy-from-prod
 | `status` | Show active DB path and reason (env var, dev checkout, or production) |
 | `path` | Print just the path (machine-friendly, for scripts) |
 | `copy-from-prod` | Copy production DB to dev DB for local development |
+
+### **emdx config**
+Persistent settings, stored in `~/.config/emdx/config.json`.
+
+```bash
+# Show all settings (defaults + anything explicitly set)
+emdx config list
+
+# Turn off synchronous auto-linking so saves stay fast on large KBs
+emdx config set maintain.auto_link_on_save false
+
+# Check a setting's effective value
+emdx config get maintain.auto_link_on_save
+
+# Revert to the default
+emdx config unset maintain.auto_link_on_save
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| `get <key>` | Print a setting's effective value (set value or default) |
+| `set <key> <value>` | Set a setting; values parse as bool/number when they look like one |
+| `unset <key>` | Remove a setting, reverting to its default |
+| `list` | Show all settings and the config file path |
+
+**Known settings:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `maintain.auto_link_on_save` | `true` | Run semantic auto-linking synchronously on `emdx save`. Turn off for fast saves on large KBs, then run `emdx maintain index` and `emdx maintain link --all` out of band. The `--auto-link/--no-auto-link` flags override this per call. |
 
 ## 🏷️ **Tag Management**
 
@@ -1181,6 +1214,7 @@ emdx gist 42 --update abc123def456
 ### **Environment Variables**
 - `EMDX_DB` - Override database path (e.g., `EMDX_DB=/tmp/test.db emdx status`)
 - `EMDX_TEST_DB` - Test isolation database (set by pytest fixtures)
+- `EMDX_CONFIG_FILE` - Override settings file path (default `~/.config/emdx/config.json`)
 - `EMDX_TASK_ID` - Task ID for agent sessions (used by hooks, see [Hooks & Integration](#-hooks--integration))
 - `EMDX_DOC_ID` - Document ID for context injection (used by `prime.sh` hook)
 - `GITHUB_TOKEN` - For Gist integration
