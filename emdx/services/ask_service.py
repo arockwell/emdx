@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..database import db
 from ..utils.environment import get_subprocess_env
 
@@ -285,7 +286,7 @@ class Answer:
 class AskService:
     """Answer questions using your knowledge base."""
 
-    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+    DEFAULT_MODEL = DEFAULT_LLM_MODEL
     MIN_EMBEDDINGS_FOR_SEMANTIC = 50
 
     def __init__(self, model: str | None = None):

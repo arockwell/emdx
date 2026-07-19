@@ -18,6 +18,7 @@ import typer
 from rich.panel import Panel
 from rich.table import Table
 
+from emdx.config.cli_config import DEFAULT_LLM_MODEL
 from emdx.database.documents import (
     find_supersede_candidate,
     set_parent,
@@ -1370,7 +1371,7 @@ def _view_review(doc: Document) -> None:
             system_prompt=system_prompt,
             user_message=user_message,
             title=f"Review: {title[:50]}",
-            model="claude-sonnet-4-5-20250929",
+            model=DEFAULT_LLM_MODEL,
         )
     except RuntimeError as e:
         console.print(f"[red]Review generation failed: {e}[/red]")

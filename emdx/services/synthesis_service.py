@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from ..config.cli_config import DEFAULT_LLM_MODEL, DEFAULT_OPUS_MODEL
 from ..database import db
 from ..utils.environment import get_subprocess_env
 
@@ -120,7 +121,7 @@ class DistillService:
     - Summarizing content for different audiences
     """
 
-    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+    DEFAULT_MODEL = DEFAULT_LLM_MODEL
 
     AUDIENCE_PROMPTS = {
         Audience.ME: (
@@ -256,7 +257,7 @@ class SynthesisService:
     """AI-powered document synthesis using Claude API."""
 
     # Always use Opus for synthesis - quality critical, infrequent operation
-    DEFAULT_MODEL = "claude-opus-4-6"
+    DEFAULT_MODEL = DEFAULT_OPUS_MODEL
     MAX_TOKENS = 8000
 
     def __init__(self, model: str | None = None):
