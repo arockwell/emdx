@@ -346,14 +346,14 @@ class BrowserContainer(App[None]):
 
     def action_open_command_palette(self) -> None:
         """Open the command palette modal."""
-        import asyncio
-
         try:
             from emdx.ui.command_palette import CommandPaletteScreen
 
             def on_palette_result(result: dict | None) -> None:
                 if result:
-                    asyncio.create_task(self._handle_palette_result(result))
+                    # run_worker (not bare create_task): asyncio holds only a weak
+                    # ref to tasks, so an unreferenced task can be GC'd mid-flight
+                    self.run_worker(self._handle_palette_result(result), exclusive=True)
 
             self.push_screen(CommandPaletteScreen(), on_palette_result)
 
