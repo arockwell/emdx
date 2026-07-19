@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -1499,7 +1500,7 @@ def _flag_wiki_staleness(doc_id: int) -> None:
         from emdx.services.wiki_staleness_service import check_doc_staleness
 
         check_doc_staleness(doc_id)
-    except Exception:
+    except sqlite3.OperationalError:
         pass  # Wiki tables may not exist; non-critical
 
 
