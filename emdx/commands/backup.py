@@ -98,7 +98,14 @@ def list_backups(
             print(f"Error: {e}")
         raise typer.Exit(code=1) from None
 
-    backups = svc.list_backups()
+    try:
+        backups = svc.list_backups()
+    except RuntimeError as e:
+        if json_output:
+            print(json_mod.dumps({"error": str(e)}))
+        else:
+            print(f"Error: {e}")
+        raise typer.Exit(code=1) from None
 
     if json_output:
         print(json_mod.dumps(backups, indent=2))
