@@ -143,9 +143,6 @@ def main(
     version: bool = typer.Option(False, "--version", "-V", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
-    db_url: str | None = typer.Option(
-        None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
-    ),
 ) -> None:
     """
     emdx - A knowledge base for developers and AI agents
