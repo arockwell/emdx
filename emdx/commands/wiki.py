@@ -21,6 +21,7 @@ from rich import box
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..utils.output import console
 
 logger = logging.getLogger(__name__)
@@ -612,7 +613,7 @@ def wiki_generate(
     effective_topics = topic_list[:limit]
 
     # Create a run record
-    run_model = model or "claude-sonnet-4-5-20250929"
+    run_model = model or DEFAULT_LLM_MODEL
     run_id = create_wiki_run(model=run_model, dry_run=dry_run)
 
     generated = 0

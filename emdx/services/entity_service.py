@@ -783,13 +783,6 @@ VALID_RELATIONSHIP_TYPES = frozenset(
     }
 )
 
-# Model shorthand → model ID mapping (dateless aliases: stable across snapshot bumps)
-_MODEL_MAP: dict[str, str] = {
-    "haiku": "claude-haiku-4-5",
-    "sonnet": "claude-sonnet-4-5",
-    "opus": "claude-opus-4-6",
-}
-
 # Cost per million tokens (input, output) for estimation
 _MODEL_COSTS: dict[str, tuple[float, float]] = {
     "haiku": (1.00, 5.00),
@@ -842,13 +835,20 @@ class LLMExtractionStats(TypedDict):
 def resolve_model(shorthand: str) -> str:
     """Resolve a model shorthand to a full model ID.
 
+    Delegates to the central alias map in config.cli_config so all code
+    paths agree on what 'haiku'/'sonnet'/'opus' mean.
+
     Args:
         shorthand: 'haiku', 'sonnet', 'opus', or a full model ID.
 
     Returns:
-        The full model ID string.
+        The full model ID string (unknown values pass through unchanged).
     """
-    return _MODEL_MAP.get(shorthand.lower(), shorthand)
+    from ..config.cli_config import CliTool, resolve_model_alias
+
+    resolved = resolve_model_alias(shorthand.lower(), CliTool.CLAUDE)
+    # Unknown shorthand: pass the caller's original spelling through
+    return resolved if resolved != shorthand.lower() else shorthand
 
 
 def estimate_cost(content_length: int, model: str = "haiku") -> float:
