@@ -782,18 +782,18 @@ VALID_RELATIONSHIP_TYPES = frozenset(
     }
 )
 
-# Model shorthand → full model ID mapping
+# Model shorthand → model ID mapping (dateless aliases: stable across snapshot bumps)
 _MODEL_MAP: dict[str, str] = {
-    "haiku": "claude-haiku-4-5-20250315",
-    "sonnet": "claude-sonnet-4-20250514",
-    "opus": "claude-opus-4-20250514",
+    "haiku": "claude-haiku-4-5",
+    "sonnet": "claude-sonnet-4-5",
+    "opus": "claude-opus-4-6",
 }
 
 # Cost per million tokens (input, output) for estimation
 _MODEL_COSTS: dict[str, tuple[float, float]] = {
-    "haiku": (0.80, 4.00),
+    "haiku": (1.00, 5.00),
     "sonnet": (3.00, 15.00),
-    "opus": (15.00, 75.00),
+    "opus": (5.00, 25.00),
 }
 
 # Maximum content length to send to the LLM (chars)
