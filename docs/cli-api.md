@@ -1183,6 +1183,9 @@ emdx gist 42 --update abc123def456
 - `EMDX_TEST_DB` - Test isolation database (set by pytest fixtures)
 - `EMDX_TASK_ID` - Task ID for agent sessions (used by hooks, see [Hooks & Integration](#-hooks--integration))
 - `EMDX_DOC_ID` - Document ID for context injection (used by `prime.sh` hook)
+- `EMDX_CLI_TOOL` - Preferred CLI backend for LLM features (default: `claude`)
+- `EMDX_CODE_THEME` - Syntax-highlighting theme for rendered markdown (e.g. `monokai`)
+- `EMDX_EXECUTION_ID` - Execution identifier recorded on document events (set by agent harnesses)
 - `GITHUB_TOKEN` - For Gist integration
 - `EDITOR` - Default editor for `emdx edit`
 
