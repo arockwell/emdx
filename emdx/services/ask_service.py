@@ -488,19 +488,6 @@ class AskService:
 
         return min(recent_count / max(len(doc_ids), 1), 1.0)
 
-    def _calculate_confidence(self, source_count: int) -> str:
-        """Calculate confidence level based on number of sources.
-
-        Legacy method — kept for backward compatibility.
-        Prefer _calculate_confidence_signals() for new code.
-        """
-        if source_count >= 3:
-            return "high"
-        elif source_count >= 1:
-            return "medium"
-        else:
-            return "low"
-
     def _get_filtered_doc_ids(
         self,
         tags: str | None = None,

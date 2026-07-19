@@ -335,15 +335,6 @@ class EmbeddingService:
         results.sort(key=lambda x: x.similarity, reverse=True)
         return results[:limit]
 
-    async def search_async(
-        self, query: str, limit: int = 10, threshold: float = 0.3
-    ) -> list[SemanticMatch]:
-        """Async semantic search - runs embedding in thread pool to avoid blocking."""
-        import asyncio
-
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, lambda: self._search_sync(query, limit, threshold))
-
     def find_similar(
         self, doc_id: int, limit: int = 5, project: str | None = None
     ) -> list[SemanticMatch]:
