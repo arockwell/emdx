@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Any
 
 from ..database import db
+from ..utils.environment import get_subprocess_env
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ def _execute_prompt(
             capture_output=True,
             text=True,
             timeout=SYNTHESIS_TIMEOUT,
+            env=get_subprocess_env(),
         )
         if result.returncode != 0:
             error_msg = result.stderr.strip() or f"Exit code {result.returncode}"

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import TypedDict
 
 from ..database import db, document_links
+from ..utils.environment import get_subprocess_env
 
 logger = logging.getLogger(__name__)
 
@@ -995,6 +996,7 @@ def _call_claude_for_entities(
             capture_output=True,
             text=True,
             timeout=_CLAUDE_TIMEOUT,
+            env=get_subprocess_env(),
         )
     except FileNotFoundError:
         raise RuntimeError(

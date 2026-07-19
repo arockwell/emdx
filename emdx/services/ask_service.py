@@ -19,6 +19,7 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from ..database import db
+from ..utils.environment import get_subprocess_env
 
 if TYPE_CHECKING:
     from .embedding_service import ChunkMatch, EmbeddingService
@@ -255,6 +256,7 @@ def _execute_claude_prompt(
             capture_output=True,
             text=True,
             timeout=ANSWER_TIMEOUT,
+            env=get_subprocess_env(),
         )
         if result.returncode != 0:
             error_msg = result.stderr.strip() or f"Exit code {result.returncode}"
