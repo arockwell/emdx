@@ -35,17 +35,6 @@ except ImportError:
     HAS_DOCS = False
 
 
-def format_tokens(tokens: int) -> str:
-    """Format token count with K/M abbreviations."""
-    if tokens is None or tokens == 0:
-        return "—"
-    if tokens >= 1_000_000:
-        return f"{tokens / 1_000_000:.1f}M"
-    if tokens >= 1_000:
-        return f"{tokens / 1_000:.0f}K"
-    return str(tokens)
-
-
 def format_cost(cost: float) -> str:
     """Format cost in dollars."""
     if not cost or cost == 0:

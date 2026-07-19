@@ -23,11 +23,6 @@ logger = logging.getLogger(__name__)
 _keybinding_registry = None
 
 
-def get_keybinding_registry() -> Any:
-    """Get the global keybinding registry instance."""
-    return _keybinding_registry
-
-
 class BrowserContainerWidget(Widget):
     """Widget wrapper to avoid Screen padding issue."""
 
@@ -314,10 +309,6 @@ class BrowserContainer(App[None]):
             return
 
         # Don't handle any other keys - let them bubble to browsers
-
-    async def view_document_fullscreen(self, doc_id: int) -> None:
-        """View a document fullscreen - switch to document browser and open it."""
-        await self._view_document(doc_id)
 
     def _dump_widget_tree(self) -> None:
         """Debug function to dump the widget tree and regions (ctrl+d)."""
