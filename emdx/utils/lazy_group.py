@@ -158,7 +158,10 @@ class LazyCommand(click.Group):
         help_text: str,
         parent_group: LazyTyperGroup,
     ) -> None:
-        super().__init__(name=name, help=help_text)
+        # invoke_without_command so bare invocation (e.g. `emdx trash`) parses
+        # and reaches invoke(); the real group then applies its own
+        # invoke_without_command semantics (default action or "Missing command").
+        super().__init__(name=name, help=help_text, invoke_without_command=True)
         self.import_path = import_path
         self.help_text = help_text
         self.short_help = help_text  # For --help listings
@@ -262,6 +265,17 @@ class LazyCommand(click.Group):
         real_cmd = self._load_real_command()
         # Update the parent group's cache
         self.parent_group._loaded_commands[self.name or ""] = real_cmd
+        # Bare invocation of a group that doesn't define a default action:
+        # show its help (matching eager-group behavior) instead of delegating,
+        # which would fail with a bare "Missing command." error.
+        if (
+            not ctx._protected_args
+            and not ctx.args
+            and isinstance(real_cmd, click.Group)
+            and not real_cmd.invoke_without_command
+        ):
+            click.echo(real_cmd.get_help(ctx))
+            ctx.exit()
         # Delegate to the real command
         return real_cmd.invoke(ctx)
 
