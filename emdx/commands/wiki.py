@@ -1005,10 +1005,12 @@ def wiki_coverage(
             ") "
             "ORDER BY d.id"
         )
+        query_params: list[int] = []
         if limit > 0:
-            query += f" LIMIT {limit}"
+            query += " LIMIT ?"
+            query_params.append(limit)
 
-        uncovered_rows = conn.execute(query).fetchall()
+        uncovered_rows = conn.execute(query, query_params).fetchall()
 
     if json_output:
         data = {
