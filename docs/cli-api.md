@@ -485,6 +485,22 @@ emdx maintain compact --json
 
 > **Tip:** Run periodically (e.g. monthly) or after bulk deletes. Safe to run any time — it only reorganizes storage, never changes content.
 
+#### **emdx maintain doctor**
+Scan for documents damaged by known bugs. Currently detects path-as-content damage (#1051): docs whose entire body is a file path, saved before the positional-path guard existed. Read-only — reports findings, never mutates.
+
+```bash
+# Scan for damaged documents
+emdx maintain doctor
+
+# JSON output (for scripting cleanup)
+emdx maintain doctor --json
+```
+
+**Options:**
+- `--json` - Structured JSON output (`{"damaged": [...], "count": N}`)
+
+For each hit, reports whether the file at the stored path still exists — if it does, recover with `emdx edit <id> --file <path>`.
+
 #### **emdx maintain cloud-backup**
 Upload, list, and download knowledge base backups to cloud providers (GitHub Gists or Google Drive).
 

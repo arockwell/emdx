@@ -280,6 +280,7 @@ emdx maintain backup                   # Create compressed daily backup
 emdx maintain backup --list            # List existing backups
 emdx maintain backup --restore <file>  # Restore from a backup
 emdx maintain compact                  # Compact DB (VACUUM + FTS optimize)
+emdx maintain doctor                   # Scan for docs damaged by known bugs
 emdx maintain freshness                # Score document freshness (staleness)
 emdx maintain freshness --stale        # Show only stale docs
 

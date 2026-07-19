@@ -370,11 +370,13 @@ def save(
         except Exception as e:
             console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
 
-    # Step 6.7: Link to task if specified
+    # Step 6.7: Link to task if specified. The saved doc is what the task
+    # PRODUCED, so it goes in output_doc_id — source_doc_id is the doc a
+    # task came from and must not be clobbered here (#1085).
     if task is not None:
         from emdx.models.tasks import update_task
 
-        update_kwargs: dict[str, Any] = {"source_doc_id": doc_id}
+        update_kwargs: dict[str, Any] = {"output_doc_id": doc_id}
         if mark_done:
             update_kwargs["status"] = "done"
         update_task(task, **update_kwargs)
