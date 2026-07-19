@@ -254,14 +254,14 @@ class SynthesisService:
     """AI-powered document synthesis using Claude API."""
 
     # Always use Opus for synthesis - quality critical, infrequent operation
-    DEFAULT_MODEL = "claude-opus-4-20250514"
+    DEFAULT_MODEL = "claude-opus-4-6"
     MAX_TOKENS = 8000
 
     def __init__(self, model: str | None = None):
         """Initialize the synthesis service.
 
         Args:
-            model: Model to use (defaults to claude-opus-4)
+            model: Model to use (defaults to claude-opus-4-6)
         """
         self.model = model or self.DEFAULT_MODEL
 

@@ -1600,7 +1600,7 @@ def wiki_model(
     """Set or clear a per-topic model override for wiki generation.
 
     Examples:
-        emdx maintain wiki model 5 claude-opus-4-5-20250514     # Set override
+        emdx maintain wiki model 5 claude-opus-4-6              # Set override
         emdx maintain wiki model 5 --clear                       # Remove override
     """
     from ..database import db
