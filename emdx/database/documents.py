@@ -5,6 +5,7 @@ Document CRUD operations for emdx knowledge base
 from __future__ import annotations
 
 import logging
+import sqlite3
 from typing import Union, cast
 
 from ..models.document import Document
@@ -291,7 +292,7 @@ def update_document(doc_id: int, title: str, content: str) -> bool:
             from emdx.services.wiki_synthesis_service import mark_stale
 
             mark_stale(doc_id, reason="source_updated")
-        except Exception:
+        except sqlite3.OperationalError:
             pass  # Wiki tables may not exist yet; non-critical
 
     return updated

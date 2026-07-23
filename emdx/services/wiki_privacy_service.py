@@ -32,9 +32,16 @@ _PATH_PATTERNS = [
     re.compile(r"C:\\Users\\[a-zA-Z0-9_-]+\\"),  # Windows paths
 ]
 
-# Internal IPs
+# Internal IPs (RFC 1918). Each alternative matches a full 4-octet
+# address — a shared 2-octet suffix would redact only 3 octets of
+# 10.x.y.z (leaking the host octet) and false-positive on version
+# strings like "macOS 10.15.7".
 _IP_PATTERNS = [
-    re.compile(r"\b(?:10|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b"),
+    re.compile(
+        r"\b(?:10(?:\.\d{1,3}){3}"
+        r"|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}"
+        r"|192\.168(?:\.\d{1,3}){2})\b"
+    ),
 ]
 
 # Temporal references that are meaningless out of context

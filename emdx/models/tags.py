@@ -250,8 +250,37 @@ def search_by_tags(
             tag_conditions = "t.name IN ({})".format(",".join("?" * len(tag_names_lower)))
             tag_params = tag_names_lower
 
-        if mode == "all" and not prefix_match:
-            # Documents must have ALL specified tags (only works with exact match)
+        if mode == "all" and prefix_match:
+            # Documents must match EVERY tag pattern (each satisfied by at least
+            # one prefix match). One EXISTS-style subquery per requested tag,
+            # ANDed together, so overlapping prefix matches on a single tag
+            # can't satisfy two different requested tags at once.
+            exists_clauses = []
+            params: list[str | int | None] = []
+            for tag in tag_names_lower:
+                exists_clauses.append(
+                    """d.id IN (
+                        SELECT dt2.document_id
+                        FROM document_tags dt2
+                        JOIN tags t2 ON dt2.tag_id = t2.id
+                        WHERE t2.name LIKE ?
+                    )"""
+                )
+                params.append(f"{tag}%")
+            all_condition = " AND ".join(exists_clauses)
+
+            query = f"""
+                SELECT DISTINCT
+                    d.id, d.title, d.project, d.created_at, d.access_count,
+                    GROUP_CONCAT(t.name, ', ') as tags
+                FROM documents d
+                JOIN document_tags dt ON d.id = dt.document_id
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE d.is_deleted = FALSE
+                AND ({all_condition})
+            """
+        elif mode == "all" and not prefix_match:
+            # Documents must have ALL specified tags (exact match)
             query = """
                 SELECT DISTINCT
                     d.id, d.title, d.project, d.created_at, d.access_count,
@@ -270,7 +299,7 @@ def search_by_tags(
                 )
             """.format(",".join("?" * len(tag_names_lower)))
 
-            params: list[str | int | None] = list(tag_names_lower) + [len(tag_names_lower)]
+            params = list(tag_names_lower) + [len(tag_names_lower)]
         else:
             # Documents with ANY of the specified tags (or prefix matches)
             query = f"""
