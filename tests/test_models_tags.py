@@ -690,6 +690,40 @@ class TestSearchByTags:
         result_ids = [r["id"] for r in results]
         assert doc1 in result_ids
 
+    def test_search_excludes_superseded_documents_any_branch(self) -> None:
+        """A superseded doc (parent_id set via --supersede) shouldn't surface
+        alongside its replacement, matching list_documents()'s default. Uses
+        prefix_match=True (default), which hits the ANY-tag query branch."""
+        from emdx.database.documents import set_parent
+        from emdx.models.tags import add_tags_to_document, search_by_tags
+
+        old_doc = _create_document(title="Versioned Doc v1")
+        new_doc = _create_document(title="Versioned Doc v2")
+        add_tags_to_document(old_doc, ["versioned-repro"])
+        add_tags_to_document(new_doc, ["versioned-repro"])
+        set_parent(old_doc, new_doc, relationship="supersedes")
+
+        results = search_by_tags(["versioned-repro"])
+        result_ids = [r["id"] for r in results]
+        assert new_doc in result_ids
+        assert old_doc not in result_ids
+
+    def test_search_excludes_superseded_documents_all_branch(self) -> None:
+        """Same as above but for the strict ALL-tags branch (prefix_match=False)."""
+        from emdx.database.documents import set_parent
+        from emdx.models.tags import add_tags_to_document, search_by_tags
+
+        old_doc = _create_document(title="Versioned Doc v1")
+        new_doc = _create_document(title="Versioned Doc v2")
+        add_tags_to_document(old_doc, ["versioned-repro", "shared"])
+        add_tags_to_document(new_doc, ["versioned-repro", "shared"])
+        set_parent(old_doc, new_doc, relationship="supersedes")
+
+        results = search_by_tags(["versioned-repro", "shared"], mode="all", prefix_match=False)
+        result_ids = [r["id"] for r in results]
+        assert new_doc in result_ids
+        assert old_doc not in result_ids
+
 
 # =========================================================================
 # rename_tag

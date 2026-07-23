@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-07-23
+
+**Fast embeddings and a hardened core.** Embedding operations now run on fastembed's ONNX runtime — the same `all-MiniLM-L6-v2` model without importing torch — cutting cold start from 5.5s to 0.4s, so auto-link-on-save stays synchronous and instant. Around it: a wave of audit-driven fixes (security hardening, dev-DB isolation that actually works, atomic backup restore), a big dependency refresh, and a CI cache fix that makes dependency PRs testable again.
+
+### 🚀 Major Features
+
+#### fastembed ONNX Embedding Backend (#1045)
+- Embeddings prefer fastembed (ONNX runtime) when available, with sentence-transformers as fallback — ~14x faster cold start (0.4s vs 5.5s), ~25% less peak memory
+- `EMDX_EMBEDDING_BACKEND=fastembed|sentence-transformers` forces a backend
+- Each backend gets its own vector-space partition key; switching backends requires one `emdx maintain index` rebuild
+
+#### CLI & Task Features
+- `emdx maintain compact` — database VACUUM + FTS optimize (#1047)
+- `emdx edit` non-interactive mode via `--file`/`--content`/stdin (#1046)
+- Task lifecycle events recorded on status changes; `emdx save` refuses an existing file path passed positionally (#1052)
+
+### 🔧 Improvements
+
+- Lazy-load wiki, task, tag, and trash command groups for faster CLI startup (#1080)
+- Model configuration centralized in `cli_config`; invalid/retired model IDs replaced with dateless aliases (#1083, #1070)
+- SQL `LIMIT` bound as a parameter instead of f-string interpolation (#1079)
+- Dead code removal: 2 orphaned modules, 20 unreferenced functions (#1084); committed Vim swap file removed (#1071)
+- Test coverage for data-mutating hot spots and the `get_db_path` priority chain (#1082, #1050)
+- New env vars documented (`EMDX_CLI_TOOL`, `EMDX_CODE_THEME`, `EMDX_EXECUTION_ID`) with a version-sync test (#1081)
+- CI: venv cache keyed on `pyproject.toml` — the old key hashed a nonexistent `poetry.lock`, so all branches shared one stale cache (#1091)
+- Dependencies refreshed: typer, rich, click, textual, pyyaml, types-pyyaml, scikit-learn, sentence-transformers, google-api-python-client, google-auth-oauthlib, GitHub Actions (#1018–#1024, #1037, #1092, #1093)
+
+### 🐛 Bug Fixes
+
+- **Dev-DB isolation never worked** — `_is_dev_checkout()` stopped one directory short of the repo root, so every `poetry run emdx` invocation silently used the production database (#1050)
+- **Security**: path traversal in Google Drive backup download; full document contents no longer passed to `claude` CLI via argv; private-IP redaction no longer leaks the host octet of 10.x addresses (#1049)
+- `emdx labs distill` crashed with `TypeError: 'SearchHit' object is not subscriptable` on any non-empty search (#1048)
+- `emdx save --task N` linked the doc as the task's *source* instead of its *output*, overwriting real source docs; `emdx find --tags` surfaced superseded document versions (#1090)
+- `find --tags` with prefix matching enforced ANY semantics where ALL was documented (#1089)
+- Cloud backup surfaces provider failures instead of crashing or reporting false success (#1078)
+- TUI: activity data loading moved off the event loop with batched tag queries (#1077); discarded `asyncio.create_task` replaced with `run_worker` (#1076)
+- Scrubbed environment passed to `claude` CLI subprocess calls (#1075)
+- Backup restore made atomic: validate, snapshot, then swap (#1072)
+- Staleness check exception handling narrowed to `sqlite3.OperationalError` (#1073); dead `--db-url`/`EMDX_DATABASE_URL` option removed (#1074)
+- `emdx prime` shows full epic IDs; `task list --all` returns all tasks; `save` never blocks on idle non-TTY stdin; `edit` preserves Markdown headings (#1044, #1043, #1042, #1040)
+- HuggingFace download noise suppressed during model loading (#1028)
+
 ## [0.32.0] - 2026-03-07
 
 **Data model refactor: proper domain objects replace the TypedDict cast zoo.** Document, Task, TaskLogEntry, SearchHit, and Category are now `@dataclass(slots=True)` with factory methods (`from_row()`) that parse datetimes at the DB boundary and `to_dict()` for JSON serialization. The dict-compatibility layer (`__getitem__`, `.get()`) was added then fully removed in one release cycle — all ~220 bracket access sites converted to attribute access. SQLiteDatabase's isolated mode (300 lines of drifted duplicate SQL) was deleted; tests now use the conftest fixture that swaps the connection singleton.
@@ -58,6 +100,7 @@ Task view polls every 1 second matching the document browser's pattern. A finger
 
 - **datetime crash** — SQLite `datetime` objects in timestamp fields no longer crash the string inversion sort or silently suppress recency hints in `_format_time_ago`
 
+[0.33.0]: https://github.com/arockwell/emdx/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/arockwell/emdx/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/arockwell/emdx/compare/v0.30.0...v0.31.0
 
