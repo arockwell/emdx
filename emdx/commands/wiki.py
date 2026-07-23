@@ -21,6 +21,7 @@ from rich import box
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..utils.output import console
 
 logger = logging.getLogger(__name__)
@@ -612,7 +613,7 @@ def wiki_generate(
     effective_topics = topic_list[:limit]
 
     # Create a run record
-    run_model = model or "claude-sonnet-4-5-20250929"
+    run_model = model or DEFAULT_LLM_MODEL
     run_id = create_wiki_run(model=run_model, dry_run=dry_run)
 
     generated = 0
@@ -1005,10 +1006,12 @@ def wiki_coverage(
             ") "
             "ORDER BY d.id"
         )
+        query_params: list[int] = []
         if limit > 0:
-            query += f" LIMIT {limit}"
+            query += " LIMIT ?"
+            query_params.append(limit)
 
-        uncovered_rows = conn.execute(query).fetchall()
+        uncovered_rows = conn.execute(query, query_params).fetchall()
 
     if json_output:
         data = {
@@ -1600,7 +1603,7 @@ def wiki_model(
     """Set or clear a per-topic model override for wiki generation.
 
     Examples:
-        emdx maintain wiki model 5 claude-opus-4-5-20250514     # Set override
+        emdx maintain wiki model 5 claude-opus-4-6              # Set override
         emdx maintain wiki model 5 --clear                       # Remove override
     """
     from ..database import db

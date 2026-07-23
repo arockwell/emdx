@@ -163,3 +163,4 @@ test_output.txt
 # Claude Code worktrees (created by Claude Code agent isolation)
 .claude/worktrees/
 .worktrees/
+*.swp

@@ -35,7 +35,7 @@ def _strip_ansi(text: str) -> str:
 def setup_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
     """Set up a fresh test database for each test."""
     test_db = tmp_path / "test.db"
-    monkeypatch.setenv("EMDX_DATABASE_URL", f"sqlite:///{test_db}")
+    monkeypatch.setenv("EMDX_TEST_DB", str(test_db))
     db.ensure_schema()
     yield
 

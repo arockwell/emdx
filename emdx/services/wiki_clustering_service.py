@@ -18,6 +18,7 @@ import subprocess
 from dataclasses import dataclass
 
 from ..database import db
+from ..utils.environment import get_subprocess_env
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +530,7 @@ def auto_label_cluster(cluster: TopicCluster) -> str:
             capture_output=True,
             text=True,
             timeout=30,
+            env=get_subprocess_env(),
         )
         if result.returncode == 0 and result.stdout.strip():
             label = result.stdout.strip().strip('"').strip("'")

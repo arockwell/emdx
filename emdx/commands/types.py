@@ -17,6 +17,7 @@ class EpicInfo(TypedDict):
     title: str
     status: str
     epic_key: str | None
+    epic_seq: int | None
     child_count: int
     children_done: int
 

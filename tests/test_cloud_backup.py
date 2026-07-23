@@ -178,10 +178,13 @@ class TestGitHubGistProvider:
         assert provider.list_backups() == []
 
     @patch("subprocess.run")
-    def test_list_backups_gh_error(self, mock_run: MagicMock) -> None:
+    def test_list_backups_gh_error_raises(self, mock_run: MagicMock) -> None:
+        """gh failures (not installed / not authenticated) must surface as an
+        error, not be reported as an empty backup list."""
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
         provider = GitHubGistProvider()
-        assert provider.list_backups() == []
+        with pytest.raises(RuntimeError):
+            provider.list_backups()
 
     @patch("subprocess.run")
     def test_delete_success(self, mock_run: MagicMock) -> None:

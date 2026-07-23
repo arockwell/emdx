@@ -1,7 +1,7 @@
 """Knowledge event recording for emdx.
 
 Append-only event log for tracking KB interactions: searches, views,
-creates, updates, deletes, and asks.
+creates, updates, deletes, asks, and task lifecycle changes.
 """
 
 from __future__ import annotations
@@ -15,7 +15,22 @@ from emdx.database.connection import db_connection
 logger = logging.getLogger(__name__)
 
 # Valid event types
-EVENT_TYPES = frozenset({"search", "view", "create", "update", "delete", "ask"})
+EVENT_TYPES = frozenset(
+    {
+        # Document events
+        "search",
+        "view",
+        "create",
+        "update",
+        "delete",
+        "ask",
+        # Task lifecycle events (#1012) — task_id lives in metadata_json,
+        # doc_id stays NULL (it references documents, not tasks)
+        "task_create",
+        "task_status",
+        "task_delete",
+    }
+)
 
 
 def record_event(
@@ -28,7 +43,8 @@ def record_event(
 
     Args:
         event_type: One of 'search', 'view', 'create', 'update',
-                    'delete', 'ask'.
+                    'delete', 'ask', 'task_create', 'task_status',
+                    'task_delete'.
         doc_id: Optional document ID associated with the event.
         query: Optional search query (for search/ask events).
         metadata: Optional dict of extra context (serialised as JSON).

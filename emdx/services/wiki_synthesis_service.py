@@ -22,6 +22,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
+from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..database import db
 from ..database.documents import save_document
 from ..database.types import WikiArticleTimingDict
@@ -43,7 +44,7 @@ MAX_DOC_CHARS = 12_000
 STUFF_THRESHOLD_CHARS = 80_000
 
 # Default model — Sonnet for speed/cost balance on bulk generation
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = DEFAULT_LLM_MODEL
 
 # Wiki article tag applied to all generated articles
 WIKI_ARTICLE_TAG = "wiki-article"
