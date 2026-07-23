@@ -8,6 +8,16 @@ from pathlib import Path
 from .constants import EMDX_CONFIG_DIR
 
 
+def _project_root() -> Path:
+    """Return the directory containing the emdx package.
+
+    settings.py → config/ → emdx/ → project root (three .parent hops
+    from the file itself). In a dev checkout this is the repo root; in
+    an installed package it is site-packages (which has no pyproject.toml).
+    """
+    return Path(__file__).resolve().parent.parent.parent
+
+
 def _is_dev_checkout() -> bool:
     """Detect if running from an editable install (dev checkout).
 
@@ -15,9 +25,7 @@ def _is_dev_checkout() -> bool:
     pyproject.toml — i.e., running via `poetry run emdx` from the repo.
     """
     try:
-        # config/ → emdx/ → project root
-        project_root = Path(__file__).resolve().parent.parent
-        return (project_root / "pyproject.toml").is_file()
+        return (_project_root() / "pyproject.toml").is_file()
     except Exception:
         return False
 
@@ -45,8 +53,7 @@ def get_db_path() -> Path:
 
     # 3. Dev checkout → local .emdx/dev.db
     if _is_dev_checkout():
-        project_root = Path(__file__).resolve().parent.parent
-        dev_dir = project_root / ".emdx"
+        dev_dir = _project_root() / ".emdx"
         dev_db = dev_dir / "dev.db"
         if not dev_db.exists():
             dev_dir.mkdir(parents=True, exist_ok=True)

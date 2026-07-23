@@ -18,7 +18,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..database import db
+from ..utils.environment import get_subprocess_env
 
 if TYPE_CHECKING:
     from .embedding_service import ChunkMatch, EmbeddingService
@@ -255,6 +257,7 @@ def _execute_claude_prompt(
             capture_output=True,
             text=True,
             timeout=ANSWER_TIMEOUT,
+            env=get_subprocess_env(),
         )
         if result.returncode != 0:
             error_msg = result.stderr.strip() or f"Exit code {result.returncode}"
@@ -283,7 +286,7 @@ class Answer:
 class AskService:
     """Answer questions using your knowledge base."""
 
-    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+    DEFAULT_MODEL = DEFAULT_LLM_MODEL
     MIN_EMBEDDINGS_FOR_SEMANTIC = 50
 
     def __init__(self, model: str | None = None):
@@ -484,19 +487,6 @@ class AskService:
             recent_count: int = cursor.fetchone()[0]
 
         return min(recent_count / max(len(doc_ids), 1), 1.0)
-
-    def _calculate_confidence(self, source_count: int) -> str:
-        """Calculate confidence level based on number of sources.
-
-        Legacy method — kept for backward compatibility.
-        Prefer _calculate_confidence_signals() for new code.
-        """
-        if source_count >= 3:
-            return "high"
-        elif source_count >= 1:
-            return "medium"
-        else:
-            return "low"
 
     def _get_filtered_doc_ids(
         self,

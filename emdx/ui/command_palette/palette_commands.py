@@ -46,13 +46,6 @@ class CommandRegistry:
         self._commands[command.id] = command
         logger.debug(f"Registered command: {command.id}")
 
-    def unregister(self, command_id: str) -> bool:
-        """Unregister a command. Returns True if found."""
-        if command_id in self._commands:
-            del self._commands[command_id]
-            return True
-        return False
-
     def get(self, command_id: str) -> PaletteCommand | None:
         """Get a command by ID."""
         return self._commands.get(command_id)

@@ -32,17 +32,17 @@ class TestResolveModel:
     """Test model shorthand resolution."""
 
     def test_haiku_resolves(self) -> None:
-        assert resolve_model("haiku") == "claude-haiku-4-5-20250315"
+        assert resolve_model("haiku") == "claude-haiku-4-5"
 
     def test_sonnet_resolves(self) -> None:
-        assert resolve_model("sonnet") == "claude-sonnet-4-20250514"
+        assert resolve_model("sonnet") == "claude-sonnet-4-5"
 
     def test_opus_resolves(self) -> None:
-        assert resolve_model("opus") == "claude-opus-4-20250514"
+        assert resolve_model("opus") == "claude-opus-4-6"
 
     def test_case_insensitive(self) -> None:
-        assert resolve_model("Haiku") == "claude-haiku-4-5-20250315"
-        assert resolve_model("SONNET") == "claude-sonnet-4-20250514"
+        assert resolve_model("Haiku") == "claude-haiku-4-5"
+        assert resolve_model("SONNET") == "claude-sonnet-4-5"
 
     def test_full_id_passthrough(self) -> None:
         full_id = "claude-custom-model-2026"
@@ -395,7 +395,7 @@ class TestCallClaudeForEntities:
         )
         _call_claude_for_entities("content", "Title", model="sonnet")
         call_args = mock_run.call_args[0][0]
-        assert "claude-sonnet-4-20250514" in call_args
+        assert "claude-sonnet-4-5" in call_args
 
 
 # ── Database persistence ─────────────────────────────────────────────
@@ -576,7 +576,7 @@ class TestExtractAndSaveEntitiesLLM:
 
         assert stats["entities_saved"] == 2
         assert stats["relationships_saved"] == 1
-        assert stats["model"] == "claude-haiku-4-5-20250315"
+        assert stats["model"] == "claude-haiku-4-5"
         assert stats["estimated_input_tokens"] > 0
         assert stats["estimated_cost_usd"] > 0.0
 

@@ -24,28 +24,6 @@ class TestAnswerDataclass:
         assert answer.confidence == "high"
 
 
-class TestConfidenceCalculation:
-    """Tests for confidence calculation."""
-
-    def test_high_confidence_with_3_or_more_sources(self) -> None:
-        """3+ sources should yield high confidence."""
-        service = AskService()
-        assert service._calculate_confidence(3) == "high"
-        assert service._calculate_confidence(5) == "high"
-        assert service._calculate_confidence(10) == "high"
-
-    def test_medium_confidence_with_1_or_2_sources(self) -> None:
-        """1-2 sources should yield medium confidence."""
-        service = AskService()
-        assert service._calculate_confidence(1) == "medium"
-        assert service._calculate_confidence(2) == "medium"
-
-    def test_low_confidence_with_no_sources(self) -> None:
-        """0 sources should yield low confidence."""
-        service = AskService()
-        assert service._calculate_confidence(0) == "low"
-
-
 class TestFilterHelper:
     """Tests for _get_filtered_doc_ids helper."""
 

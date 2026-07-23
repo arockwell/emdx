@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import TypedDict
 
 from ..database import db, document_links
+from ..utils.environment import get_subprocess_env
 
 logger = logging.getLogger(__name__)
 
@@ -782,18 +783,11 @@ VALID_RELATIONSHIP_TYPES = frozenset(
     }
 )
 
-# Model shorthand → full model ID mapping
-_MODEL_MAP: dict[str, str] = {
-    "haiku": "claude-haiku-4-5-20250315",
-    "sonnet": "claude-sonnet-4-20250514",
-    "opus": "claude-opus-4-20250514",
-}
-
 # Cost per million tokens (input, output) for estimation
 _MODEL_COSTS: dict[str, tuple[float, float]] = {
-    "haiku": (0.80, 4.00),
+    "haiku": (1.00, 5.00),
     "sonnet": (3.00, 15.00),
-    "opus": (15.00, 75.00),
+    "opus": (5.00, 25.00),
 }
 
 # Maximum content length to send to the LLM (chars)
@@ -841,13 +835,20 @@ class LLMExtractionStats(TypedDict):
 def resolve_model(shorthand: str) -> str:
     """Resolve a model shorthand to a full model ID.
 
+    Delegates to the central alias map in config.cli_config so all code
+    paths agree on what 'haiku'/'sonnet'/'opus' mean.
+
     Args:
         shorthand: 'haiku', 'sonnet', 'opus', or a full model ID.
 
     Returns:
-        The full model ID string.
+        The full model ID string (unknown values pass through unchanged).
     """
-    return _MODEL_MAP.get(shorthand.lower(), shorthand)
+    from ..config.cli_config import CliTool, resolve_model_alias
+
+    resolved = resolve_model_alias(shorthand.lower(), CliTool.CLAUDE)
+    # Unknown shorthand: pass the caller's original spelling through
+    return resolved if resolved != shorthand.lower() else shorthand
 
 
 def estimate_cost(content_length: int, model: str = "haiku") -> float:
@@ -995,6 +996,7 @@ def _call_claude_for_entities(
             capture_output=True,
             text=True,
             timeout=_CLAUDE_TIMEOUT,
+            env=get_subprocess_env(),
         )
     except FileNotFoundError:
         raise RuntimeError(

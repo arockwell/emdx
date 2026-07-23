@@ -11,7 +11,6 @@ and convenience methods for the TUI (recent documents, popular tags, etc.).
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from difflib import SequenceMatcher
@@ -103,11 +102,6 @@ class HybridSearchResult:
 # Reciprocal Rank Fusion constant (standard default from Cormack et al.)
 # Higher k reduces the impact of high rankings from a single list.
 RRF_K = 60
-
-# Legacy weight constants kept for backward compatibility in tests
-KEYWORD_WEIGHT = 0.4
-SEMANTIC_WEIGHT = 0.6
-HYBRID_BOOST = 0.15
 
 
 # ── Free functions ───────────────────────────────────────────────────
@@ -276,84 +270,6 @@ class HybridSearchService:
             return self._search_hybrid(query, limit, project, extract, doc_type=doc_type)
 
     # ── Query-parsing search (TUI path) ──────────────────────────────
-
-    def parse_query(self, raw_query: str) -> SearchQuery:
-        """Parse a query string with special syntax.
-
-        Syntax:
-            tags:active,done  — Match documents with these tags (AND)
-            tags:any:bug,error — Match documents with any of these tags (OR)
-            semantic: — Enable semantic search
-            ai: — Alias for semantic:
-            after:2024-01-01 — Created after date
-            before:2024-12-31 — Created before date
-            modified:2024-01-01 — Modified after date
-            project:myproject — Filter by project
-
-        Returns:
-            SearchQuery with parsed components
-        """
-        query = SearchQuery()
-        remaining_text = raw_query.strip()
-
-        # Extract tags:... patterns
-        tags_match = re.search(r"tags:(any:)?([^\s]+)", remaining_text, re.IGNORECASE)
-        if tags_match:
-            if tags_match.group(1):
-                query.tag_mode = "any"
-            tag_str = tags_match.group(2)
-            query.tags = [t.strip() for t in tag_str.split(",") if t.strip()]
-            remaining_text = (
-                remaining_text[: tags_match.start()] + remaining_text[tags_match.end() :]
-            )
-
-        # Extract @tag patterns (alternative syntax)
-        at_tags = re.findall(r"@(\w+)", remaining_text)
-        if at_tags:
-            query.tags.extend(at_tags)
-            remaining_text = re.sub(r"@\w+", "", remaining_text)
-
-        # Extract semantic: or ai: flag
-        if re.search(r"\b(semantic:|ai:)\b", remaining_text, re.IGNORECASE):
-            query.semantic = True
-            remaining_text = re.sub(r"\b(semantic:|ai:)\b", "", remaining_text, flags=re.IGNORECASE)
-
-        # Extract after: date
-        after_match = re.search(r"after:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
-        if after_match:
-            query.created_after = parse_datetime(after_match.group(1))
-            remaining_text = (
-                remaining_text[: after_match.start()] + remaining_text[after_match.end() :]
-            )
-
-        # Extract before: date
-        before_match = re.search(r"before:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
-        if before_match:
-            query.created_before = parse_datetime(before_match.group(1))
-            remaining_text = (
-                remaining_text[: before_match.start()] + remaining_text[before_match.end() :]
-            )
-
-        # Extract modified: date
-        modified_match = re.search(r"modified:(\d{4}-\d{2}-\d{2})", remaining_text, re.IGNORECASE)
-        if modified_match:
-            query.modified_after = parse_datetime(modified_match.group(1))
-            remaining_text = (
-                remaining_text[: modified_match.start()] + remaining_text[modified_match.end() :]
-            )
-
-        # Extract project: filter
-        project_match = re.search(r"project:(\S+)", remaining_text, re.IGNORECASE)
-        if project_match:
-            query.project = project_match.group(1)
-            remaining_text = (
-                remaining_text[: project_match.start()] + remaining_text[project_match.end() :]
-            )
-
-        # Clean up remaining text
-        query.text = " ".join(remaining_text.split()).strip()
-
-        return query
 
     def _prepare_fts_query(self, text: str) -> str:
         """Prepare text for FTS5 query with prefix matching.

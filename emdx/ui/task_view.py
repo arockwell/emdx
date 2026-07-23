@@ -125,24 +125,6 @@ def _format_time_short(dt_str: str | datetime | None) -> str:
     return result.replace(" ago", "") if result else ""
 
 
-def _priority_str(priority: int) -> str:
-    """Return a short priority indicator."""
-    if priority <= 1:
-        return "!!!"
-    if priority <= 2:
-        return "!! "
-    return "   "
-
-
-def _priority_style(priority: int) -> str:
-    """Return a Rich style for a priority level."""
-    if priority <= 1:
-        return "bold red"
-    if priority <= 2:
-        return "yellow"
-    return "dim"
-
-
 def _strip_epic_prefix(title: str, epic_key: str | None, epic_seq: int | None) -> str:
     """Strip the 'KEY-N: ' prefix from a title if it matches the epic."""
     if epic_key and epic_seq:

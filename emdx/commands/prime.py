@@ -294,11 +294,24 @@ def _task_label(task: ReadyTask | InProgressTask) -> str:
     return f"{label:<13}"
 
 
+def _epic_label(epic: EpicInfo) -> str:
+    """Full epic identifier (e.g. FIX-50), matching `task epic list`'s Key column.
+
+    Showing only the key prefix invites `--epic <KEY>` guesses that resolve
+    to nothing (see #1029).
+    """
+    epic_key = epic.get("epic_key")
+    epic_seq = epic.get("epic_seq")
+    if epic_key and epic_seq:
+        return f"{epic_key}-{epic_seq}"
+    return epic_key or f"#{epic['id']}"
+
+
 def _format_epic_line(epic: EpicInfo) -> str:
     """Format an epic line with progress bar."""
     done = epic["children_done"]
     total = epic["child_count"]
-    cat = epic.get("epic_key") or ""
+    label = _epic_label(epic)
 
     # Progress bar: 5 chars wide
     if total > 0:
@@ -311,15 +324,15 @@ def _format_epic_line(epic: EpicInfo) -> str:
         progress = "     no tasks"
 
     name = epic["title"][:30]
-    return f"  {cat:<10}{name:<32}{progress}"
+    return f"  {label:<13}{name:<32}{progress}"
 
 
 def _format_epic_brief(epic: EpicInfo) -> str:
     """Format an epic as a compact one-liner for brief mode."""
     done = epic["children_done"]
     total = epic["child_count"]
-    cat = epic.get("epic_key") or ""
-    prefix = f"{cat}: " if cat else ""
+    label = _epic_label(epic)
+    prefix = f"{label}: " if epic.get("epic_key") else ""
     return f"  {prefix}{epic['title']} — {done}/{total} done"
 
 
@@ -333,7 +346,7 @@ def _get_active_epics() -> list[EpicInfo]:
     with db.get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT t.id, t.title, t.status, t.epic_key,
+            SELECT t.id, t.title, t.status, t.epic_key, t.epic_seq,
                 COUNT(c.id) as child_count,
                 COUNT(CASE WHEN c.status IN ('done', 'duplicate')
                     THEN 1 END) as children_done
@@ -350,8 +363,9 @@ def _get_active_epics() -> list[EpicInfo]:
                 title=r[1],
                 status=r[2],
                 epic_key=r[3],
-                child_count=r[4],
-                children_done=r[5],
+                epic_seq=r[4],
+                child_count=r[5],
+                children_done=r[6],
             )
             for r in rows
         ]
