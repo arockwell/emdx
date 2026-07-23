@@ -156,6 +156,79 @@ class TestBackupService:
         assert not result.success
         assert "not found" in result.message
 
+    def test_restore_corrupt_backup_leaves_live_db_untouched(
+        self, svc: BackupService, tmp_path: Path
+    ) -> None:
+        """A corrupt/garbage backup must fail without modifying the live DB."""
+        corrupt = tmp_path / "corrupt.db"
+        corrupt.write_bytes(b"this is not a sqlite database" * 100)
+
+        result = svc.restore_backup(corrupt)
+        assert not result.success
+
+        # Live DB still intact and readable
+        conn = sqlite3.connect(svc.db_path)
+        row = conn.execute("SELECT title FROM docs WHERE id=1").fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "hello"
+
+    def test_restore_truncated_gz_leaves_live_db_untouched(
+        self, svc: BackupService, tmp_path: Path
+    ) -> None:
+        """A truncated .gz backup must fail without modifying the live DB."""
+        result = svc.create_backup(compress=True)
+        assert result.success and result.path is not None
+        data = result.path.read_bytes()
+        result.path.write_bytes(data[: len(data) // 2])
+
+        restore_result = svc.restore_backup(result.path)
+        assert not restore_result.success
+
+        conn = sqlite3.connect(svc.db_path)
+        row = conn.execute("SELECT title FROM docs WHERE id=1").fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "hello"
+
+    def test_restore_creates_pre_restore_safety_copy(self, svc: BackupService) -> None:
+        result = svc.create_backup(compress=True)
+        assert result.success and result.path is not None
+
+        # Change the live DB so the safety copy is distinguishable
+        conn = sqlite3.connect(svc.db_path)
+        conn.execute("UPDATE docs SET title='changed' WHERE id=1")
+        conn.commit()
+        conn.close()
+
+        restore_result = svc.restore_backup(result.path)
+        assert restore_result.success
+
+        pre_restore = svc.db_path.parent / f"{svc.db_path.name}.pre-restore"
+        assert pre_restore.exists()
+        conn = sqlite3.connect(pre_restore)
+        row = conn.execute("SELECT title FROM docs WHERE id=1").fetchone()
+        conn.close()
+        assert row[0] == "changed"
+
+    def test_restore_failure_cleans_up_temp_files(
+        self, svc: BackupService, tmp_path: Path
+    ) -> None:
+        """Failed restores must not leak decompressed/temp DB files."""
+        corrupt_gz = tmp_path / "emdx-backup-corrupt.db.gz"
+        with gzip.open(corrupt_gz, "wb") as f:
+            f.write(b"not a sqlite database" * 100)
+
+        result = svc.restore_backup(corrupt_gz)
+        assert not result.success
+
+        leftovers = [
+            p
+            for p in svc.db_path.parent.iterdir()
+            if "restore-src" in p.name or "restore-tmp" in p.name
+        ]
+        assert leftovers == []
+
     def test_retention_pruning(self, svc: BackupService, backup_dir: Path) -> None:
         """Old backups beyond retention tiers get pruned."""
         now = datetime.now(tz=timezone.utc)

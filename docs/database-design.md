@@ -297,6 +297,19 @@ CREATE TABLE knowledge_events (
 );
 ```
 
+Event types:
+
+| event_type | When | metadata_json |
+|-----------|------|---------------|
+| `search` / `view` / `create` / `update` / `delete` / `ask` | Document operations | varies; `doc_id` set where applicable |
+| `task_create` | `emdx task add` | `{"task_id": N, "epic_key": "...", "status": "open"}` |
+| `task_status` | Status transitions (`task active/done/block`, etc.) | `{"task_id": N, "old_status": "...", "new_status": "...", "epic_key": "..."}` |
+| `task_delete` | `emdx task delete` | `{"task_id": N}` |
+
+Task events keep `doc_id` NULL (it references documents, not tasks); the
+task ID lives in `metadata_json`. External consumers can poll this table
+instead of diffing the `tasks` table to react to task changes.
+
 #### `document_versions` — Content History
 ```sql
 CREATE TABLE document_versions (

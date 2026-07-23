@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ import typer
 from rich.panel import Panel
 from rich.table import Table
 
+from emdx.config.cli_config import DEFAULT_LLM_MODEL
 from emdx.database.documents import (
     find_supersede_candidate,
     set_parent,
@@ -42,6 +44,11 @@ from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Core CRUD operations for documents")
 
+# Marks the end of the instructional header in `emdx edit` temp files.
+# Only lines above (and including) this are stripped on save, so Markdown
+# headings in the document body survive round-trips through the editor.
+EDIT_PREAMBLE_SENTINEL = "# ---- edit below this line; this marker and lines above are removed ----"
+
 
 @dataclass
 class InputContent:
@@ -60,13 +67,72 @@ class DocumentMetadata:
     project: str | None = None
 
 
+# How long to wait for data on an open non-TTY stdin before treating it as
+# empty. Only applies when stdin is the sole possible content source; a
+# wedged harness that holds stdin open forever gets a clean error instead
+# of hanging the process (see #1034).
+STDIN_PROBE_TIMEOUT = 5.0
+
+
+def _stdin_ready(timeout: float) -> bool:
+    """Return True if stdin has data (or EOF) available within timeout."""
+    import select
+    import sys
+
+    try:
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+    except (OSError, ValueError, TypeError):
+        # Unprobeable stdin (e.g. Windows non-socket, test doubles):
+        # fall back to the blocking read rather than dropping input.
+        return True
+    return bool(ready)
+
+
+def _guard_path_like_positional(arg: str) -> None:
+    """Refuse a positional arg that is an existing file path (#1051).
+
+    Callers (usually agents) sometimes pass a file path positionally instead
+    of via -f/--file. The save "succeeds" with the literal path string as the
+    document body, and the real content is lost once the file at that path is
+    cleaned up. Fail loudly instead; the literal-string case survives via
+    stdin (`printf '%s' "/some/path" | emdx save`).
+    """
+    if "\n" in arg:
+        return
+    try:
+        is_file = Path(arg).expanduser().is_file()
+    except (OSError, ValueError):
+        return
+
+    if is_file:
+        console.print(f"[red]Error: positional argument is an existing file path: {arg}[/red]")
+        console.print(
+            "[red]Use -f/--file to save the file's contents, "
+            "or pipe via stdin to save the literal string.[/red]"
+        )
+        raise typer.Exit(1)
+
+    # Path-looking but nonexistent: usually a temp file already cleaned up or
+    # a mistyped path. Warn but proceed with the literal string.
+    if arg.startswith(("/", "~")) and " " not in arg:
+        console.print(
+            f"[yellow]Warning: '{arg}' looks like a file path but no such file exists; "
+            "saving it as literal content. Use -f/--file to save a file's contents.[/yellow]"
+        )
+
+
 def get_input_content(input_arg: str | None, file_path: str | None = None) -> InputContent:
     """Handle input from stdin, --file, or positional content argument.
 
-    Priority: --file > stdin > positional content arg.
+    Priority: --file > positional content arg > stdin.
 
-    When --file is explicitly provided, stdin is skipped entirely to avoid
-    blocking on non-TTY stdin that has no data (see #732).
+    When --file or a positional argument is provided, stdin is never read:
+    probing an open non-TTY stdin that has no data blocks forever under
+    backgrounded/tool-invoked callers (see #732, #1034).
+
+    A positional argument that is an existing file path is refused (#1051):
+    it almost always means the caller meant -f/--file, and accepting it
+    silently records the path string instead of the file's contents.
     """
     import sys
 
@@ -83,16 +149,17 @@ def get_input_content(input_arg: str | None, file_path: str | None = None) -> In
             console.print(f"[red]Error reading file: {e}[/red]")
             raise typer.Exit(1) from e
 
-    # Priority 2: Check if stdin has data
-    if not sys.stdin.isatty():
+    # Priority 2: Positional argument (skip stdin — content already in hand)
+    if input_arg:
+        _guard_path_like_positional(input_arg)
+        return InputContent(content=input_arg, source_type="direct")
+
+    # Priority 3: stdin, guarded so an open-but-idle stdin can't wedge us
+    if not sys.stdin.isatty() and _stdin_ready(STDIN_PROBE_TIMEOUT):
         content = sys.stdin.read()
         if content.strip():  # Only use stdin if it has actual content
             return InputContent(content=content, source_type="stdin")
         # Fall through if stdin is empty
-
-    # Priority 3: Positional argument is always treated as content
-    if input_arg:
-        return InputContent(content=input_arg, source_type="direct")
 
     # No input provided
     console.print(
@@ -209,7 +276,7 @@ def save(
 ) -> None:
     """Save content to the knowledge base.
 
-    Content sources (in priority order): --file > stdin > positional argument.
+    Content sources (in priority order): --file > positional argument > stdin.
     """
     # Validate --done requires --task
     if mark_done and task is None:
@@ -1304,7 +1371,7 @@ def _view_review(doc: Document) -> None:
             system_prompt=system_prompt,
             user_message=user_message,
             title=f"Review: {title[:50]}",
-            model="claude-sonnet-4-5-20250929",
+            model=DEFAULT_LLM_MODEL,
         )
     except RuntimeError as e:
         console.print(f"[red]Review generation failed: {e}[/red]")
@@ -1428,17 +1495,73 @@ def _print_related_docs(
         print(f"Related: {', '.join(parts)}")
 
 
+def _flag_wiki_staleness(doc_id: int) -> None:
+    """Flag wiki articles sourced from this doc as stale (non-critical)."""
+    try:
+        from emdx.services.wiki_staleness_service import check_doc_staleness
+
+        check_doc_staleness(doc_id)
+    except sqlite3.OperationalError:
+        pass  # Wiki tables may not exist; non-critical
+
+
+def _resolve_edit_body(file: str | None, content: str | None) -> str | None:
+    """Resolve a non-interactive content source for `edit`, if one was given.
+
+    Sources, mirroring `save`: --file (with '-' meaning stdin), --content,
+    or piped stdin. Returns None when no source is present (interactive
+    editor should launch).
+    """
+    import sys
+
+    if file is not None and content is not None:
+        console.print("[red]Error: --file and --content are mutually exclusive[/red]")
+        raise typer.Exit(1)
+
+    if file == "-":
+        return sys.stdin.read()
+    if file is not None:
+        fp = Path(file)
+        if not fp.exists() or not fp.is_file():
+            console.print(f"[red]Error: File not found: {file}[/red]")
+            raise typer.Exit(1)
+        try:
+            return fp.read_text(encoding="utf-8")
+        except Exception as e:
+            console.print(f"[red]Error reading file: {e}[/red]")
+            raise typer.Exit(1) from e
+    if content is not None:
+        return content
+
+    # Piped stdin (guarded like save: never block on an open-but-idle stdin)
+    if not sys.stdin.isatty() and _stdin_ready(STDIN_PROBE_TIMEOUT):
+        piped = sys.stdin.read()
+        if piped.strip():
+            return piped
+
+    return None
+
+
 @app.command()
 def edit(
     identifier: str = typer.Argument(..., help="Document ID or title"),
     title: str | None = typer.Option(
         None, "--title", "-t", help="Update title without editing content"
     ),
+    file: str | None = typer.Option(
+        None, "--file", "-f", help="Replace content from a file path ('-' reads stdin)"
+    ),
+    content: str | None = typer.Option(None, "--content", help="Replace content from a string"),
     editor: str | None = typer.Option(
         None, "--editor", "-e", help="Editor to use (default: $EDITOR)"
     ),
 ) -> None:
-    """Edit a document in the knowledge base"""
+    """Edit a document in the knowledge base.
+
+    Non-interactive updates: --file PATH, --file - (stdin), --content TEXT,
+    or pipe new content via stdin. Combine with --title to update both at
+    once. With no content source, opens $EDITOR as before.
+    """
     try:
         # Fetch document
         doc = get_document(identifier)
@@ -1447,6 +1570,22 @@ def edit(
             console.print(f"[red]Error: Document '{identifier}' not found[/red]")
             raise typer.Exit(1)
 
+        # Non-interactive content update (--file / --content / piped stdin)
+        new_body = _resolve_edit_body(file, content)
+        if new_body is not None:
+            new_title = title or doc.title
+            success = update_document(doc.id, new_title, new_body)
+            if success:
+                console.print(f"[green]✅ Updated #{doc.id}:[/green] [cyan]{new_title}[/cyan]")
+                if title and title != doc.title:
+                    console.print(f"   [dim]Title changed from:[/dim] {doc.title}")
+                console.print("   [dim]Content updated[/dim]")
+                _flag_wiki_staleness(doc.id)
+            else:
+                console.print("[red]Error updating document[/red]")
+                raise typer.Exit(1)
+            return
+
         # Quick title update without editing content
         if title:
             success = update_document(doc.id, title, doc.content)
@@ -1454,15 +1593,7 @@ def edit(
                 console.print(
                     f"[green]✅ Updated title of #{doc.id} to:[/green] [cyan]{title}[/cyan]"
                 )
-                # Flag wiki articles sourced from this doc as stale
-                try:
-                    from emdx.services.wiki_staleness_service import (
-                        check_doc_staleness,
-                    )
-
-                    check_doc_staleness(doc.id)
-                except Exception:
-                    pass  # Wiki tables may not exist; non-critical
+                _flag_wiki_staleness(doc.id)
             else:
                 console.print("[red]Error updating document title[/red]")
                 raise typer.Exit(1)
@@ -1478,11 +1609,10 @@ def edit(
             tmp_file.write(f"# Editing: {doc.title} (ID: {doc.id})\n")
             tmp_file.write(f"# Project: {doc.project or 'None'}\n")
             tmp_file.write(f"# Created: {str(doc.created_at or '')[:16]}\n")
-            tmp_file.write("# Lines starting with '#' will be removed\n")
             tmp_file.write("#\n")
-            tmp_file.write("# First line (after comments) will be used as the title\n")
-            tmp_file.write("# The rest will be the content\n")
-            tmp_file.write("#\n")
+            tmp_file.write("# First line below the marker is the title\n")
+            tmp_file.write("# The rest is the content (saved verbatim, headings included)\n")
+            tmp_file.write(f"{EDIT_PREAMBLE_SENTINEL}\n")
 
             # Write title and content
             tmp_file.write(f"{doc.title}\n\n")
@@ -1502,8 +1632,19 @@ def edit(
             with open(tmp_file_path) as f:
                 lines = f.readlines()
 
-            # Remove comment lines
-            lines = [line for line in lines if not line.strip().startswith("#")]
+            # Strip only the instructional preamble, never the body: everything
+            # up to and including the sentinel line is discarded. If the user
+            # deleted the sentinel, fall back to dropping the leading comment
+            # block so Markdown headings in the body survive either way.
+            sentinel_idx = next(
+                (i for i, line in enumerate(lines) if line.strip() == EDIT_PREAMBLE_SENTINEL),
+                None,
+            )
+            if sentinel_idx is not None:
+                lines = lines[sentinel_idx + 1 :]
+            else:
+                while lines and lines[0].strip().startswith("#"):
+                    lines.pop(0)
 
             # Extract title and content
             if not lines:
@@ -1539,16 +1680,7 @@ def edit(
                 if new_title != doc.title:
                     console.print(f"   [dim]Title changed from:[/dim] {doc.title}")
                 console.print("   [dim]Content updated[/dim]")
-
-                # Flag wiki articles sourced from this doc as stale
-                try:
-                    from emdx.services.wiki_staleness_service import (
-                        check_doc_staleness,
-                    )
-
-                    check_doc_staleness(doc.id)
-                except Exception:
-                    pass  # Wiki tables may not exist; non-critical
+                _flag_wiki_staleness(doc.id)
             else:
                 console.print("[red]Error updating document[/red]")
                 raise typer.Exit(1)
