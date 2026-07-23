@@ -128,6 +128,74 @@ class TestDistillService:
 
 
 # ---------------------------------------------------------------------------
+# Document fetching regression tests (BUG-2)
+# ---------------------------------------------------------------------------
+class TestDistillDocumentFetching:
+    """Regression tests for BUG-2: `_get_documents_by_query` crashed with
+    TypeError: 'SearchHit' object is not subscriptable.
+
+    These exercise the real search -> fetch pipeline against the test DB
+    (no mocking of search_documents/search_by_tags/_fetch_full_content),
+    which is exactly the path the old cast()-based code broke on.
+    """
+
+    def test_get_documents_by_query_real_search_path(self):
+        """Query path: SearchHit results must be converted to dicts with content."""
+        from emdx.commands.distill import _get_documents_by_query
+        from emdx.database.documents import save_document
+
+        doc_id = save_document(
+            title="Distill regression auth doc",
+            content="Authentication uses distillregressiontoken for sessions.",
+            project="distill-test",
+        )
+
+        docs = _get_documents_by_query("distillregressiontoken")
+
+        assert docs, "expected the seeded document to match the query"
+        match = next(d for d in docs if d["id"] == doc_id)
+        assert match["title"] == "Distill regression auth doc"
+        assert "distillregressiontoken" in match["content"]
+
+    def test_get_documents_by_tags_real_search_path(self):
+        """Tags path: TagSearchResultDict rows have no 'content' key; full
+        content must be fetched from the DB."""
+        from emdx.commands.distill import _get_documents_by_tags
+        from emdx.database.documents import save_document
+        from emdx.models.tags import add_tags_to_document
+
+        doc_id = save_document(
+            title="Distill regression tagged doc",
+            content="Full body content for the tagged distill regression doc.",
+            project="distill-test",
+        )
+        add_tags_to_document(doc_id, ["distill-regression-tag"])
+
+        docs = _get_documents_by_tags(["distill-regression-tag"])
+
+        assert docs, "expected the tagged document to be found"
+        match = next(d for d in docs if d["id"] == doc_id)
+        assert match["title"] == "Distill regression tagged doc"
+        assert match["content"] == "Full body content for the tagged distill regression doc."
+
+    def test_fetch_full_content_preserves_order_and_skips_missing(self):
+        from emdx.commands.distill import _fetch_full_content
+        from emdx.database.documents import save_document
+
+        id_a = save_document(title="Distill order A", content="A", project="distill-test")
+        id_b = save_document(title="Distill order B", content="B", project="distill-test")
+
+        docs = _fetch_full_content([id_b, 999999999, id_a])
+
+        assert [d["id"] for d in docs] == [id_b, id_a]
+
+    def test_fetch_full_content_empty(self):
+        from emdx.commands.distill import _fetch_full_content
+
+        assert _fetch_full_content([]) == []
+
+
+# ---------------------------------------------------------------------------
 # Distill command tests
 # ---------------------------------------------------------------------------
 class TestDistillCommand:
