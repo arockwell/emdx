@@ -3,6 +3,7 @@
 Loads recent documents (excluding superseded) and sorts by timestamp descending.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 
@@ -33,20 +34,26 @@ class ActivityDataLoader:
     ) -> list[ActivityItem]:
         """Load all documents and sort by timestamp descending.
 
+        The DB work is synchronous SQLite; run it in a thread so the awaiting
+        TUI event loop isn't blocked for the duration of the queries.
+
         Args:
             doc_type_filter: Filter documents by type: "user", "wiki", or "all".
 
         Returns:
             Sorted list of document items.
         """
+        return await asyncio.to_thread(self._load_all_sync, doc_type_filter)
+
+    def _load_all_sync(self, doc_type_filter: str = "all") -> list[ActivityItem]:
         docs: list[ActivityItem] = []
         if HAS_DOCS:
-            docs = await self._load_documents(doc_type_filter=doc_type_filter)
+            docs = self._load_documents(doc_type_filter=doc_type_filter)
 
         docs.sort(key=lambda item: -item.timestamp.timestamp())
         return docs
 
-    async def _load_documents(self, doc_type_filter: str = "all") -> list[ActivityItem]:
+    def _load_documents(self, doc_type_filter: str = "all") -> list[ActivityItem]:
         """Load recent documents (top-level only, superseded are hidden).
 
         Args:
@@ -61,14 +68,12 @@ class ActivityDataLoader:
             logger.error(f"Error listing recent documents: {e}", exc_info=True)
             return items
 
-        # Bulk-load tags for all docs in one pass
+        # Bulk-load tags for all docs in a single query (avoids N+1)
         doc_tags: dict[int, list[str]] = {}
         try:
-            from emdx.models.tags import get_document_tags
+            from emdx.models.tags import get_tags_for_documents
 
-            for doc in docs:
-                doc_id = doc.id
-                doc_tags[doc_id] = get_document_tags(doc_id)
+            doc_tags = get_tags_for_documents([doc.id for doc in docs])
         except ImportError:
             pass
         except Exception as e:

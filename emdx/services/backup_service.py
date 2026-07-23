@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import gzip
 import logging
+import os
 import shutil
 import sqlite3
 import time
@@ -138,6 +139,12 @@ class BackupService:
         """Restore the knowledge base from a backup file.
 
         Handles both compressed (.db.gz) and uncompressed (.db) backups.
+
+        The live database is never written in place: the backup is validated
+        (PRAGMA integrity_check) in a temp copy first, the current database is
+        preserved as ``<name>.pre-restore``, and the validated copy is swapped
+        in atomically with os.replace(). On any failure the live database is
+        left untouched.
         """
         start = time.monotonic()
 
@@ -151,28 +158,40 @@ class BackupService:
                 message=f"Backup file not found: {backup_path}",
             )
 
+        # Temp files live next to the live DB so os.replace() stays on one filesystem
+        temp_source = self.db_path.parent / f".{self.db_path.name}.restore-src"
+        temp_restore = self.db_path.parent / f".{self.db_path.name}.restore-tmp"
         try:
             if backup_path.suffix == ".gz":
-                # Decompress to a temp file, then restore
-                temp_db = backup_path.with_suffix("")
-                with gzip.open(backup_path, "rb") as f_in, open(temp_db, "wb") as f_out:
+                with gzip.open(backup_path, "rb") as f_in, open(temp_source, "wb") as f_out:
                     shutil.copyfileobj(f_in, f_out)
-                source_path = temp_db
+                source_path = temp_source
             else:
                 source_path = backup_path
 
-            # Restore via SQLite backup API
+            # Materialize the restored DB in a temp file via the SQLite backup API
             src = sqlite3.connect(source_path)
-            dst = sqlite3.connect(self.db_path)
+            dst = sqlite3.connect(temp_restore)
             try:
                 src.backup(dst)
             finally:
                 dst.close()
                 src.close()
 
-            # Clean up temp decompressed file
-            if backup_path.suffix == ".gz" and source_path.exists():
-                source_path.unlink()
+            # Validate before touching the live DB
+            check_conn = sqlite3.connect(temp_restore)
+            try:
+                integrity = check_conn.execute("PRAGMA integrity_check").fetchone()[0]
+            finally:
+                check_conn.close()
+            if integrity != "ok":
+                raise RuntimeError(f"backup failed integrity check: {integrity}")
+
+            # Keep a safety copy of the current DB, then swap in the validated copy
+            if self.db_path.exists():
+                pre_restore = self.db_path.parent / f"{self.db_path.name}.pre-restore"
+                shutil.copy2(self.db_path, pre_restore)
+            os.replace(temp_restore, self.db_path)
 
             duration = time.monotonic() - start
             return BackupResult(
@@ -193,6 +212,9 @@ class BackupService:
                 pruned_count=0,
                 message=f"Restore failed: {e}",
             )
+        finally:
+            for tmp in (temp_source, temp_restore):
+                tmp.unlink(missing_ok=True)
 
     def _parse_backup_date(self, path: Path) -> datetime | None:
         """Extract date from backup filename like emdx-backup-2026-02-28_143022.db.gz."""

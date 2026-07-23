@@ -11,7 +11,7 @@ emdx [OPTIONS] COMMAND [ARGS]...
 ## 📚 **Document Management**
 
 ### **emdx save**
-Save content to the knowledge base. Content sources in priority order: stdin > `--file` > positional argument.
+Save content to the knowledge base. Content sources in priority order: `--file` > positional argument > stdin.
 
 ```bash
 # Save inline content (positional arg is always content, never a file path)
@@ -206,7 +206,7 @@ emdx view 42 --review
 ```
 
 ### **emdx edit**
-Edit document in your default editor.
+Edit document in your default editor, or update it non-interactively.
 
 ```bash
 # Edit by ID
@@ -214,6 +214,18 @@ emdx edit 42
 
 # Edit with specific editor
 EDITOR=vim emdx edit 42
+
+# Non-interactive: replace body from a file, string, or stdin
+emdx edit 42 --file body.md
+emdx edit 42 --content "new body text"
+cat body.md | emdx edit 42            # piped stdin
+emdx edit 42 --file -                 # explicit stdin
+
+# Update title and body together
+emdx edit 42 --title "New Title" --content "new body"
+
+# Title only (no editor)
+emdx edit 42 --title "New Title"
 ```
 
 ### **emdx delete**
@@ -421,6 +433,22 @@ emdx maintain backup --json
 - `--json` - Structured JSON output
 
 > **Tip:** Backups can be triggered automatically via Claude Code hooks (e.g., on session start). Use `--quiet` for silent hook-driven backups.
+
+#### **emdx maintain compact**
+Compact the database to keep on-disk size and query latency in check as the knowledge base grows. Runs FTS5 index optimization, `PRAGMA optimize`, `VACUUM`, and a WAL checkpoint.
+
+```bash
+# Compact the database
+emdx maintain compact
+
+# JSON output (sizes before/after, bytes reclaimed)
+emdx maintain compact --json
+```
+
+**Options:**
+- `--json` - Structured JSON output
+
+> **Tip:** Run periodically (e.g. monthly) or after bulk deletes. Safe to run any time — it only reorganizes storage, never changes content.
 
 #### **emdx maintain cloud-backup**
 Upload, list, and download knowledge base backups to cloud providers (GitHub Gists or Google Drive).
@@ -699,6 +727,14 @@ emdx maintain index --clear
 - `--chunks` - Use chunk-level embeddings
 - `--stats` - Show index statistics
 - `--clear` - Clear all embeddings
+
+**Embedding backend:** emdx embeds with all-MiniLM-L6-v2, preferring the
+fastembed (ONNX) backend when installed — ~0.4s cold start vs ~5.5s for
+torch-based sentence-transformers, which remains the fallback. Set
+`EMDX_EMBEDDING_BACKEND=fastembed|sentence-transformers` to force one.
+Each backend stores vectors under its own `model_name`, so switching
+backends requires one `emdx maintain index` to rebuild (old vectors are
+ignored, not corrupted).
 
 #### **emdx maintain link**
 Create semantic links between related documents (moved from `emdx ai link`).
@@ -1155,6 +1191,9 @@ emdx gist 42 --update abc123def456
 - `EMDX_TEST_DB` - Test isolation database (set by pytest fixtures)
 - `EMDX_TASK_ID` - Task ID for agent sessions (used by hooks, see [Hooks & Integration](#-hooks--integration))
 - `EMDX_DOC_ID` - Document ID for context injection (used by `prime.sh` hook)
+- `EMDX_CLI_TOOL` - Preferred CLI backend for LLM features (default: `claude`)
+- `EMDX_CODE_THEME` - Syntax-highlighting theme for rendered markdown (e.g. `monokai`)
+- `EMDX_EXECUTION_ID` - Execution identifier recorded on document events (set by agent harnesses)
 - `GITHUB_TOKEN` - For Gist integration
 - `EDITOR` - Default editor for `emdx edit`
 
