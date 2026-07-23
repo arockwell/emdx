@@ -236,6 +236,8 @@ def search_by_tags(
         project: Optional project filter
         limit: Maximum results to return
         prefix_match: If True, 'workflow' matches 'workflow-output' etc.
+
+    Superseded documents (parent_id set) are excluded, matching list_documents().
     """
     with db.get_connection() as conn:
         tag_names_lower = [tag.lower().strip() for tag in tag_names]
@@ -277,6 +279,7 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
+                AND d.parent_id IS NULL
                 AND ({all_condition})
             """
         elif mode == "all" and not prefix_match:
@@ -289,6 +292,7 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
+                AND d.parent_id IS NULL
                 AND d.id IN (
                     SELECT document_id
                     FROM document_tags dt
@@ -310,6 +314,7 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
+                AND d.parent_id IS NULL
                 AND ({tag_conditions})
             """
 

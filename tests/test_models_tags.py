@@ -690,6 +690,39 @@ class TestSearchByTags:
         result_ids = [r["id"] for r in results]
         assert doc1 in result_ids
 
+    def test_excludes_superseded_documents_any_mode(self) -> None:
+        """A doc with parent_id set (superseded) should not surface in ANY mode."""
+        from emdx.database.documents import set_parent
+        from emdx.models.tags import add_tags_to_document, search_by_tags
+
+        old_doc = _create_document(title="Versioned Doc v1")
+        new_doc = _create_document(title="Versioned Doc v2")
+        add_tags_to_document(old_doc, ["versioned-repro"])
+        add_tags_to_document(new_doc, ["versioned-repro"])
+        # Mirrors `emdx save --supersede`: the OLD doc's parent_id points at the NEW doc.
+        set_parent(old_doc, new_doc, relationship="supersedes")
+
+        results = search_by_tags(["versioned-repro"], mode="any", prefix_match=False)
+        result_ids = [r["id"] for r in results]
+        assert new_doc in result_ids
+        assert old_doc not in result_ids
+
+    def test_excludes_superseded_documents_all_mode(self) -> None:
+        """A doc with parent_id set (superseded) should not surface in ALL mode either."""
+        from emdx.database.documents import set_parent
+        from emdx.models.tags import add_tags_to_document, search_by_tags
+
+        old_doc = _create_document(title="Versioned Doc v1")
+        new_doc = _create_document(title="Versioned Doc v2")
+        add_tags_to_document(old_doc, ["versioned-repro", "extra-tag"])
+        add_tags_to_document(new_doc, ["versioned-repro", "extra-tag"])
+        set_parent(old_doc, new_doc, relationship="supersedes")
+
+        results = search_by_tags(["versioned-repro", "extra-tag"], mode="all", prefix_match=True)
+        result_ids = [r["id"] for r in results]
+        assert new_doc in result_ids
+        assert old_doc not in result_ids
+
 
 # =========================================================================
 # rename_tag
