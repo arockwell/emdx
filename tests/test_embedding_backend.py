@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 
-from emdx.services import embedding_service
-from emdx.services.embedding_service import (
+np = pytest.importorskip("numpy")
+
+from emdx.services import embedding_service  # noqa: E402
+from emdx.services.embedding_service import (  # noqa: E402
     BACKEND_ENV_VAR,
     EmbeddingService,
     _backend_name,
