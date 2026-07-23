@@ -277,6 +277,7 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
+                AND d.parent_id IS NULL
                 AND ({all_condition})
             """
         elif mode == "all" and not prefix_match:
