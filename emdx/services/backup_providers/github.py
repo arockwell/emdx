@@ -153,18 +153,21 @@ class GitHubGistProvider:
         return str(dest_gz)
 
     def list_backups(self) -> list[BackupMetadata]:
-        """List all emdx backup gists, newest first."""
-        try:
-            result = self._run_gh(
-                [
-                    "gist",
-                    "list",
-                    "--limit",
-                    "100",
-                ]
-            )
-        except RuntimeError:
-            return []
+        """List all emdx backup gists, newest first.
+
+        Raises:
+            RuntimeError: If gh is not installed/authenticated or the listing
+                fails. An availability failure must not be reported as "no
+                backups" — callers would wrongly conclude their backups are gone.
+        """
+        result = self._run_gh(
+            [
+                "gist",
+                "list",
+                "--limit",
+                "100",
+            ]
+        )
 
         backups: list[BackupMetadata] = []
 

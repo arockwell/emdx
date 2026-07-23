@@ -31,6 +31,7 @@ from ..services.clustering import (
     find_clusters,
     require_sklearn,
 )
+from ..utils.environment import get_subprocess_env
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -351,6 +352,7 @@ def _generate_questions(topics: list[TopicCluster]) -> list[TopicQuestions]:
         try:
             proc = subprocess.run(
                 ["claude", "--print", "-p", prompt, "--model", "sonnet"],
+                env=get_subprocess_env(),
                 capture_output=True,
                 text=True,
                 timeout=120,

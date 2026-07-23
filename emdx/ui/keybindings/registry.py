@@ -356,29 +356,9 @@ class KeybindingRegistry:
 
         return bindings
 
-    def get_all_keys(self) -> set[str]:
-        """Get all registered keys."""
-        return set(self.by_key.keys())
-
-    def get_binding_for_key(self, key: str, context: Context) -> KeybindingEntry | None:
-        """
-        Get the active binding for a key in a context.
-
-        Returns the most specific binding (child overrides parent).
-        """
-        bindings = self.get_bindings_for_context(context)
-        for binding in bindings:
-            if binding.key == key:
-                return binding
-        return None
-
     def get_conflicts_by_severity(self, severity: ConflictSeverity) -> list[ConflictReport]:
         """Get conflicts filtered by severity."""
         return [c for c in self.conflicts if c.severity == severity]
-
-    def has_critical_conflicts(self) -> bool:
-        """Check if there are any critical conflicts."""
-        return any(c.severity == ConflictSeverity.CRITICAL for c in self.conflicts)
 
     def summary(self) -> str:
         """Get a summary of the registry state."""

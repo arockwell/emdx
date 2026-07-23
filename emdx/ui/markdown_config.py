@@ -155,23 +155,3 @@ def render_markdown_to_richlog(
     return content[:MAX_PREVIEW_LENGTH] if content else ""
 
 
-def render_enhanced_markdown(content: str, code_theme: str | None = None) -> Console:
-    """
-    Render markdown with enhanced formatting.
-
-    This function can be used as a drop-in replacement for basic markdown rendering
-    with better code syntax highlighting and formatting.
-    """
-    return MarkdownConfig.render_markdown(content, shared_console, code_theme)
-
-
-def list_available_themes() -> None:
-    """List all available code themes for both dark and light terminals."""
-    print("Available code themes:")
-    print("\nFor dark terminals:")
-    for theme in MarkdownConfig.THEMES["dark"]["alternatives"]:
-        print(f"  - {theme}")
-    print("\nFor light terminals:")
-    for theme in MarkdownConfig.THEMES["light"]["alternatives"]:
-        print(f"  - {theme}")
-    print("\nSet EMDX_CODE_THEME environment variable to use a specific theme.")

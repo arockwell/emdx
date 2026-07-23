@@ -6,7 +6,6 @@ from emdx.database.migrations import (
     MIGRATIONS,
     _ensure_schema_migrations,
     get_applied_migrations,
-    get_schema_version,
     migration_001_add_tags,
     migration_054_set_based_migration_tracking,
     record_migration,
@@ -22,13 +21,6 @@ class TestSimpleMigrations:
         conn = sqlite3.connect(":memory:")
         applied = get_applied_migrations(conn)
         assert applied == set()
-        conn.close()
-
-    def test_get_schema_version_legacy(self):
-        """Legacy get_schema_version still works for backward compat."""
-        conn = sqlite3.connect(":memory:")
-        version = get_schema_version(conn)
-        assert version == -1
         conn.close()
 
     def test_tags_migration_creates_tables(self):

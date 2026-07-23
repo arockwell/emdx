@@ -38,6 +38,7 @@ google-auth-oauthlib = "^1.2.0"
 [tool.poetry.group.ml.dependencies]
 scikit-learn = "^1.6.0"
 datasketch = "^1.6.0"
+fastembed = "^0.8.0"
 sentence-transformers = "^5.2.2"
 numpy = "^2.4.2"
 
@@ -61,11 +62,6 @@ emdx = "emdx.main:run"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-]
 
 [tool.ruff]
 line-length = 100
@@ -102,6 +98,8 @@ module = [
     "datasketch.*",
     "sentence_transformers",
     "sentence_transformers.*",
+    "fastembed",
+    "fastembed.*",
     "transformers",
     "transformers.*",
     "psutil",
