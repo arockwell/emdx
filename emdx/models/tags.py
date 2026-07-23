@@ -289,6 +289,7 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
+                AND d.parent_id IS NULL
                 AND d.id IN (
                     SELECT document_id
                     FROM document_tags dt
@@ -310,6 +311,7 @@ def search_by_tags(
                 JOIN document_tags dt ON d.id = dt.document_id
                 JOIN tags t ON dt.tag_id = t.id
                 WHERE d.is_deleted = FALSE
+                AND d.parent_id IS NULL
                 AND ({tag_conditions})
             """
 
