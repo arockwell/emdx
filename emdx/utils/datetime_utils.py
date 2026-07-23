@@ -90,28 +90,6 @@ def parse_datetime(
     return default
 
 
-def parse_timestamp(value: Union[str, datetime, None]) -> datetime:
-    """
-    Parse a timestamp with timezone awareness for database operations.
-
-    This is a specialized version that always returns a datetime
-    (falling back to now() if parsing fails) and ensures UTC timezone
-    for database consistency.
-
-    Args:
-        value: The value to parse
-
-    Returns:
-        Parsed datetime with UTC timezone, or current UTC time if parsing fails
-    """
-    result = parse_datetime(value, assume_utc=True)
-    if result is None:
-        return datetime.now(timezone.utc)
-    if result.tzinfo is None:
-        return result.replace(tzinfo=timezone.utc)
-    return result
-
-
 def format_datetime(dt: Union[str, datetime, None], format_str: str = "%Y-%m-%d %H:%M") -> str:
     """
     Format a datetime value for display.

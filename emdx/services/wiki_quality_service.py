@@ -18,6 +18,7 @@ import re
 import time
 from typing import TYPE_CHECKING
 
+from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..database import db
 
 if TYPE_CHECKING:
@@ -467,7 +468,7 @@ def llm_quality_assessment(
         f"{source_summaries}"
     )
 
-    used_model = model or "claude-sonnet-4-5-20250929"
+    used_model = model or DEFAULT_LLM_MODEL
 
     try:
         result = _execute_prompt(

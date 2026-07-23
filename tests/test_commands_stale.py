@@ -134,7 +134,7 @@ class TestMaintainStaleBackwardCompat:
     ) -> Generator[None, None, None]:
         """Set up a fresh test database."""
         test_db = tmp_path / "test.db"
-        monkeypatch.setenv("EMDX_DATABASE_URL", f"sqlite:///{test_db}")
+        monkeypatch.setenv("EMDX_TEST_DB", str(test_db))
         db.ensure_schema()
         yield
 
@@ -186,7 +186,7 @@ class TestMaintainTouchBackwardCompat:
     ) -> Generator[None, None, None]:
         """Set up a fresh test database."""
         test_db = tmp_path / "test.db"
-        monkeypatch.setenv("EMDX_DATABASE_URL", f"sqlite:///{test_db}")
+        monkeypatch.setenv("EMDX_TEST_DB", str(test_db))
         db.ensure_schema()
         yield
 
@@ -235,7 +235,7 @@ class TestPrimeIntegration:
     ) -> None:
         """get_top_stale_for_priming returns a list."""
         test_db = tmp_path / "test.db"
-        monkeypatch.setenv("EMDX_DATABASE_URL", f"sqlite:///{test_db}")
+        monkeypatch.setenv("EMDX_TEST_DB", str(test_db))
         db.ensure_schema()
 
         result = get_top_stale_for_priming(limit=5)

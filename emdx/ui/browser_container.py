@@ -23,11 +23,6 @@ logger = logging.getLogger(__name__)
 _keybinding_registry = None
 
 
-def get_keybinding_registry() -> Any:
-    """Get the global keybinding registry instance."""
-    return _keybinding_registry
-
-
 class BrowserContainerWidget(Widget):
     """Widget wrapper to avoid Screen padding issue."""
 
@@ -315,10 +310,6 @@ class BrowserContainer(App[None]):
 
         # Don't handle any other keys - let them bubble to browsers
 
-    async def view_document_fullscreen(self, doc_id: int) -> None:
-        """View a document fullscreen - switch to document browser and open it."""
-        await self._view_document(doc_id)
-
     def _dump_widget_tree(self) -> None:
         """Debug function to dump the widget tree and regions (ctrl+d)."""
         lines = [f"Screen size={self.screen.size} region={self.screen.region}"]
@@ -346,14 +337,14 @@ class BrowserContainer(App[None]):
 
     def action_open_command_palette(self) -> None:
         """Open the command palette modal."""
-        import asyncio
-
         try:
             from emdx.ui.command_palette import CommandPaletteScreen
 
             def on_palette_result(result: dict | None) -> None:
                 if result:
-                    asyncio.create_task(self._handle_palette_result(result))
+                    # run_worker (not bare create_task): asyncio holds only a weak
+                    # ref to tasks, so an unreferenced task can be GC'd mid-flight
+                    self.run_worker(self._handle_palette_result(result), exclusive=True)
 
             self.push_screen(CommandPaletteScreen(), on_palette_result)
 

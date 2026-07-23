@@ -214,7 +214,7 @@ def compact(
         None, "--topic", help="Filter to documents matching this topic/query"
     ),
     model: str | None = typer.Option(
-        None, "--model", "-m", help="Model to use for synthesis (default: claude-opus-4)"
+        None, "--model", "-m", help="Model to use for synthesis (default: claude-opus-4-6)"
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),

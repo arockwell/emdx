@@ -3,10 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from emdx.services.hybrid_search import (
-    HYBRID_BOOST,
-    KEYWORD_WEIGHT,
     RRF_K,
-    SEMANTIC_WEIGHT,
     HybridSearchResult,
     HybridSearchService,
     SearchMode,
@@ -229,26 +226,6 @@ class TestHybridSearchResult:
         assert result.source == "hybrid"
         assert result.tags == ["python", "analysis"]
         assert result.chunk_heading == "Methods > Data"
-
-
-class TestWeightConstants:
-    """Tests for weight constants (legacy, kept for compatibility)."""
-
-    def test_weights_sum_reasonable(self):
-        """Keyword + semantic weights sum to reasonable value."""
-        assert 0.9 <= KEYWORD_WEIGHT + SEMANTIC_WEIGHT <= 1.1
-
-    def test_boost_is_small(self):
-        """Hybrid boost is a small bonus value."""
-        assert 0 < HYBRID_BOOST <= 0.2
-
-    def test_keyword_weight_positive(self):
-        """Keyword weight is positive."""
-        assert KEYWORD_WEIGHT > 0
-
-    def test_semantic_weight_positive(self):
-        """Semantic weight is positive."""
-        assert SEMANTIC_WEIGHT > 0
 
 
 class TestHybridSearchService:
