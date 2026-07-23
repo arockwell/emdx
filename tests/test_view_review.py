@@ -154,7 +154,9 @@ class TestViewReviewHelper:
         _view_review(_DOC)
 
         call_kwargs = mock_execute.call_args
-        assert call_kwargs[1]["model"] == "claude-sonnet-4-5-20250929"
+        from emdx.config.cli_config import DEFAULT_LLM_MODEL
+
+        assert call_kwargs[1]["model"] == DEFAULT_LLM_MODEL
 
     @patch(
         "emdx.services.ask_service._execute_claude_prompt",

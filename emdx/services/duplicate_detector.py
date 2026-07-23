@@ -210,10 +210,12 @@ class DuplicateDetector:
                 AND LENGTH(d.content) > 50
                 ORDER BY d.access_count DESC, d.id
             """
+            params: list[int] = []
             if max_documents:
-                query += f" LIMIT {max_documents}"
+                query += " LIMIT ?"
+                params.append(max_documents)
 
-            cursor.execute(query)
+            cursor.execute(query, params)
             documents = [cast(DuplicateDocument, dict(row)) for row in cursor.fetchall()]
 
         if len(documents) < 2:

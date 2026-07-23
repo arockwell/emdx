@@ -84,21 +84,30 @@ CLI_CONFIGS: dict[CliTool, CliConfig] = {
     ),
 }
 
-# Model aliases for convenience
+# Model aliases for convenience.
+# Values use dateless model aliases so snapshot retirements can't break them.
 MODEL_ALIASES: dict[str, dict[str, str]] = {
     "opus": {
         "claude": "claude-opus-4-6",
     },
     "sonnet": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": "claude-sonnet-4-5",
+    },
+    "haiku": {
+        "claude": "claude-haiku-4-5",
     },
     "auto": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": "claude-sonnet-4-5",
     },
     "fast": {
-        "claude": "claude-sonnet-4-5-20250929",
+        "claude": "claude-sonnet-4-5",
     },
 }
+
+# Single source of truth for the default models used by LLM-backed features.
+# Services must import these instead of hardcoding model ID literals.
+DEFAULT_LLM_MODEL: str = MODEL_ALIASES["sonnet"]["claude"]
+DEFAULT_OPUS_MODEL: str = MODEL_ALIASES["opus"]["claude"]
 
 
 def get_default_cli_tool() -> CliTool:
