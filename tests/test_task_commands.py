@@ -452,12 +452,13 @@ class TestTaskList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_includes_all_statuses_with_all_flag(self, mock_tasks):
+        """--all bypasses the default limit entirely (GH #1014)."""
         mock_tasks.list_tasks.return_value = []
         result = runner.invoke(app, ["list", "--all"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
             status=None,
-            limit=20,
+            limit=-1,
             epic_key=None,
             parent_task_id=None,
             since=None,
@@ -470,7 +471,21 @@ class TestTaskList:
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
             status=None,
-            limit=20,
+            limit=-1,
+            epic_key=None,
+            parent_task_id=None,
+            since=None,
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_all_with_explicit_limit_respects_it(self, mock_tasks):
+        """An explicit -n alongside --all still caps the result (GH #1014)."""
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "--all", "-n", "5"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=None,
+            limit=5,
             epic_key=None,
             parent_task_id=None,
             since=None,

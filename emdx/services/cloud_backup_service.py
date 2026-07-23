@@ -76,7 +76,10 @@ class CloudBackupService:
                 message=f"Backup uploaded to {self.provider.name}: {metadata['backup_id']}",
                 metadata=metadata,
             )
-        except RuntimeError as e:
+        except Exception as e:
+            # Providers raise more than RuntimeError (OSError from file I/O,
+            # HTTP errors from gdrive); all become a failure result, not a crash
+            logger.debug("Cloud upload failed", exc_info=True)
             return CloudBackupResult(
                 success=False,
                 message=f"Upload failed: {e}",
@@ -100,7 +103,8 @@ class CloudBackupService:
                 message=f"Backup downloaded to {path}",
                 path=path,
             )
-        except RuntimeError as e:
+        except Exception as e:
+            logger.debug("Cloud download failed", exc_info=True)
             return CloudDownloadResult(
                 success=False,
                 message=f"Download failed: {e}",
@@ -108,12 +112,31 @@ class CloudBackupService:
             )
 
     def list_backups(self) -> list[BackupMetadata]:
-        """List all backups from the cloud provider."""
-        return self.provider.list_backups()
+        """List all backups from the cloud provider.
+
+        Raises:
+            RuntimeError: If the provider is unavailable (e.g. gh not
+                installed / not authenticated) or the listing fails.
+        """
+        try:
+            return self.provider.list_backups()
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Listing backups failed: {e}") from e
 
     def delete(self, backup_id: str) -> bool:
-        """Delete a backup from the cloud provider."""
-        return self.provider.delete(backup_id)
+        """Delete a backup from the cloud provider.
+
+        Raises:
+            RuntimeError: If the provider is unavailable or the delete fails.
+        """
+        try:
+            return self.provider.delete(backup_id)
+        except RuntimeError:
+            raise
+        except Exception as e:
+            raise RuntimeError(f"Deleting backup failed: {e}") from e
 
     def check_auth(self) -> ProviderAuthStatus:
         """Check authentication status for the current provider."""

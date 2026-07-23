@@ -649,8 +649,8 @@ class TestSearchByTags:
         results = search_by_tags(["nonexistent"], prefix_match=False)
         assert results == []
 
-    def test_all_mode_with_prefix_match_uses_any_logic(self) -> None:
-        """When mode='all' but prefix_match=True, it falls back to 'any' logic."""
+    def test_all_mode_with_prefix_match_enforces_and(self) -> None:
+        """mode='all' + prefix_match=True (the CLI default) must require every tag."""
         from emdx.models.tags import add_tags_to_document, search_by_tags
 
         doc1 = _create_document(title="Has Workflow")
@@ -658,12 +658,37 @@ class TestSearchByTags:
         add_tags_to_document(doc1, ["workflow"])
         add_tags_to_document(doc2, ["worker"])
 
-        # mode="all" + prefix_match=True uses the 'any' branch
+        # Neither doc has both "workflow" and "worker" prefix matches, so
+        # the ALL-mode result should be empty, not the ANY-mode union.
         results = search_by_tags(["workflow", "worker"], mode="all", prefix_match=True)
         result_ids = [r["id"] for r in results]
-        # Both should match since prefix_match forces 'any' behavior
+        assert doc1 not in result_ids
+        assert doc2 not in result_ids
+
+    def test_all_mode_with_prefix_match_matches_doc_with_all_tags(self) -> None:
+        """A doc satisfying every requested tag prefix should still match in ALL mode."""
+        from emdx.models.tags import add_tags_to_document, search_by_tags
+
+        doc1 = _create_document(title="Alpha Doc")
+        doc2 = _create_document(title="Beta Doc")
+        add_tags_to_document(doc1, ["alpha", "shared-tag"])
+        add_tags_to_document(doc2, ["beta", "shared-tag"])
+
+        results = search_by_tags(["alpha", "shared-tag"], mode="all", prefix_match=True)
+        result_ids = [r["id"] for r in results]
         assert doc1 in result_ids
-        assert doc2 in result_ids
+        assert doc2 not in result_ids
+
+    def test_all_mode_with_prefix_match_still_prefix_matches(self) -> None:
+        """ALL-mode should still allow prefix matching per tag, just require every tag."""
+        from emdx.models.tags import add_tags_to_document, search_by_tags
+
+        doc1 = _create_document(title="Has Both Prefixes")
+        add_tags_to_document(doc1, ["workflow-output", "worker-node"])
+
+        results = search_by_tags(["workflow", "worker"], mode="all", prefix_match=True)
+        result_ids = [r["id"] for r in results]
+        assert doc1 in result_ids
 
 
 # =========================================================================

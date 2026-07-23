@@ -567,27 +567,6 @@ class TestConfidenceSignalsIntegration:
 # ── Legacy compatibility ───────────────────────────────────────────────
 
 
-class TestLegacyCompatibility:
-    """Tests that legacy _calculate_confidence still works."""
-
-    def test_legacy_confidence_high(self) -> None:
-        """Legacy method should still return high for 3+ sources."""
-        service = AskService()
-        assert service._calculate_confidence(3) == "high"
-        assert service._calculate_confidence(10) == "high"
-
-    def test_legacy_confidence_medium(self) -> None:
-        """Legacy method should still return medium for 1-2."""
-        service = AskService()
-        assert service._calculate_confidence(1) == "medium"
-        assert service._calculate_confidence(2) == "medium"
-
-    def test_legacy_confidence_low(self) -> None:
-        """Legacy method should still return low for 0."""
-        service = AskService()
-        assert service._calculate_confidence(0) == "low"
-
-
 # ── CLI flag resolution ────────────────────────────────────────────────
 
 

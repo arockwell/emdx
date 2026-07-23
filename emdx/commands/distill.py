@@ -37,8 +37,8 @@ def _get_documents_by_query(
     limit: int = 20,
 ) -> list[DistillDocumentDict]:
     """Get documents matching a search query."""
-    docs = search_documents(query=query, limit=limit)
-    return _fetch_full_content(cast(list[DistillDocumentDict], docs))
+    hits = search_documents(query=query, limit=limit)
+    return _fetch_full_content([hit.id for hit in hits])
 
 
 def _get_documents_by_tags(
@@ -47,15 +47,13 @@ def _get_documents_by_tags(
 ) -> list[DistillDocumentDict]:
     """Get documents matching tags."""
     docs = search_by_tags(tag_names=tags, mode="any", limit=limit)
-    return _fetch_full_content(cast(list[DistillDocumentDict], docs))
+    return _fetch_full_content([d["id"] for d in docs])
 
 
-def _fetch_full_content(docs: list[DistillDocumentDict]) -> list[DistillDocumentDict]:
-    """Fetch full content for a list of document summaries."""
-    if not docs:
+def _fetch_full_content(doc_ids: list[int]) -> list[DistillDocumentDict]:
+    """Fetch full content for the given document IDs, preserving order."""
+    if not doc_ids:
         return []
-
-    doc_ids = [d["id"] for d in docs]
 
     with db.get_connection() as conn:
         cursor = conn.cursor()
@@ -67,13 +65,13 @@ def _fetch_full_content(docs: list[DistillDocumentDict]) -> list[DistillDocument
         rows = cursor.fetchall()
 
     # Build map for ordering
-    content_map = {
-        row["id"]: {"id": row["id"], "title": row["title"], "content": row["content"]}
+    content_map: dict[int, DistillDocumentDict] = {
+        row["id"]: DistillDocumentDict(id=row["id"], title=row["title"], content=row["content"])
         for row in rows
     }
 
     # Return in original order
-    return [content_map[d["id"]] for d in docs if d["id"] in content_map]  # type: ignore[misc]
+    return [content_map[doc_id] for doc_id in doc_ids if doc_id in content_map]
 
 
 def _parse_audience(audience_str: str) -> Audience:

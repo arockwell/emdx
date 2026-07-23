@@ -18,6 +18,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..database import db
 
 console = Console()
@@ -474,7 +475,7 @@ def _briefing_save(hours: int, model: str | None) -> None:
             system_prompt=system_prompt,
             user_message=prompt,
             title=title,
-            model=model or "claude-sonnet-4-5-20250929",
+            model=model or DEFAULT_LLM_MODEL,
         )
         if result.success and result.output_content:
             print(result.output_content)

@@ -10,6 +10,7 @@ from emdx.config.constants import (
     DEFAULT_TASK_PRIORITY,
 )
 from emdx.database import db
+from emdx.models.events import record_event
 from emdx.models.task import Task, TaskLogEntry
 from emdx.models.types import TaskRef
 
@@ -96,7 +97,12 @@ def create_task(
                 [(task_id, dep_id) for dep_id in depends_on if dep_id is not None],
             )
         conn.commit()
-        return task_id
+
+    record_event(
+        "task_create",
+        metadata={"task_id": task_id, "epic_key": epic_key, "status": status},
+    )
+    return task_id
 
 
 def create_epic(name: str, category_key: str, description: str = "") -> int:
@@ -157,6 +163,7 @@ def delete_epic(epic_id: int, force: bool = False) -> dict[str, int]:
         conn.execute("DELETE FROM tasks WHERE id = ?", (epic_id,))
         conn.commit()
 
+    record_event("task_delete", metadata={"task_id": epic_id})
     return {"children_unlinked": children_unlinked}
 
 
@@ -338,9 +345,31 @@ def update_task(task_id: int, **kwargs: Any) -> bool:
     params.append(task_id)
 
     with db.get_connection() as conn:
+        old_status: str | None = None
+        old_epic_key: str | None = None
+        if "status" in filtered_kwargs:
+            row = conn.execute(
+                "SELECT status, epic_key FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+            if row:
+                old_status, old_epic_key = row[0], row[1]
+
         cursor = conn.execute(f"UPDATE tasks SET {', '.join(sets)} WHERE id = ?", params)
         conn.commit()
-        return cursor.rowcount > 0
+        updated = cursor.rowcount > 0
+
+    new_status = filtered_kwargs.get("status")
+    if updated and new_status is not None and new_status != old_status:
+        record_event(
+            "task_status",
+            metadata={
+                "task_id": task_id,
+                "old_status": old_status,
+                "new_status": new_status,
+                "epic_key": filtered_kwargs.get("epic_key", old_epic_key),
+            },
+        )
+    return updated
 
 
 def set_task_output_doc(task_id: int, doc_id: int) -> None:
@@ -362,7 +391,11 @@ def delete_task(task_id: int) -> bool:
     with db.get_connection() as conn:
         cursor = conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
         conn.commit()
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+
+    if deleted:
+        record_event("task_delete", metadata={"task_id": task_id})
+    return deleted
 
 
 def get_dependencies(task_id: int) -> list[Task]:

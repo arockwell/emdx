@@ -24,6 +24,10 @@ LAZY_SUBCOMMANDS = {
     "compact": "emdx.commands.compact:app",
     "maintain": "emdx.commands.maintain:app",
     "labs": "emdx.commands.labs:app",
+    "wiki": "emdx.commands.wiki:wiki_app",
+    "task": "emdx.commands.tasks:app",
+    "tag": "emdx.commands.tags:app",
+    "trash": "emdx.commands.trash:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -33,6 +37,10 @@ LAZY_HELP = {
     "compact": "Reduce KB redundancy through AI synthesis",
     "maintain": "Maintenance and analysis tools",
     "labs": "Experimental commands (may change or be removed)",
+    "wiki": "Auto-wiki from your knowledge base",
+    "task": "Agent work queue",
+    "tag": "Manage document tags",
+    "trash": "Manage deleted documents",
 }
 
 
@@ -58,10 +66,6 @@ from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.serve import serve as serve_command  # noqa: E402
 from emdx.commands.stale import stale_command, touch_command  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
-from emdx.commands.tags import app as tag_app  # noqa: E402
-from emdx.commands.tasks import app as tasks_app  # noqa: E402
-from emdx.commands.trash import app as trash_app  # noqa: E402
-from emdx.commands.wiki import wiki_app  # noqa: E402
 from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
@@ -92,19 +96,8 @@ for command in core_app.registered_commands:
 for command in gist_app.registered_commands:
     app.registered_commands.append(command)
 
-# Tag commands (subcommand group: emdx tag <subcommand>)
-app.add_typer(tag_app, name="tag", help="Manage document tags")
-
-# Trash commands (subcommand group: emdx trash <subcommand>)
-app.add_typer(trash_app, name="trash", help="Manage deleted documents")
-
-# Add tasks as a subcommand group
-app.add_typer(tasks_app, name="task", help="Agent work queue")
-
-# maintain is lazy-loaded (heavy scipy/sklearn imports via clustering)
-
-# Add wiki as a top-level command group (also available under maintain for backward compat)
-app.add_typer(wiki_app, name="wiki", help="Auto-wiki from your knowledge base")
+# tag, trash, task, wiki, and maintain are lazy-loaded (see LAZY_SUBCOMMANDS):
+# their modules are heavy enough to dominate CLI startup when imported eagerly
 
 # Add db as a subcommand group
 app.add_typer(db_app, name="db", help="Database management")
@@ -143,9 +136,6 @@ def main(
     version: bool = typer.Option(False, "--version", "-V", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
-    db_url: str | None = typer.Option(
-        None, "--db-url", envvar="EMDX_DATABASE_URL", help="Database connection URL"
-    ),
 ) -> None:
     """
     emdx - A knowledge base for developers and AI agents
