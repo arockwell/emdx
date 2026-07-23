@@ -55,11 +55,6 @@ class MaintenanceReport:
             self.overall_success = False
 
     @property
-    def total_affected(self) -> int:
-        """Total items affected across all operations."""
-        return sum(r.items_affected for r in self.results)
-
-    @property
     def summary(self) -> str:
         """Human-readable summary of the maintenance run."""
         if not self.results:

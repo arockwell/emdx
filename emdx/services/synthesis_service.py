@@ -16,7 +16,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from ..config.cli_config import DEFAULT_LLM_MODEL, DEFAULT_OPUS_MODEL
 from ..database import db
+from ..utils.environment import get_subprocess_env
 
 logger = logging.getLogger(__name__)
 
@@ -58,16 +60,22 @@ def _execute_prompt(
     """
     prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_message}"
 
-    cmd = ["claude", "--print", prompt]
+    # Pass the prompt via stdin, never argv: process arguments are
+    # world-readable (ps/procfs) and can exceed ARG_MAX for large
+    # documents. `claude --print` reads the prompt from stdin when no
+    # positional prompt is given.
+    cmd = ["claude", "--print"]
     if model:
         cmd.extend(["--model", model])
 
     try:
         result = subprocess.run(
             cmd,
+            input=prompt,
             capture_output=True,
             text=True,
             timeout=SYNTHESIS_TIMEOUT,
+            env=get_subprocess_env(),
         )
         if result.returncode != 0:
             error_msg = result.stderr.strip() or f"Exit code {result.returncode}"
@@ -118,7 +126,7 @@ class DistillService:
     - Summarizing content for different audiences
     """
 
-    DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+    DEFAULT_MODEL = DEFAULT_LLM_MODEL
 
     AUDIENCE_PROMPTS = {
         Audience.ME: (
@@ -254,14 +262,14 @@ class SynthesisService:
     """AI-powered document synthesis using Claude API."""
 
     # Always use Opus for synthesis - quality critical, infrequent operation
-    DEFAULT_MODEL = "claude-opus-4-20250514"
+    DEFAULT_MODEL = DEFAULT_OPUS_MODEL
     MAX_TOKENS = 8000
 
     def __init__(self, model: str | None = None):
         """Initialize the synthesis service.
 
         Args:
-            model: Model to use (defaults to claude-opus-4)
+            model: Model to use (defaults to claude-opus-4-6)
         """
         self.model = model or self.DEFAULT_MODEL
 

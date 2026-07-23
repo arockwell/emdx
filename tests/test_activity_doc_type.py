@@ -104,7 +104,7 @@ class TestDataLoaderDocTypeFilter:
         ):
             mock_svc.list_recent_documents.return_value = docs
             loader = ActivityDataLoader()
-            items = await loader._load_documents(doc_type_filter="user")
+            items = loader._load_documents(doc_type_filter="user")
 
         assert len(items) == 1
         assert isinstance(items[0], DocumentItem)
@@ -124,7 +124,7 @@ class TestDataLoaderDocTypeFilter:
         ):
             mock_svc.list_recent_documents.return_value = docs
             loader = ActivityDataLoader()
-            items = await loader._load_documents(doc_type_filter="wiki")
+            items = loader._load_documents(doc_type_filter="wiki")
 
         assert len(items) == 1
         assert isinstance(items[0], DocumentItem)
@@ -144,7 +144,7 @@ class TestDataLoaderDocTypeFilter:
         ):
             mock_svc.list_recent_documents.return_value = docs
             loader = ActivityDataLoader()
-            items = await loader._load_documents(doc_type_filter="all")
+            items = loader._load_documents(doc_type_filter="all")
 
         assert len(items) == 2
 
@@ -159,7 +159,7 @@ class TestDataLoaderDocTypeFilter:
         ):
             mock_svc.list_recent_documents.return_value = docs
             loader = ActivityDataLoader()
-            items = await loader._load_documents(doc_type_filter="user")
+            items = loader._load_documents(doc_type_filter="user")
 
         assert len(items) == 1
         assert isinstance(items[0], DocumentItem)

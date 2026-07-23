@@ -138,25 +138,6 @@ def record_migration(conn: sqlite3.Connection, version: str) -> None:
     conn.commit()
 
 
-def get_schema_version(conn: sqlite3.Connection) -> int:
-    """Get the current schema version (legacy, deprecated).
-
-    Kept for backward compatibility with tests. New code should use
-    get_applied_migrations() instead.
-    """
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS schema_version (
-            version INTEGER PRIMARY KEY,
-            applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    """
-    )
-    cursor = conn.execute("SELECT MAX(version) FROM schema_version")
-    result = cursor.fetchone()
-    return result[0] if result[0] is not None else -1
-
-
 def migration_000_create_documents_table(conn: sqlite3.Connection) -> None:
     """Create the initial documents table and related schema."""
     cursor = conn.cursor()

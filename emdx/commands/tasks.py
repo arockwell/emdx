@@ -838,7 +838,9 @@ def list_cmd(
     status: str | None = typer.Option(None, "-s", "--status", help="Filter by status (comma-sep)"),
     all: bool = typer.Option(False, "--all", "-a", help="Include all tasks"),
     done: bool = typer.Option(False, "--done", help="Show done tasks"),
-    limit: int = typer.Option(20, "-n", "--limit"),
+    limit: int | None = typer.Option(
+        None, "-n", "--limit", help="Max tasks to show (default 20; --all shows everything)"
+    ),
     epic: TaskRef | None = typer.Option(None, "-e", "--epic", help="Epic ID (e.g. 510 or SEC-1)"),
     cat: str | None = typer.Option(None, "-c", "--cat", help="Filter by category"),
     since: str | None = typer.Option(
@@ -882,6 +884,11 @@ def list_cmd(
         status_list = ["done"]
     else:
         status_list = ["open", "active", "blocked"]
+
+    # --all means all: only cap when the user explicitly passed -n/--limit.
+    # SQLite treats LIMIT -1 as unlimited.
+    if limit is None:
+        limit = -1 if all else 20
 
     resolved_epic = _resolve_id(epic) if epic else None
     task_list = tasks.list_tasks(

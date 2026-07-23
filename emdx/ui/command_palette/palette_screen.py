@@ -5,7 +5,6 @@ Provides quick access to documents, commands, and navigation
 via keyboard-driven fuzzy search.
 """
 
-import asyncio
 import logging
 import traceback
 from typing import Any
@@ -204,7 +203,9 @@ class CommandPaletteScreen(ModalScreen):
         # Use unique render ID to avoid race conditions
         self._render_id = getattr(self, "_render_id", 0) + 1
         current_render = self._render_id
-        self.call_later(lambda: asyncio.create_task(self._render_results(state, current_render)))
+        # run_worker (not bare create_task): asyncio holds only a weak ref to
+        # tasks, so an unreferenced task can be GC'd before it renders
+        self.call_later(lambda: self.run_worker(self._render_results(state, current_render)))
 
     async def _render_results(self, state: PaletteState, render_id: int) -> None:
         """Render results to the ListView."""
@@ -249,9 +250,14 @@ class CommandPaletteScreen(ModalScreen):
         if self._debounce_timer:
             self._debounce_timer.stop()
 
-        # Debounce search (100ms)
+        # Debounce search (100ms). Exclusive worker: cancels any in-flight
+        # search so a slow older search can't clobber newer results, and keeps
+        # a strong reference (bare create_task tasks can be GC'd mid-flight).
         self._debounce_timer = self.set_timer(
-            0.1, lambda: asyncio.create_task(self.presenter.search(query))
+            0.1,
+            lambda: self.run_worker(
+                self.presenter.search(query), group="palette-search", exclusive=True
+            ),
         )
 
     def action_cursor_up(self) -> None:
