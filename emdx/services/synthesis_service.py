@@ -60,13 +60,18 @@ def _execute_prompt(
     """
     prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_message}"
 
-    cmd = ["claude", "--print", prompt]
+    # Pass the prompt via stdin, never argv: process arguments are
+    # world-readable (ps/procfs) and can exceed ARG_MAX for large
+    # documents. `claude --print` reads the prompt from stdin when no
+    # positional prompt is given.
+    cmd = ["claude", "--print"]
     if model:
         cmd.extend(["--model", model])
 
     try:
         result = subprocess.run(
             cmd,
+            input=prompt,
             capture_output=True,
             text=True,
             timeout=SYNTHESIS_TIMEOUT,
