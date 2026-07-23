@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v5
       with:
         path: .venv
-        key: venv-${{ runner.os }}-3.13-noml-${{ hashFiles('**/poetry.lock') }}
+        key: venv-${{ runner.os }}-3.13-noml-${{ hashFiles('pyproject.toml') }}
 
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
@@ -79,7 +79,7 @@ jobs:
       uses: actions/cache@v5
       with:
         path: .venv
-        key: venv-${{ runner.os }}-${{ matrix.python-version }}-noml-${{ hashFiles('**/poetry.lock') }}
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-noml-${{ hashFiles('pyproject.toml') }}
 
     - name: Install dependencies
       if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
