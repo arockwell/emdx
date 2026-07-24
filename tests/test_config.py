@@ -134,7 +134,25 @@ def test_is_dev_checkout_true_when_pyproject_at_root(
 ) -> None:
     fake_settings = _fake_checkout(tmp_path, with_pyproject=True)
     monkeypatch.setattr(settings, "__file__", str(fake_settings))
+    monkeypatch.chdir(fake_settings.parent.parent.parent)
     assert _is_dev_checkout() is True
+
+
+def test_is_dev_checkout_false_when_cwd_outside_checkout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression guard for the uv-tool-install bug: an editable install's
+    package source always lives inside the checkout (pyproject.toml
+    present), but if the caller's cwd is some unrelated project, this
+    must NOT be treated as a dev checkout — it would otherwise silently
+    redirect that unrelated project's emdx writes into the checkout's
+    throwaway dev.db."""
+    fake_settings = _fake_checkout(tmp_path, with_pyproject=True)
+    monkeypatch.setattr(settings, "__file__", str(fake_settings))
+    unrelated = tmp_path / "some-other-project"
+    unrelated.mkdir()
+    monkeypatch.chdir(unrelated)
+    assert _is_dev_checkout() is False
 
 
 def test_is_dev_checkout_false_without_pyproject(
@@ -169,10 +187,11 @@ def test_dev_checkout_returns_local_dev_db(
 ) -> None:
     fake_settings = _fake_checkout(tmp_path, with_pyproject=True)
     monkeypatch.setattr(settings, "__file__", str(fake_settings))
+    root = fake_settings.parent.parent.parent
+    monkeypatch.chdir(root)
 
     db_path = get_db_path()
 
-    root = fake_settings.parent.parent.parent
     assert db_path == root / ".emdx" / "dev.db"
     assert db_path.parent.is_dir()
     # First run announces the dev DB on stderr.
@@ -188,6 +207,7 @@ def test_dev_checkout_existing_dev_db_is_quiet(
     fake_settings = _fake_checkout(tmp_path, with_pyproject=True)
     monkeypatch.setattr(settings, "__file__", str(fake_settings))
     root = fake_settings.parent.parent.parent
+    monkeypatch.chdir(root)
     dev_db = root / ".emdx" / "dev.db"
     dev_db.parent.mkdir(parents=True)
     dev_db.touch()
@@ -244,6 +264,7 @@ def test_dev_checkout_beats_production_default(
 ) -> None:
     fake_settings = _fake_checkout(tmp_path, with_pyproject=True)
     monkeypatch.setattr(settings, "__file__", str(fake_settings))
+    monkeypatch.chdir(fake_settings.parent.parent.parent)
     db_path = get_db_path()
     assert db_path.name == "dev.db"
     assert db_path != clean_env / "knowledge.db"
@@ -258,6 +279,7 @@ def test_full_priority_chain_order(
     fake_settings = _fake_checkout(tmp_path, with_pyproject=True)
     monkeypatch.setattr(settings, "__file__", str(fake_settings))
     root = fake_settings.parent.parent.parent
+    monkeypatch.chdir(root)
 
     monkeypatch.setenv("EMDX_TEST_DB", str(test_db))
     monkeypatch.setenv("EMDX_DB", str(explicit_db))
