@@ -281,7 +281,7 @@ class TestSaveCommand:
         data = json.loads(result.stdout)
         assert data["id"] == 99
         assert data["task_id"] == 5
-        mock_update_task.assert_called_once_with(5, source_doc_id=99, status="done")
+        mock_update_task.assert_called_once_with(5, output_doc_id=99, status="done")
 
     @patch("emdx.services.link_service.auto_link_document")
     @patch("emdx.services.entity_service.entity_match_wikify")
