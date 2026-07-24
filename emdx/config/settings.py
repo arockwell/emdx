@@ -19,13 +19,25 @@ def _project_root() -> Path:
 
 
 def _is_dev_checkout() -> bool:
-    """Detect if running from an editable install (dev checkout).
+    """Detect if actually working inside the emdx dev checkout.
 
-    Checks if the emdx package source lives inside a directory with
-    pyproject.toml — i.e., running via `poetry run emdx` from the repo.
+    Requires BOTH: the package source lives under a directory with
+    pyproject.toml, AND the current working directory is inside that
+    same checkout — i.e., running `poetry run emdx` (or an editable
+    `uv tool install`) from within the repo. The pyproject.toml check
+    alone is not enough: `uv tool install --editable <checkout>` makes
+    every invocation of the globally-installed binary resolve its
+    package source to the checkout, regardless of the caller's actual
+    cwd, which silently redirected writes from unrelated projects into
+    the checkout's throwaway .emdx/dev.db instead of the shared
+    production database.
     """
     try:
-        return (_project_root() / "pyproject.toml").is_file()
+        project_root = _project_root()
+        if not (project_root / "pyproject.toml").is_file():
+            return False
+        cwd = Path.cwd().resolve()
+        return cwd == project_root or project_root in cwd.parents
     except Exception:
         return False
 
