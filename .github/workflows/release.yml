@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to tag and release (e.g. 0.33.0, no v prefix). Must match pyproject.toml.'
+        required: true
+        type: string
 
 jobs:
   release:
@@ -30,12 +36,35 @@ jobs:
         virtualenvs-create: true
         virtualenvs-in-project: true
 
+    - name: Create tag (manual dispatch)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        ver="${{ inputs.version }}"
+        pyver=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+        if [ "$ver" != "$pyver" ]; then
+          echo "::error::Requested v$ver but pyproject.toml is at $pyver — merge the version bump first"
+          exit 1
+        fi
+        if git ls-remote --exit-code origin "refs/tags/v$ver" > /dev/null 2>&1; then
+          echo "::error::Tag v$ver already exists"
+          exit 1
+        fi
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git tag "v$ver"
+        git push origin "v$ver"
+
     - name: Build package
       run: poetry build
 
-    - name: Extract version from tag
+    - name: Extract version
       id: get_version
-      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        fi
 
     - name: Extract changelog for this version
       id: changelog
@@ -61,6 +90,7 @@ jobs:
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v3
       with:
+        tag_name: v${{ steps.get_version.outputs.VERSION }}
         body_path: changelog_body.txt
         files: |
           dist/*
