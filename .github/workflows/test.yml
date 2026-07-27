@@ -24,7 +24,7 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Set up Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: "3.13"
 
@@ -37,7 +37,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: .venv
         key: venv-${{ runner.os }}-3.13-noml-${{ hashFiles('pyproject.toml') }}
@@ -63,7 +63,7 @@ jobs:
     - uses: actions/checkout@v7
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -76,7 +76,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ matrix.python-version }}-noml-${{ hashFiles('pyproject.toml') }}
