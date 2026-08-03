@@ -1554,7 +1554,8 @@ emdx task epic delete 510 --force
 
 ## 🏔️ Epic Management (`emdx task epic`)
 
-Organize tasks into epics for larger initiatives.
+Organize tasks into epics for larger initiatives. Also available as the top-level
+shortcut `emdx epic` (e.g. `emdx epic list` is the same as `emdx task epic list`).
 
 ```bash
 # Create an epic

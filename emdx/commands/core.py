@@ -436,7 +436,9 @@ def find(
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum results to return"),
     snippets: bool = typer.Option(False, "--snippets", "-s", help="Show content snippets"),
     fuzzy: bool = typer.Option(False, "--fuzzy", "-f", help="Use fuzzy search"),
-    tags: str | None = typer.Option(None, "--tags", "-t", help="Filter by tags (comma-separated)"),
+    tags: str | None = typer.Option(
+        None, "--tags", "-t", "--tag", "--tag-search", help="Filter by tags (comma-separated)"
+    ),
     any_tags: bool = typer.Option(False, "--any-tags", help="Match ANY tag instead of ALL tags"),
     no_tags: str | None = typer.Option(None, "--no-tags", help="Exclude documents with these tags"),
     ids_only: bool = typer.Option(

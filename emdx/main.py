@@ -28,6 +28,7 @@ LAZY_SUBCOMMANDS = {
     "task": "emdx.commands.tasks:app",
     "tag": "emdx.commands.tags:app",
     "trash": "emdx.commands.trash:app",
+    "epic": "emdx.commands.epics:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -41,6 +42,7 @@ LAZY_HELP = {
     "task": "Agent work queue",
     "tag": "Manage document tags",
     "trash": "Manage deleted documents",
+    "epic": "Manage task epics",
 }
 
 
@@ -49,7 +51,7 @@ LAZY_HELP = {
 register_lazy_commands(LAZY_SUBCOMMANDS, LAZY_HELP)
 
 # Register top-level command aliases (alias -> canonical name)
-register_aliases({"show": "view"})
+register_aliases({"show": "view", "list": "find", "recent": "find"})
 
 # =============================================================================
 # EAGER IMPORTS - Core KB commands (fast, always needed)

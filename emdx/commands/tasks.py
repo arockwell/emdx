@@ -18,7 +18,9 @@ from emdx.models.types import TaskRef
 from emdx.utils.lazy_group import make_alias_group
 from emdx.utils.output import console, is_non_interactive, print_json
 
-app = typer.Typer(help="Agent work queue", cls=make_alias_group({"create": "add"}))
+app = typer.Typer(
+    help="Agent work queue", cls=make_alias_group({"create": "add", "show": "view"})
+)
 app.add_typer(epics_app, name="epic", help="Manage task epics")
 app.add_typer(categories_app, name="cat", help="Manage task categories")
 
@@ -848,6 +850,9 @@ def list_cmd(
     ),
     today: bool = typer.Option(False, "--today", help="Show tasks completed today"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    search: str | None = typer.Option(None, "--search", hidden=True),
+    tag: str | None = typer.Option(None, "--tag", hidden=True),
+    project: str | None = typer.Option(None, "--project", hidden=True),
 ) -> None:
     """List tasks.
 
@@ -864,6 +869,26 @@ def list_cmd(
         emdx task list --epic 510
         emdx task list --epic SEC-1
     """
+    if search is not None:
+        console.print(
+            "[red]task list has no --search filter.[/red] "
+            "Use [cyan]emdx find[/cyan] to search document content instead."
+        )
+        raise typer.Exit(code=1)
+    if tag is not None:
+        console.print(
+            "[red]task list has no --tag filter.[/red] "
+            "Tasks aren't tagged — use [cyan]emdx find --tags ...[/cyan] for documents, "
+            "or [cyan]--cat[/cyan]/[cyan]--epic[/cyan] to filter tasks."
+        )
+        raise typer.Exit(code=1)
+    if project is not None:
+        console.print(
+            "[red]task list has no --project filter.[/red] "
+            "Use [cyan]emdx find --project ...[/cyan] for documents."
+        )
+        raise typer.Exit(code=1)
+
     since_date: str | None = None
     if today:
         since_date = date.today().isoformat()
