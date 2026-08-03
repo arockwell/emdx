@@ -274,9 +274,7 @@ class TestSaveCommand:
         mock_get_task.return_value = {"id": 5, "title": "Research task", "status": "open"}
         mock_update_task.return_value = True
 
-        result = runner.invoke(
-            app, ["save", "--file", str(f), "--task", "5", "--done", "--json"]
-        )
+        result = runner.invoke(app, ["save", "--file", str(f), "--task", "5", "--done", "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["id"] == 99
@@ -443,6 +441,36 @@ class TestFindCommand:
         result = runner.invoke(app, ["find", "--tags", "python"])
         assert result.exit_code == 0
         assert "Tagged" in _out(result)
+
+    @patch("emdx.commands.core.get_tags_for_documents")
+    @patch("emdx.commands.core.search_by_tags")
+    def test_find_by_tag_singular_alias(self, mock_search_tags, mock_get_tags):
+        """GH #1105: --tag is an alias for --tags."""
+        mock_search_tags.return_value = [
+            {
+                "id": 5,
+                "title": "Tagged",
+                "project": None,
+                "created_at": datetime(2024, 6, 1),
+                "access_count": 1,
+            }
+        ]
+        mock_get_tags.return_value = {5: ["python"]}
+
+        result = runner.invoke(app, ["find", "--tag", "python"])
+        assert result.exit_code == 0
+        mock_search_tags.assert_called_once_with(["python"], mode="all", project=None, limit=10)
+
+    @patch("emdx.commands.core.get_tags_for_documents")
+    @patch("emdx.commands.core.search_by_tags")
+    def test_find_by_tag_search_alias(self, mock_search_tags, mock_get_tags):
+        """GH #1105: --tag-search is an alias for --tags."""
+        mock_search_tags.return_value = []
+        mock_get_tags.return_value = {}
+
+        result = runner.invoke(app, ["find", "--tag-search", "python"])
+        assert result.exit_code == 0
+        mock_search_tags.assert_called_once_with(["python"], mode="all", project=None, limit=10)
 
 
 # ---------------------------------------------------------------------------
