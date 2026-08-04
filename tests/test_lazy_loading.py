@@ -287,6 +287,46 @@ class TestCLIIntegration:
         assert result.exit_code == 0
         assert "Search" in result.output or "find" in result.output.lower()
 
+    def test_list_is_an_alias_for_find(self) -> None:
+        """GH #1104: `emdx list` should resolve to `emdx find`."""
+        from emdx.main import app
+
+        result = runner.invoke(app, ["list", "--help"])
+        find_result = runner.invoke(app, ["find", "--help"])
+
+        assert result.exit_code == 0
+        # Usage line echoes the invoked name ("list" vs "find"); everything
+        # else (options, help text) comes from the same underlying command.
+        result_lines = [line for line in result.output.splitlines() if "Usage:" not in line]
+        find_lines = [line for line in find_result.output.splitlines() if "Usage:" not in line]
+        assert result_lines == find_lines
+
+    def test_recent_is_an_alias_for_find(self) -> None:
+        """GH #1104: `emdx recent` should resolve to `emdx find`."""
+        from emdx.main import app
+
+        result = runner.invoke(app, ["recent", "--help"])
+        find_result = runner.invoke(app, ["find", "--help"])
+
+        assert result.exit_code == 0
+        result_lines = [line for line in result.output.splitlines() if "Usage:" not in line]
+        find_lines = [line for line in find_result.output.splitlines() if "Usage:" not in line]
+        assert result_lines == find_lines
+
+    def test_epic_is_a_top_level_command(self) -> None:
+        """GH #1104: `emdx epic` should forward into `emdx task epic`."""
+        import importlib
+
+        import emdx.main
+
+        importlib.reload(emdx.main)
+        from emdx.main import app
+
+        result = runner.invoke(app, ["epic", "--help"])
+
+        assert result.exit_code == 0
+        assert "epic" in result.output.lower()
+
 
 class TestLazyRegistry:
     """Test the lazy command registry."""

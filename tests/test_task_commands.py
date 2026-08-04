@@ -580,6 +580,37 @@ class TestTaskList:
         assert "quite a bit" in out
 
 
+class TestTaskListUnsupportedFilters:
+    """GH #1105: --search/--tag/--project don't exist on task list; point at emdx find."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_search_flag_errors_with_find_suggestion(self, mock_tasks):
+        result = runner.invoke(app, ["list", "--search", "foo"])
+        assert result.exit_code == 1
+        out = _out(result)
+        assert "--search" in out
+        assert "emdx find" in out
+        mock_tasks.list_tasks.assert_not_called()
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_tag_flag_errors_with_find_tags_suggestion(self, mock_tasks):
+        result = runner.invoke(app, ["list", "--tag", "urgent"])
+        assert result.exit_code == 1
+        out = _out(result)
+        assert "--tag" in out
+        assert "emdx find --tags" in out
+        mock_tasks.list_tasks.assert_not_called()
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_project_flag_errors_with_find_project_suggestion(self, mock_tasks):
+        result = runner.invoke(app, ["list", "--project", "emdx"])
+        assert result.exit_code == 1
+        out = _out(result)
+        assert "--project" in out
+        assert "emdx find --project" in out
+        mock_tasks.list_tasks.assert_not_called()
+
+
 class TestTaskListDateFilters:
     """Tests for task list --since and --today date filters."""
 
@@ -760,6 +791,34 @@ class TestTaskView:
         assert "Fix auth bug" in out
         assert "open" in out
         assert "race condition" in out
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_show_is_an_alias_for_view(self, mock_tasks):
+        """GH #1104: `task show` should resolve to `task view`."""
+        mock_tasks.resolve_task_id.return_value = 42
+        mock_tasks.get_task.return_value = Task.from_row(
+            {
+                "id": 42,
+                "title": "Fix auth bug",
+                "status": "open",
+                "description": "The auth middleware has a race condition",
+                "epic_key": None,
+                "epic_seq": None,
+                "parent_task_id": None,
+                "source_doc_id": None,
+                "priority": 3,
+                "created_at": "2026-01-15",
+            }
+        )
+        mock_tasks.get_dependencies.return_value = []
+        mock_tasks.get_dependents.return_value = []
+        mock_tasks.get_task_log.return_value = []
+
+        result = runner.invoke(app, ["show", "42"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "#42" in out
+        assert "Fix auth bug" in out
 
     @patch("emdx.models.documents.get_document")
     @patch("emdx.commands.tasks.tasks")
