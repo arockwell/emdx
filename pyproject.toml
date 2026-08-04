@@ -54,7 +54,7 @@ types-pyyaml = "^6.0.12.20260408"
 
 [tool.poetry.group.wiki.dependencies]
 python-igraph = "^1.0.0"
-leidenalg = "^0.11.0"
+leidenalg = ">=0.11,<0.13"
 
 [tool.poetry.scripts]
 emdx = "emdx.main:run"
