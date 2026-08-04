@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.33.1] - 2026-08-04
+
+**Fewer guessed commands, one dev-DB fix.** Common near-misses now resolve instead of failing: `list`/`recent` alias to `find`, a top-level `emdx epic` shortcut forwards to `task epic`, and `task list --search/--tag/--project` point at the right flag instead of a bare Click error. Also fixes a dev-checkout detection bug, plus routine dependency maintenance.
+
+### Added
+
+- **CLI alias & near-miss fixes** (#1104, #1105, #1106) — `list`/`recent` alias to `find`; new top-level `emdx epic` command; `task show` aliases to `task view`; `find --tag`/`--tag-search` alias to `--tags`; `task list --search`/`--tag`/`--project` (which don't exist on that command) now print a message pointing at `emdx find --tags`/`--project` or `--cat`/`--epic` instead of Click's bare "No such option"
+
+### Fixed
+
+- **Dev-database misdetection under editable installs** — `poetry run emdx` in a worktree could silently fall through to the production database instead of the local dev DB (#1096)
+
+### Dependencies
+
+- mypy, ruff, leidenalg, datasketch, google-auth-httplib2, GitHub Actions refreshed (#1097, #1098, #1100, #1101, #1102, #1103)
+
+[0.33.1]: https://github.com/arockwell/emdx/compare/v0.33.0...v0.33.1
+
 ## [0.33.0] - 2026-07-23
 
 **Fast embeddings and a hardened core.** Embedding operations now run on fastembed's ONNX runtime — the same `all-MiniLM-L6-v2` model without importing torch — cutting cold start from 5.5s to 0.4s, so auto-link-on-save stays synchronous and instant. Around it: a wave of audit-driven fixes (security hardening, dev-DB isolation that actually works, atomic backup restore), a big dependency refresh, and a CI cache fix that makes dependency PRs testable again.
