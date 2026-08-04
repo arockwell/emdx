@@ -4,9 +4,30 @@ emdx - A knowledge base that AI agents can read, write, and search
 
 import hashlib
 import time
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
-__version__ = "0.33.1"
+import tomllib
+
+
+def _get_version() -> str:
+    """Return the installed package version, falling back to pyproject.toml.
+
+    Reading from importlib.metadata reflects what was actually installed
+    (e.g. by ``uv tool upgrade``), rather than a hardcoded string that can
+    drift from the running package. The pyproject.toml fallback covers
+    running from a source checkout without an installed distribution.
+    """
+    try:
+        return version("emdx")
+    except PackageNotFoundError:
+        pyproject = Path(__file__).parent.parent / "pyproject.toml"
+        with pyproject.open("rb") as f:
+            data = tomllib.load(f)
+        return str(data["tool"]["poetry"]["version"])
+
+
+__version__ = _get_version()
 
 
 # Generate a unique build identifier based on current timestamp and file modification times
