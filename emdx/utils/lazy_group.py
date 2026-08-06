@@ -18,6 +18,29 @@ from typing import Any
 import click
 from typer.core import TyperGroup
 
+# typer >= 0.26 vendors its own rewritten click under ``typer._click``, where
+# ``Group`` no longer exists as a separate class — ``TyperGroup`` is itself the
+# group implementation. Anything that has to live inside typer's parse tree must
+# therefore derive from ``TyperGroup`` (not ``click.Group``), and cross-hierarchy
+# ``isinstance`` checks must be duck-typed instead.
+#
+# For the same reason the ctx/formatter objects passed to the click hooks below
+# are ``click.*`` types under typer < 0.26 and ``typer._click.*`` types from 0.26
+# on, so they are annotated ``Any`` rather than pinned to one hierarchy.
+ClickContext = Any
+ClickFormatter = Any
+
+
+def _is_command(obj: Any) -> bool:
+    """True if ``obj`` is a click/typer command object."""
+    return hasattr(obj, "invoke") and hasattr(obj, "make_context")
+
+
+def _is_group(obj: Any) -> bool:
+    """True if ``obj`` is a command that dispatches subcommands."""
+    return hasattr(obj, "get_command") and hasattr(obj, "list_commands")
+
+
 # Module-level registry for command aliases
 # Maps alias name -> canonical command name
 _ALIAS_REGISTRY: dict[str, str] = {}
@@ -46,12 +69,12 @@ class _AliasFormatMixin:
 
     _aliases: dict[str, str]  # alias -> canonical
 
-    def format_commands(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+    def format_commands(self, ctx: ClickContext, formatter: ClickFormatter) -> None:
         """Override to append alias annotations to command names in help."""
         # Build reverse map: canonical -> [alias1, alias2, ...]
         reverse = _build_reverse_alias_map(self._aliases)
 
-        commands: list[tuple[str, click.Command | None]] = []
+        commands: list[tuple[str, Any]] = []
         for subcommand in self.list_commands(ctx):  # type: ignore[attr-defined]
             cmd = self.get_command(ctx, subcommand)  # type: ignore[attr-defined]
             if cmd is not None and not cmd.hidden:
@@ -93,7 +116,7 @@ class AliasGroup(_AliasFormatMixin, TyperGroup):
         super().__init__(*args, **kwargs)
         self._aliases: dict[str, str] = aliases or {}
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+    def get_command(self, ctx: ClickContext, cmd_name: str) -> Any:
         """Resolve aliases before looking up the command."""
         canonical = self._aliases.get(cmd_name, cmd_name)
         return super().get_command(ctx, canonical)
@@ -144,11 +167,15 @@ def register_lazy_commands(
     _LAZY_REGISTRY["help"] = help_strings
 
 
-class LazyCommand(click.Group):
+class LazyCommand(TyperGroup):
     """A placeholder command that loads the real command on invocation.
 
     This command appears in help listings with pre-defined help text,
     but only loads the actual module when the command is invoked.
+
+    Derives from ``TyperGroup`` rather than ``click.Group`` so the placeholder
+    stays inside typer's own command hierarchy (see the compat note at the top
+    of this module).
     """
 
     def __init__(
@@ -166,9 +193,9 @@ class LazyCommand(click.Group):
         self.help_text = help_text
         self.short_help = help_text  # For --help listings
         self.parent_group = parent_group
-        self._real_command: click.BaseCommand | None = None
+        self._real_command: Any = None
 
-    def _load_real_command(self) -> click.BaseCommand:
+    def _load_real_command(self) -> Any:
         """Load the actual command."""
         if self._real_command is not None:
             return self._real_command
@@ -186,32 +213,36 @@ class LazyCommand(click.Group):
             self._real_command = self._convert_to_click_command(cmd_object)
             return self._real_command
         except ImportError as e:
-            # Create an error command
-            import_err = str(e)
-
-            @click.command(name=self.name)
-            def error_cmd() -> None:
-                click.echo(f"Command '{self.name}' is not available: {import_err}", err=True)
-                click.echo(
-                    "This might be due to missing optional dependencies.",
-                    err=True,
-                )
-                raise SystemExit(1)
-
-            self._real_command = error_cmd
+            self._real_command = self._make_error_command(
+                f"Command '{self.name}' is not available: {e}",
+                "This might be due to missing optional dependencies.",
+            )
             return self._real_command
         except Exception as e:
-            load_err = str(e)
-
-            @click.command(name=self.name)
-            def error_cmd() -> None:
-                click.echo(f"Command '{self.name}' failed to load: {load_err}", err=True)
-                raise SystemExit(1)
-
-            self._real_command = error_cmd
+            self._real_command = self._make_error_command(
+                f"Command '{self.name}' failed to load: {e}"
+            )
             return self._real_command
 
-    def _convert_to_click_command(self, cmd_object: Any) -> click.BaseCommand:
+    def _make_error_command(self, *messages: str) -> Any:
+        """Build a stand-in command that reports a load failure and exits 1.
+
+        Built through typer rather than the ``click`` decorator so the result
+        belongs to whichever click hierarchy typer is using.
+        """
+        import typer
+        from typer.main import get_command
+
+        def error_cmd() -> None:
+            for message in messages:
+                click.echo(message, err=True)
+            raise SystemExit(1)
+
+        temp_app = typer.Typer()
+        temp_app.command(name=self.name)(error_cmd)
+        return get_command(temp_app)
+
+    def _convert_to_click_command(self, cmd_object: Any) -> Any:
         """Convert a command object to a Click command."""
         import typer
 
@@ -221,14 +252,14 @@ class LazyCommand(click.Group):
 
             # Check if it has multiple commands (use group) or single (use command)
             if len(cmd_object.registered_commands) > 1 or cmd_object.registered_groups:
-                cmd: click.BaseCommand = get_group(cmd_object)
+                cmd: Any = get_group(cmd_object)
             else:
                 cmd = get_command(cmd_object)
             cmd.name = self.name
             return cmd
 
         # Check if it's already a Click command
-        if isinstance(cmd_object, click.BaseCommand):
+        if _is_command(cmd_object):
             cmd_object.name = self.name
             return cmd_object
 
@@ -246,21 +277,21 @@ class LazyCommand(click.Group):
             f"Expected Typer app, Click command, or callable."
         )
 
-    def list_commands(self, ctx: click.Context) -> list[str]:
+    def list_commands(self, ctx: ClickContext) -> list[str]:
         """List subcommands (delegates to real command if it's a group)."""
         real_cmd = self._load_real_command()
-        if isinstance(real_cmd, click.Group):
-            return real_cmd.list_commands(ctx)
+        if _is_group(real_cmd):
+            return list(real_cmd.list_commands(ctx))
         return []
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+    def get_command(self, ctx: ClickContext, cmd_name: str) -> Any:
         """Get a subcommand (delegates to real command if it's a group)."""
         real_cmd = self._load_real_command()
-        if isinstance(real_cmd, click.Group):
+        if _is_group(real_cmd):
             return real_cmd.get_command(ctx, cmd_name)
         return None
 
-    def invoke(self, ctx: click.Context) -> Any:
+    def invoke(self, ctx: ClickContext) -> Any:
         """Invoke the command (loads the real command first)."""
         real_cmd = self._load_real_command()
         # Update the parent group's cache
@@ -271,7 +302,7 @@ class LazyCommand(click.Group):
         if (
             not ctx._protected_args
             and not ctx.args
-            and isinstance(real_cmd, click.Group)
+            and _is_group(real_cmd)
             and not real_cmd.invoke_without_command
         ):
             click.echo(real_cmd.get_help(ctx))
@@ -279,16 +310,16 @@ class LazyCommand(click.Group):
         # Delegate to the real command
         return real_cmd.invoke(ctx)
 
-    def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+    def format_help(self, ctx: ClickContext, formatter: ClickFormatter) -> None:
         """Format help text (delegates to real command for full help)."""
         real_cmd = self._load_real_command()
         real_cmd.format_help(ctx, formatter)
 
-    def get_params(self, ctx: click.Context) -> list[click.Parameter]:
+    def get_params(self, ctx: ClickContext) -> list[Any]:
         """Get parameters (loads the real command first for accurate params)."""
         real_cmd = self._load_real_command()
-        if isinstance(real_cmd, click.Command):
-            return real_cmd.get_params(ctx)
+        if hasattr(real_cmd, "get_params"):
+            return list(real_cmd.get_params(ctx))
         return list(getattr(real_cmd, "params", []))
 
     def main(self, *args: Any, **kwargs: Any) -> Any:
@@ -347,10 +378,10 @@ class LazyTyperGroup(_AliasFormatMixin, TyperGroup):
         else:
             self._aliases = _ALIAS_REGISTRY.copy()
 
-        self._loaded_commands: dict[str, click.BaseCommand] = {}
+        self._loaded_commands: dict[str, Any] = {}
         self._lazy_placeholders: dict[str, LazyCommand] = {}
 
-    def list_commands(self, ctx: click.Context) -> list[str]:
+    def list_commands(self, ctx: ClickContext) -> list[str]:
         """Return list of all commands (eager + lazy)."""
         base = super().list_commands(ctx)
         lazy = sorted(self.lazy_subcommands.keys())
@@ -358,7 +389,7 @@ class LazyTyperGroup(_AliasFormatMixin, TyperGroup):
         all_commands = base + [cmd for cmd in lazy if cmd not in base]
         return sorted(all_commands)
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+    def get_command(self, ctx: ClickContext, cmd_name: str) -> Any:
         """Get command, resolving aliases and returning a lazy placeholder if needed.
 
         For lazy commands, this returns a LazyCommand placeholder that:
@@ -371,7 +402,7 @@ class LazyTyperGroup(_AliasFormatMixin, TyperGroup):
         # Check if we've already loaded the real command
         if cmd_name in self._loaded_commands:
             loaded = self._loaded_commands[cmd_name]
-            if isinstance(loaded, click.Command):
+            if _is_command(loaded):
                 return loaded
             return None
 

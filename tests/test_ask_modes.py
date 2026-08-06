@@ -618,7 +618,7 @@ class TestResolveModeFlags:
     def test_mutual_exclusion_think_debug(self) -> None:
         """--think and --debug together should raise Exit."""
         import pytest
-        from click.exceptions import Exit
+        from typer import Exit
 
         from emdx.commands.labs_ask import _resolve_ask_mode
 
@@ -628,7 +628,7 @@ class TestResolveModeFlags:
     def test_challenge_without_think_raises(self) -> None:
         """--challenge without --think should raise Exit."""
         import pytest
-        from click.exceptions import Exit
+        from typer import Exit
 
         from emdx.commands.labs_ask import _resolve_ask_mode
 
