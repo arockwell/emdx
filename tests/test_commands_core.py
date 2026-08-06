@@ -49,7 +49,7 @@ class TestGetInputContent:
     def test_no_input_exits(self, mock_stdin):
         """No input at all raises typer.Exit."""
         import pytest
-        from click.exceptions import Exit
+        from typer import Exit
 
         mock_stdin.isatty.return_value = True
         with pytest.raises(Exit):
@@ -93,7 +93,7 @@ class TestGetInputContent:
     def test_idle_stdin_errors_instead_of_hanging(self, mock_stdin, mock_ready):
         """Open non-TTY stdin with no data errors out instead of blocking (GH #1034)."""
         import pytest
-        from click.exceptions import Exit
+        from typer import Exit
 
         mock_stdin.isatty.return_value = False
         mock_stdin.read.side_effect = AssertionError("stdin.read() must not be called")

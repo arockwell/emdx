@@ -6,7 +6,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from click.exceptions import Exit as ClickExit
+from typer import Exit as TyperExit
 
 
 @pytest.fixture(autouse=True)
@@ -165,7 +165,7 @@ class TestHistoryCommand:
     def test_history_nonexistent_doc(self) -> None:
         from emdx.commands.history import history
 
-        with pytest.raises(ClickExit):
+        with pytest.raises(TyperExit):
             history(doc_id=99999)
 
 
@@ -206,7 +206,7 @@ class TestDiffCommand:
     def test_diff_nonexistent_doc(self) -> None:
         from emdx.commands.history import diff
 
-        with pytest.raises(ClickExit):
+        with pytest.raises(TyperExit):
             diff(doc_id=99999)
 
     def test_diff_nonexistent_version(self) -> None:
@@ -216,7 +216,7 @@ class TestDiffCommand:
         doc_id = save_document("Test", "Content")
         update_document(doc_id, "Test", "Updated")
 
-        with pytest.raises(ClickExit):
+        with pytest.raises(TyperExit):
             diff(doc_id=doc_id, version=999)
 
     def test_diff_no_changes(self, capsys: pytest.CaptureFixture[str]) -> None:

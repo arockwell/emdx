@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **typer 0.26+ compatibility** — typer 0.26 vendors its own rewritten click (`typer._click`) in which `Group` no longer exists as a separate class, which broke `LazyTyperGroup`'s subcommand dispatch (`emdx task --help` failed with "No such option '--help'", `emdx trash` printed nothing, `emdx maintain --auto` skipped its sub-steps). The lazy placeholder now derives from `TyperGroup` and cross-hierarchy checks are duck-typed, so the CLI works under typer 0.24–0.27. The dependency range is widened to `>=0.24.1,<0.28.0`.
+
 ## [0.33.1] - 2026-08-04
 
 **Fewer guessed commands, one dev-DB fix.** Common near-misses now resolve instead of failing: `list`/`recent` alias to `find`, a top-level `emdx epic` shortcut forwards to `task epic`, and `task list --search/--tag/--project` point at the right flag instead of a bare Click error. Also fixes a dev-checkout detection bug, plus routine dependency maintenance.
