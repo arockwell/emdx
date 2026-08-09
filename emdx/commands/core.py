@@ -8,6 +8,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
@@ -245,6 +246,33 @@ def display_save_result(
         console.print(f"   [dim]Tags:[/dim] {format_tags(applied_tags)}")
 
 
+def spawn_postprocess(
+    doc_id: int, *, project: str | None, auto_link: bool, cross_project: bool
+) -> None:
+    """Fire off `_postprocess-doc` as a detached background process.
+
+    `start_new_session=True` puts the child in its own session so it keeps
+    running after this CLI invocation exits. Failures inside the child are
+    logged (see `postprocess_doc`), not surfaced here.
+    """
+    cmd = [sys.executable, "-m", "emdx", "_postprocess-doc", str(doc_id)]
+    if project:
+        cmd += ["--project", project]
+    if not auto_link:
+        cmd.append("--no-auto-link")
+    if cross_project:
+        cmd.append("--cross-project")
+
+    subprocess.Popen(
+        cmd,
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+    )
+
+
 @app.command()
 def save(
     input: str | None = typer.Argument(None, help="Text content to save (or pipe via stdin)"),
@@ -332,47 +360,12 @@ def save(
     # Step 6: Apply tags
     applied_tags = apply_tags(doc_id, tags)
 
-    # Step 6.5: Title-match wikification (always runs — zero cost)
-    try:
-        from emdx.services.wikify_service import title_match_wikify
-
-        wikify_result = title_match_wikify(doc_id)
-        if wikify_result.links_created > 0 and not json_output:
-            console.print(
-                f"   [dim]Wiki-linked to {wikify_result.links_created} doc(s) by title match[/dim]"
-            )
-    except Exception as e:
-        if not json_output:
-            console.print(f"   [yellow]Wikify skipped: {e}[/yellow]")
-
-    # Step 6.55: Entity extraction + entity-match wikification (zero cost)
-    try:
-        from emdx.services.entity_service import entity_match_wikify
-
-        entity_result = entity_match_wikify(doc_id)
-        if entity_result.links_created > 0 and not json_output:
-            console.print(
-                f"   [dim]Entity-linked to {entity_result.links_created}"
-                " doc(s) by shared concepts[/dim]"
-            )
-    except Exception as e:
-        if not json_output:
-            console.print(f"   [yellow]Entity wikify skipped: {e}[/yellow]")
-    # Step 6.6: Auto-link to similar documents (default on, use --no-auto-link to skip)
-    if auto_link:
-        try:
-            from emdx.services.link_service import auto_link_document
-
-            # Scope to same project unless --cross-project is set
-            scope_project = None if cross_project else final_project
-            link_result = auto_link_document(doc_id, project=scope_project)
-            if link_result.links_created > 0 and not json_output:
-                console.print(f"   [dim]Linked to {link_result.links_created} similar doc(s)[/dim]")
-        except ImportError:
-            pass  # AI extras not installed — silently skip
-        except Exception as e:
-            if not json_output:
-                console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
+    # Step 6.5: Title-wikify, entity-wikify, and auto-link run in a detached
+    # background process so `save` returns immediately regardless of KB size.
+    # See `_postprocess-doc` below; failures are logged there, not here.
+    spawn_postprocess(
+        doc_id, project=final_project, auto_link=auto_link, cross_project=cross_project
+    )
 
     # Step 6.7: Link to task if specified
     if task is not None:
@@ -425,6 +418,48 @@ def save(
             for tag, confidence in suggestions:
                 console.print(f"   • {tag} [dim]({confidence:.0%})[/dim]")
             console.print(f"\n[dim]Apply with: emdx tag {doc_id} <tags>[/dim]")
+
+
+@app.command(name="_postprocess-doc", hidden=True)
+def postprocess_doc(
+    doc_id: int = typer.Argument(...),
+    project: str | None = typer.Option(None, "--project"),
+    auto_link: bool = typer.Option(True, "--auto-link/--no-auto-link"),
+    cross_project: bool = typer.Option(False, "--cross-project"),
+) -> None:
+    """Internal command: run wikify/entity-link/auto-link for a saved doc.
+
+    Spawned in the background by `save` via `spawn_postprocess` — not meant
+    to be run directly by users.
+    """
+    from emdx.utils.logging_utils import get_logger
+
+    logger = get_logger("emdx.postprocess")
+
+    try:
+        from emdx.services.wikify_service import title_match_wikify
+
+        title_match_wikify(doc_id)
+    except Exception:
+        logger.exception("title_match_wikify failed for doc %s", doc_id)
+
+    try:
+        from emdx.services.entity_service import entity_match_wikify
+
+        entity_match_wikify(doc_id)
+    except Exception:
+        logger.exception("entity_match_wikify failed for doc %s", doc_id)
+
+    if auto_link:
+        try:
+            from emdx.services.link_service import auto_link_document
+
+            scope_project = None if cross_project else project
+            auto_link_document(doc_id, project=scope_project)
+        except ImportError:
+            pass  # AI extras not installed — silently skip
+        except Exception:
+            logger.exception("auto_link_document failed for doc %s", doc_id)
 
 
 @app.command()

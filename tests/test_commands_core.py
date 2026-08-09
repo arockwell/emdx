@@ -281,9 +281,7 @@ class TestSaveCommand:
         assert data["task_id"] == 5
         mock_update_task.assert_called_once_with(5, output_doc_id=99, status="done")
 
-    @patch("emdx.services.link_service.auto_link_document")
-    @patch("emdx.services.entity_service.entity_match_wikify")
-    @patch("emdx.services.wikify_service.title_match_wikify")
+    @patch("emdx.commands.core.subprocess.Popen")
     @patch("emdx.commands.core.apply_tags")
     @patch("emdx.commands.core.create_document")
     @patch("emdx.commands.core.detect_project")
@@ -292,39 +290,110 @@ class TestSaveCommand:
         mock_detect,
         mock_create,
         mock_tags,
-        mock_wikify,
-        mock_entity,
-        mock_autolink,
+        mock_popen,
         tmp_path,
     ):
-        """--json suppresses wiki-link/entity-link/auto-link notices.
-
-        Forces all three auto-linking side effects to report created links;
-        json.loads succeeding on the full stdout proves nothing else leaked
-        onto it.
+        """--json produces clean JSON with no wikify/entity-link/auto-link
+        notices leaking onto stdout — that post-processing now runs out of
+        process entirely (see test_save_spawns_background_postprocess), so
+        json.loads succeeding on the full stdout proves nothing else leaked.
         """
-        from emdx.services.entity_service import EntityWikifyResult
-        from emdx.services.link_service import AutoLinkResult
-        from emdx.services.wikify_service import WikifyResult
-
         f = tmp_path / "doc.md"
         f.write_text("content")
 
         mock_detect.return_value = "proj"
         mock_create.return_value = 55
         mock_tags.return_value = []
-        mock_wikify.return_value = WikifyResult(doc_id=55, links_created=2)
-        mock_entity.return_value = EntityWikifyResult(
-            doc_id=55, entities_extracted=1, links_created=1
-        )
-        mock_autolink.return_value = AutoLinkResult(
-            doc_id=55, links_created=1, linked_doc_ids=[1], scores=[0.9]
-        )
 
         result = runner.invoke(app, ["save", "--file", str(f), "--json"])
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["id"] == 55
+
+    @patch("emdx.commands.core.subprocess.Popen")
+    @patch("emdx.commands.core.apply_tags")
+    @patch("emdx.commands.core.create_document")
+    @patch("emdx.commands.core.detect_project")
+    def test_save_spawns_background_postprocess(
+        self, mock_detect, mock_create, mock_tags, mock_popen, tmp_path
+    ):
+        """`save` backgrounds wikify/entity-link/auto-link via a detached
+        `_postprocess-doc` subprocess instead of running them inline."""
+        f = tmp_path / "doc.md"
+        f.write_text("content")
+
+        mock_detect.return_value = "proj"
+        mock_create.return_value = 55
+        mock_tags.return_value = []
+
+        result = runner.invoke(app, ["save", "--file", str(f), "--json"])
+        assert result.exit_code == 0
+
+        mock_popen.assert_called_once()
+        args, kwargs = mock_popen.call_args
+        cmd = args[0]
+        assert cmd[-4:] == ["_postprocess-doc", "55", "--project", "proj"]
+        assert kwargs["start_new_session"] is True
+
+    @patch("emdx.commands.core.subprocess.Popen")
+    @patch("emdx.commands.core.apply_tags")
+    @patch("emdx.commands.core.create_document")
+    @patch("emdx.commands.core.detect_project")
+    def test_save_no_auto_link_passes_flag_to_postprocess(
+        self, mock_detect, mock_create, mock_tags, mock_popen, tmp_path
+    ):
+        """--no-auto-link is forwarded to the backgrounded postprocess command."""
+        f = tmp_path / "doc.md"
+        f.write_text("content")
+
+        mock_detect.return_value = "proj"
+        mock_create.return_value = 55
+        mock_tags.return_value = []
+
+        result = runner.invoke(app, ["save", "--file", str(f), "--json", "--no-auto-link"])
+        assert result.exit_code == 0
+
+        cmd = mock_popen.call_args[0][0]
+        assert "--no-auto-link" in cmd
+
+    @patch("emdx.services.link_service.auto_link_document")
+    @patch("emdx.services.entity_service.entity_match_wikify")
+    @patch("emdx.services.wikify_service.title_match_wikify")
+    def test_postprocess_doc_runs_all_three_steps(self, mock_wikify, mock_entity, mock_autolink):
+        """The hidden `_postprocess-doc` command — what `save` backgrounds —
+        still runs title-wikify, entity-wikify, and auto-link for the doc."""
+        result = runner.invoke(app, ["_postprocess-doc", "55", "--project", "proj"])
+        assert result.exit_code == 0
+        mock_wikify.assert_called_once_with(55)
+        mock_entity.assert_called_once_with(55)
+        mock_autolink.assert_called_once_with(55, project="proj")
+
+    @patch("emdx.services.link_service.auto_link_document")
+    @patch("emdx.services.entity_service.entity_match_wikify")
+    @patch("emdx.services.wikify_service.title_match_wikify")
+    def test_postprocess_doc_no_auto_link_skips_linking(
+        self, mock_wikify, mock_entity, mock_autolink
+    ):
+        result = runner.invoke(
+            app, ["_postprocess-doc", "55", "--project", "proj", "--no-auto-link"]
+        )
+        assert result.exit_code == 0
+        mock_wikify.assert_called_once_with(55)
+        mock_entity.assert_called_once_with(55)
+        mock_autolink.assert_not_called()
+
+    @patch("emdx.services.link_service.auto_link_document")
+    @patch("emdx.services.entity_service.entity_match_wikify")
+    @patch("emdx.services.wikify_service.title_match_wikify")
+    def test_postprocess_doc_swallows_step_failures(self, mock_wikify, mock_entity, mock_autolink):
+        """A failure in one step (e.g. wikify) must not prevent later steps
+        from running, and must not make the command exit non-zero."""
+        mock_wikify.side_effect = RuntimeError("boom")
+
+        result = runner.invoke(app, ["_postprocess-doc", "55", "--project", "proj"])
+        assert result.exit_code == 0
+        mock_entity.assert_called_once_with(55)
+        mock_autolink.assert_called_once_with(55, project="proj")
 
     def test_save_json_done_without_task_errors_as_json(self):
         """--json --done without --task reports the error as JSON, not rich text."""
