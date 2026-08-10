@@ -18,8 +18,11 @@ cd emdx
 # Install with Poetry - core only (fast, lightweight)
 poetry install
 
-# Install with all extras (AI, similarity, Google)
+# Install with all extras (e.g. wiki topic clustering)
 poetry install --all-extras
+
+# Or install just the wiki extra (python-igraph, leidenalg)
+poetry install -E wiki
 
 # Run commands with Poetry
 poetry run emdx --help

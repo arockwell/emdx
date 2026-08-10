@@ -237,12 +237,14 @@ def discover_topics(
         ClusteringResult with discovered clusters.
     """
     try:
-        import igraph as ig  # type: ignore[import-untyped]
-        import leidenalg  # type: ignore[import-untyped]
+        import igraph as ig
+        import leidenalg
     except ImportError as e:
         raise ImportError(
-            "Wiki clustering requires python-igraph and leidenalg. "
-            "Install with: poetry add python-igraph leidenalg"
+            "Wiki topic clustering requires the optional 'python-igraph' and "
+            "'leidenalg' packages, which are not installed. "
+            "Install with: pip install 'emdx[wiki]' "
+            "(or, in a dev checkout: poetry install -E wiki)"
         ) from e
 
     # 1. Build entity-document matrix

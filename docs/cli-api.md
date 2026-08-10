@@ -772,6 +772,8 @@ Auto-wiki generation from your knowledge base. Uses Leiden community detection f
 
 > **Note:** `emdx maintain wiki` still works as an alias for backward compatibility.
 
+> **Optional dependency:** topic clustering (`emdx wiki topics`, `emdx wiki setup`) requires the `wiki` extra (`python-igraph`, `leidenalg`), which is not installed by default. Install it with `pip install 'emdx[wiki]'` (or `poetry install -E wiki` in a dev checkout). Other `emdx wiki` subcommands that only read already-saved topics don't need it.
+
 ### **emdx wiki** (no subcommand)
 
 Show a compact wiki overview: topic count, articles generated, stale count, cost, and recent articles.

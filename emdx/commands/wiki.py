@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 import typer
 from rich import box
+from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -352,12 +353,17 @@ def wiki_topics(
         console=console,
     ) as progress:
         task = progress.add_task("Discovering topics...", total=None)
-        result = discover_topics(
-            resolution=resolution,
-            min_cluster_size=min_size,
-            entity_types=entity_types or None,
-            min_df=min_df,
-        )
+        try:
+            result = discover_topics(
+                resolution=resolution,
+                min_cluster_size=min_size,
+                entity_types=entity_types or None,
+                min_df=min_df,
+            )
+        except ImportError as e:
+            progress.stop()
+            console.print(f"[red]Error:[/red] {escape(str(e))}")
+            raise typer.Exit(1) from None
         progress.update(task, completed=True)
 
     if auto_label and result.clusters:
@@ -2469,9 +2475,8 @@ def wiki_setup() -> None:
             min_cluster_size=3,
             entity_types=["heading", "proper_noun"],
         )
-    except ImportError:
-        print("  Error: Wiki clustering requires python-igraph and leidenalg")
-        print("  Install with: poetry add python-igraph leidenalg")
+    except ImportError as e:
+        print(f"  Error: {e}")
         raise typer.Exit(1) from None
 
     if not result.clusters:
