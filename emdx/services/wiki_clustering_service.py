@@ -241,8 +241,9 @@ def discover_topics(
         import leidenalg  # type: ignore[import-untyped]
     except ImportError as e:
         raise ImportError(
-            "Wiki clustering requires python-igraph and leidenalg. "
-            "Install with: poetry add python-igraph leidenalg"
+            "Wiki clustering requires python-igraph and leidenalg, which are not installed. "
+            "Install with: pip install python-igraph leidenalg "
+            "(dev checkout: poetry install --with wiki)"
         ) from e
 
     # 1. Build entity-document matrix

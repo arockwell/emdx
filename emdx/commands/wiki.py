@@ -352,12 +352,17 @@ def wiki_topics(
         console=console,
     ) as progress:
         task = progress.add_task("Discovering topics...", total=None)
-        result = discover_topics(
-            resolution=resolution,
-            min_cluster_size=min_size,
-            entity_types=entity_types or None,
-            min_df=min_df,
-        )
+        try:
+            result = discover_topics(
+                resolution=resolution,
+                min_cluster_size=min_size,
+                entity_types=entity_types or None,
+                min_df=min_df,
+            )
+        except ImportError as e:
+            progress.update(task, completed=True)
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1) from None
         progress.update(task, completed=True)
 
     if auto_label and result.clusters:
@@ -2471,7 +2476,8 @@ def wiki_setup() -> None:
         )
     except ImportError:
         print("  Error: Wiki clustering requires python-igraph and leidenalg")
-        print("  Install with: poetry add python-igraph leidenalg")
+        print("  Install with: pip install python-igraph leidenalg")
+        print("  (dev checkout: poetry install --with wiki)")
         raise typer.Exit(1) from None
 
     if not result.clusters:
