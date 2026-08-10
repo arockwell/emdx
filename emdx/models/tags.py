@@ -225,7 +225,7 @@ def search_by_tags(
     tag_names: list[str],
     mode: str = "all",
     project: str | None = None,
-    limit: int = 20,
+    limit: int | None = 20,
     prefix_match: bool = True,
 ) -> list[TagSearchResultDict]:
     """Search documents by tags.
@@ -234,7 +234,7 @@ def search_by_tags(
         tag_names: List of tag names to search for
         mode: 'all' (must have all tags) or 'any' (has any of the tags)
         project: Optional project filter
-        limit: Maximum results to return
+        limit: Maximum results to return. None means no limit (returns all matches).
         prefix_match: If True, 'workflow' matches 'workflow-output' etc.
     """
     with db.get_connection() as conn:
@@ -322,8 +322,10 @@ def search_by_tags(
             query += " AND d.project = ?"
             params.append(project)
 
-        query += " GROUP BY d.id ORDER BY d.id DESC LIMIT ?"
-        params.append(limit)
+        query += " GROUP BY d.id ORDER BY d.id DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(limit)
 
         cursor = conn.execute(query, params)
 

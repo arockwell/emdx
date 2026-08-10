@@ -529,6 +529,59 @@ class TestFindCommand:
         ids_in_order = [row["id"] for row in payload]
         assert ids_in_order.index(synthesis_id) < ids_in_order.index(raw_id)
 
+    def test_find_keyword_and_tags_finds_older_tagged_match(self):
+        """GH #1118: keyword + --tags must not silently drop older matches.
+
+        Reproduces the reported bug end-to-end against a real database: a
+        document tagged "investigation" that matches the search keyword, but
+        isn't among the most recently *created* documents carrying that tag.
+        search_by_tags orders by id DESC, so a naive `limit`-bounded fetch of
+        tag candidates drops it before the keyword/tag intersection ever runs,
+        producing a false "no results" even though a real match exists.
+        """
+        from emdx.database.connection import db_connection
+        from emdx.database.documents import save_document
+        from emdx.models.tags import add_tags_to_document
+
+        with db_connection.get_connection() as conn:
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("DELETE FROM document_tags")
+            conn.execute("DELETE FROM tags")
+            conn.execute("DELETE FROM documents")
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.commit()
+
+        try:
+            # The one document that should match both the keyword and the tag.
+            target_id = save_document(
+                title="Old Investigation",
+                content="findings about the frobnicator subsystem",
+            )
+            add_tags_to_document(target_id, ["investigation"])
+
+            # More recently created documents that share the tag but not the
+            # keyword -- enough to push `target_id` past the default --limit
+            # if tag candidates were truncated before intersecting.
+            for i in range(15):
+                doc_id = save_document(title=f"Recent Doc {i}", content="unrelated content")
+                add_tags_to_document(doc_id, ["investigation"])
+
+            result = runner.invoke(
+                app, ["find", "frobnicator", "--tags", "investigation", "--mode", "keyword"]
+            )
+            out = _out(result)
+            assert result.exit_code == 0
+            assert "Old Investigation" in out
+            assert "No results" not in out
+        finally:
+            with db_connection.get_connection() as conn:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("DELETE FROM document_tags")
+                conn.execute("DELETE FROM tags")
+                conn.execute("DELETE FROM documents")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
 
 # ---------------------------------------------------------------------------
 # view command

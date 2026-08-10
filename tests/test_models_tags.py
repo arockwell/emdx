@@ -613,6 +613,34 @@ class TestSearchByTags:
         results = search_by_tags(["common"], limit=3, prefix_match=False)
         assert len(results) <= 3
 
+    def test_search_limit_none_returns_all_matches(self) -> None:
+        """GH #1118: limit=None must not truncate results.
+
+        search_by_tags orders by d.id DESC (most recently created first). Callers
+        that need to intersect the full tag-matching set with a separate keyword
+        search (e.g. `emdx find <query> -t <tag>`) must be able to get every
+        matching document, not just the most recent `limit` of them -- otherwise
+        an older, keyword-matching, correctly-tagged document is silently dropped
+        before the intersection even happens.
+        """
+        from emdx.models.tags import add_tags_to_document, search_by_tags
+
+        doc_ids = []
+        for i in range(15):
+            doc_id = _create_document(title=f"Doc {i}")
+            add_tags_to_document(doc_id, ["common"])
+            doc_ids.append(doc_id)
+
+        # Default limit (20 in this codepath, but well below 15 in other callers)
+        # would already cover 15 docs; use an explicit small limit to prove the
+        # truncation, then confirm limit=None removes it.
+        truncated = search_by_tags(["common"], limit=5, prefix_match=False)
+        assert len(truncated) == 5
+
+        unbounded = search_by_tags(["common"], limit=None, prefix_match=False)
+        result_ids = {r["id"] for r in unbounded}
+        assert result_ids == set(doc_ids)
+
     def test_search_excludes_deleted_documents(self) -> None:
         from emdx.database.connection import db_connection
         from emdx.models.tags import add_tags_to_document, search_by_tags
