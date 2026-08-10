@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 # Titles shorter than this are excluded to avoid false positives
 MIN_TITLE_LENGTH = 4
 
-# Common titles that are too generic to be useful as link targets
+# Common titles that are too generic to be useful as link targets.
+# Includes common markdown section-header words (e.g. "## Summary"), since a
+# title matching a generic header produces spurious 100%-similarity links to
+# any document that happens to use that header — see issue #1114.
 STOPWORD_TITLES = frozenset(
     {
         "notes",
@@ -45,6 +48,28 @@ STOPWORD_TITLES = frozenset(
         "info",
         "data",
         "config",
+        "summary",
+        "results",
+        "findings",
+        "overview",
+        "conclusion",
+        "background",
+        "introduction",
+        "analysis",
+        "details",
+        "context",
+        "problem",
+        "solution",
+        "approach",
+        "references",
+        "appendix",
+        "discussion",
+        "recommendations",
+        "goals",
+        "motivation",
+        "status",
+        "update",
+        "updates",
     }
 )
 
