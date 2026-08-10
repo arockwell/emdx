@@ -328,6 +328,29 @@ class TestTitleMatchWikify:
         result = title_match_wikify(5121)
         assert result.links_created == 1
 
+    def test_generic_section_header_titles_excluded(self, isolate_test_database: Any) -> None:
+        """A doc titled just 'Summary' shouldn't false-link to unrelated docs
+        that merely contain a '## Summary' markdown heading. Regression test
+        for GH #1114."""
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            _create_doc(conn, 5130, "Summary", "Some short output snippet.")
+            _create_doc(conn, 5131, "Results", "Some other short output snippet.")
+            _create_doc(
+                conn,
+                5132,
+                "Quokka Migration Writeup",
+                "# Quokka Migration Writeup\n\n"
+                "## Summary\n\nWe migrated the quokka service.\n\n"
+                "## Results\n\nEverything passed.\n",
+            )
+
+        result = title_match_wikify(5132)
+        assert result.links_created == 0
+        assert not link_exists(5132, 5130)
+        assert not link_exists(5132, 5131)
+
 
 class TestWikifyAll:
     """Test batch wikification."""
