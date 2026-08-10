@@ -100,13 +100,59 @@ def _get_documents_created(since: datetime) -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
+# Tasks have no tags column of their own (see CLAUDE.md: tasks are organized
+# by category/epic, not tags). These are the FK columns that link a task to a
+# document, used as the proxy for "does this task belong to this tag" below.
+_TASK_DOC_LINK_COLUMNS = ("gameplan_id", "source_doc_id", "output_doc_id")
+
+
+def _task_linked_doc_ids(task: dict[str, Any]) -> list[int]:
+    """Doc IDs linked to a task row, via its gameplan/source/output FKs."""
+    return [
+        doc_id for col in _TASK_DOC_LINK_COLUMNS if (doc_id := task.get(col)) is not None
+    ]
+
+
+def _strip_doc_link_columns(tasks: list[dict[str, Any]]) -> None:
+    """Drop the internal FK columns added for tag-scoping before display/JSON."""
+    for task in tasks:
+        for col in _TASK_DOC_LINK_COLUMNS:
+            task.pop(col, None)
+
+
+def _tag_matching_doc_ids(doc_ids: set[int], tag_names: list[str], match_all: bool) -> set[int]:
+    """Return the subset of doc_ids that carry the given tags.
+
+    match_all=True requires every tag (AND semantics); False requires any
+    one of them (OR semantics) — mirrors `emdx find --tags`/`--any-tags`.
+    """
+    if not doc_ids or not tag_names:
+        return set()
+    with db.get_connection() as conn:
+        id_placeholders = ",".join("?" * len(doc_ids))
+        tag_placeholders = ",".join("?" * len(tag_names))
+        cursor = conn.execute(
+            f"""
+            SELECT dt.document_id, COUNT(DISTINCT t.name) as match_count
+            FROM document_tags dt
+            JOIN tags t ON dt.tag_id = t.id
+            WHERE dt.document_id IN ({id_placeholders})
+              AND t.name IN ({tag_placeholders})
+            GROUP BY dt.document_id
+            """,
+            (*doc_ids, *tag_names),
+        )
+        required = len(tag_names) if match_all else 1
+        return {row[0] for row in cursor.fetchall() if row[1] >= required}
+
+
 def _get_tasks_completed(since: datetime) -> list[dict[str, Any]]:
     """Get tasks completed since the given datetime."""
     since_str = since.isoformat()
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
-            SELECT id, title, completed_at, project
+            SELECT id, title, completed_at, project, gameplan_id, source_doc_id, output_doc_id
             FROM tasks
             WHERE status = 'done' AND completed_at >= ?
             ORDER BY completed_at DESC
@@ -122,7 +168,8 @@ def _get_tasks_added(since: datetime) -> list[dict[str, Any]]:
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
-            SELECT id, title, status, priority, created_at, project
+            SELECT id, title, status, priority, created_at, project,
+                   gameplan_id, source_doc_id, output_doc_id
             FROM tasks
             WHERE created_at >= ?
             ORDER BY created_at DESC
@@ -138,7 +185,7 @@ def _get_tasks_blocked(since: datetime) -> list[dict[str, Any]]:
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
-            SELECT id, title, updated_at, project
+            SELECT id, title, updated_at, project, gameplan_id, source_doc_id, output_doc_id
             FROM tasks
             WHERE status = 'blocked' AND updated_at >= ?
             ORDER BY updated_at DESC
@@ -177,10 +224,13 @@ def _display_human_briefing(
     tasks_completed: list[dict[str, Any]],
     tasks_added: list[dict[str, Any]],
     blockers: list[dict[str, Any]],
+    tags: list[str] | None = None,
 ) -> None:
     """Display briefing in human-readable format using Rich."""
     # Header with time range
     time_range = f"Since {since.strftime('%Y-%m-%d %H:%M')}"
+    if tags:
+        time_range += f" · tags: {', '.join(tags)}"
     console.print(Panel(f"[bold]📊 EMDX Briefing[/bold]\n{time_range}", expand=False))
     console.print()
 
@@ -210,14 +260,14 @@ def _display_human_briefing(
         table.add_column("When", style="green")
 
         for doc in documents[:10]:  # Limit to 10 for readability
-            tags = doc.get("tags") or ""
+            doc_tags_str = doc.get("tags") or ""
             project = doc.get("project") or ""
             when = _format_relative_time(doc.get("created_at"))
             table.add_row(
                 str(doc["id"]),
                 (doc["title"][:40] + "...") if len(doc["title"]) > 40 else doc["title"],
                 project[:15] if project else "",
-                tags[:20] if tags else "",
+                doc_tags_str[:20] if doc_tags_str else "",
                 when,
             )
 
@@ -310,16 +360,18 @@ def _build_json_output(
     tasks_completed: list[dict[str, Any]],
     tasks_added: list[dict[str, Any]],
     blockers: list[dict[str, Any]],
+    tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build JSON output for --json flag."""
     # Convert comma-joined tag strings to arrays for JSON output
     for doc in documents:
-        tags = doc.get("tags")
-        doc["tags"] = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        doc_tags = doc.get("tags")
+        doc["tags"] = [t.strip() for t in doc_tags.split(",") if t.strip()] if doc_tags else []
 
     return {
         "since": since.isoformat(),
         "generated_at": datetime.now().isoformat(),
+        "tags_filter": tags,
         "summary": {
             "documents_created": len(documents),
             "tasks_completed": len(tasks_completed),
@@ -365,11 +417,25 @@ def briefing(
         "-m",
         help="Model for --save synthesis",
     ),
+    tags: str | None = typer.Option(
+        None,
+        "--tags",
+        "-t",
+        help="Scope the briefing to this tag (comma-separated for multiple)",
+    ),
+    any_tags: bool = typer.Option(
+        False,
+        "--any-tags",
+        help="With --tags, match ANY of the tags instead of ALL of them",
+    ),
 ) -> None:
     """
     Show what happened in recent emdx activity.
 
-    By default shows activity from the last 24 hours.
+    By default shows activity from the last 24 hours across the whole KB.
+    Use --tags to scope to a specific area instead of the whole KB — tasks
+    don't carry tags directly, so a task is included when its linked
+    gameplan/source/output document carries the tag.
     Use --save to generate an AI-synthesized session summary and persist it.
 
     Examples:
@@ -377,16 +443,22 @@ def briefing(
         emdx briefing --since '2 days ago'
         emdx briefing --since 2026-02-14
         emdx briefing --json
+        emdx briefing --tags sentry-investigation --since '30 days ago'
+        emdx briefing --tags investigation,security  # docs with BOTH tags
+        emdx briefing --tags investigation,security --any-tags  # EITHER tag
         emdx briefing --save                   # AI summary of last 4 hours
         emdx briefing --save --hours 8          # AI summary of last 8 hours
+        emdx briefing --save --tags sentry-investigation  # scoped AI summary
     """
     # If a subcommand was invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
         return
 
+    tag_list = [t.strip().lower() for t in tags.split(",") if t.strip()] if tags else []
+
     # Handle --save: AI-synthesized session summary (replaces old `wrapup` command)
     if save:
-        _briefing_save(hours=hours, model=model)
+        _briefing_save(hours=hours, model=model, tags=tag_list, any_tags=any_tags)
         return
 
     # Parse since argument (default to 24 hours ago)
@@ -401,15 +473,48 @@ def briefing(
     tasks_added = _get_tasks_added(since_dt)
     blockers = _get_tasks_blocked(since_dt)
 
+    if tag_list:
+        candidate_doc_ids = {doc["id"] for doc in documents}
+        for task in (*tasks_completed, *tasks_added, *blockers):
+            candidate_doc_ids.update(_task_linked_doc_ids(task))
+
+        matched_doc_ids = _tag_matching_doc_ids(
+            candidate_doc_ids, tag_list, match_all=not any_tags
+        )
+
+        documents = [doc for doc in documents if doc["id"] in matched_doc_ids]
+        tasks_completed = [
+            t for t in tasks_completed if matched_doc_ids.intersection(_task_linked_doc_ids(t))
+        ]
+        tasks_added = [
+            t for t in tasks_added if matched_doc_ids.intersection(_task_linked_doc_ids(t))
+        ]
+        blockers = [
+            t for t in blockers if matched_doc_ids.intersection(_task_linked_doc_ids(t))
+        ]
+
+    _strip_doc_link_columns(tasks_completed)
+    _strip_doc_link_columns(tasks_added)
+    _strip_doc_link_columns(blockers)
+
     # Output
     if json_output:
-        output = _build_json_output(since_dt, documents, tasks_completed, tasks_added, blockers)
+        output = _build_json_output(
+            since_dt, documents, tasks_completed, tasks_added, blockers, tags=tag_list or None
+        )
         print(json.dumps(output, indent=2, default=str))
     else:
-        _display_human_briefing(since_dt, documents, tasks_completed, tasks_added, blockers)
+        _display_human_briefing(
+            since_dt, documents, tasks_completed, tasks_added, blockers, tags=tag_list or None
+        )
 
 
-def _briefing_save(hours: int, model: str | None) -> None:
+def _briefing_save(
+    hours: int,
+    model: str | None,
+    tags: list[str] | None = None,
+    any_tags: bool = False,
+) -> None:
     """Generate AI summary of recent activity and save to KB."""
     import sys
 
@@ -420,15 +525,37 @@ def _briefing_save(hours: int, model: str | None) -> None:
     tasks = get_tasks_in_window(hours)
     docs = get_docs_in_window(hours)
 
+    if tags:
+        candidate_doc_ids = {d.id for d in docs}
+        for task in tasks:
+            candidate_doc_ids.update(
+                doc_id
+                for doc_id in (task.gameplan_id, task.source_doc_id, task.output_doc_id)
+                if doc_id is not None
+            )
+        matched_doc_ids = _tag_matching_doc_ids(candidate_doc_ids, tags, match_all=not any_tags)
+        docs = [d for d in docs if d.id in matched_doc_ids]
+        tasks = [
+            t
+            for t in tasks
+            if matched_doc_ids.intersection(
+                doc_id
+                for doc_id in (t.gameplan_id, t.source_doc_id, t.output_doc_id)
+                if doc_id is not None
+            )
+        ]
+
     total_items = len(tasks) + len(docs)
     if total_items == 0:
-        print(f"No activity in the last {hours} hours.")
+        scope = f" matching tags '{', '.join(tags)}'" if tags else ""
+        print(f"No activity{scope} in the last {hours} hours.")
         return
 
     # Build synthesis prompt
+    scope_note = f" scoped to tag(s): {', '.join(tags)}" if tags else ""
     sections = []
     sections.append(
-        f"Generate a concise session summary for the last {hours} hours.\n"
+        f"Generate a concise session summary for the last {hours} hours{scope_note}.\n"
         "Focus on: what was accomplished, what's in progress, and what needs attention."
     )
 
@@ -462,7 +589,8 @@ def _briefing_save(hours: int, model: str | None) -> None:
     )
 
     prompt = "\n\n".join(sections)
-    title = f"Session Summary ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    title_suffix = f" [{', '.join(tags)}]" if tags else ""
+    title = f"Session Summary{title_suffix} ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
 
     sys.stderr.write(f"briefing: synthesizing {total_items} items...\n")
 
@@ -479,8 +607,10 @@ def _briefing_save(hours: int, model: str | None) -> None:
         )
         if result.success and result.output_content:
             print(result.output_content)
-            tags = ["session-summary", "active"]
-            doc_id = save_document(title=title, content=result.output_content, tags=tags)
+            saved_doc_tags = ["session-summary", "active", *(tags or [])]
+            doc_id = save_document(
+                title=title, content=result.output_content, tags=saved_doc_tags
+            )
             sys.stderr.write(f"briefing: saved as doc #{doc_id}\n")
         else:
             sys.stderr.write("briefing: synthesis failed\n")

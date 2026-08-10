@@ -1708,11 +1708,23 @@ emdx briefing --since yesterday
 # Output as JSON for agent consumption
 emdx briefing --json
 
+# Scope to a tag (or comma-separated tags) instead of the whole KB
+emdx briefing --tags sentry-investigation --since "30 days ago"
+emdx briefing --tags investigation,security          # docs with BOTH tags
+emdx briefing --tags investigation,security --any-tags  # docs with EITHER tag
+
 # Generate session wrapup and save to KB (replaces old `emdx wrapup`)
 emdx briefing --save
 emdx briefing --save --hours 8
 emdx briefing --save --model sonnet
+emdx briefing --save --tags sentry-investigation      # synthesis scoped to the tag
 ```
+
+`--tags` filters `documents_created` directly by tag. Tasks don't carry tags
+of their own (they're organized by category/epic — see Task Management below),
+so a task is included when its linked gameplan/source/output document carries
+the tag. `--any-tags` switches multi-tag matching from AND (default) to OR,
+matching the convention of `emdx find --tags`/`--any-tags`.
 
 ---
 
