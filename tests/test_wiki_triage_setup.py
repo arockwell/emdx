@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Generator
 from unittest.mock import MagicMock, patch
@@ -13,6 +14,13 @@ from emdx.database import db
 from emdx.main import app
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
+
+def _strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from Rich console output for plain-text assertions."""
+    return _ANSI_RE.sub("", text)
 
 
 def _setup_wiki_topic(
@@ -200,6 +208,22 @@ class TestWikiTopicsAutoLabel:
         result = runner.invoke(app, ["labs", "wiki", "topics"])
         assert result.exit_code == 0
 
+    @patch("emdx.services.wiki_clustering_service.discover_topics")
+    def test_missing_clustering_deps_gives_clear_error(self, mock_discover: MagicMock) -> None:
+        """Issue #1120: missing igraph/leidenalg should not crash with a raw traceback."""
+        mock_discover.side_effect = ImportError(
+            "Wiki topic clustering requires the optional 'python-igraph' and "
+            "'leidenalg' packages, which are not installed. "
+            "Install with: pip install 'emdx[wiki]' "
+            "(or, in a dev checkout: poetry install -E wiki)"
+        )
+
+        result = runner.invoke(app, ["labs", "wiki", "topics"])
+        assert result.exit_code == 1
+        output = _strip_ansi(result.output)
+        assert "pip install" in output
+        assert "emdx[wiki]" in output
+
 
 # ── Auto-label service tests ─────────────────────────────────────
 
@@ -373,3 +397,31 @@ class TestWikiSetup:
         result = runner.invoke(app, ["labs", "wiki", "setup"])
         assert result.exit_code == 0
         assert "No topic clusters found" in result.output
+
+    @patch("emdx.services.wiki_clustering_service.discover_topics")
+    @patch("emdx.services.entity_service.entity_wikify_all")
+    @patch("emdx.services.embedding_service.EmbeddingService")
+    def test_setup_missing_clustering_deps_gives_clear_error(
+        self,
+        mock_embed_cls: MagicMock,
+        mock_entities: MagicMock,
+        mock_discover: MagicMock,
+    ) -> None:
+        """Issue #1120: missing igraph/leidenalg should not crash with a raw traceback."""
+        mock_service = MagicMock()
+        mock_service.stats.return_value = MagicMock(
+            indexed_documents=10, total_documents=10, indexed_chunks=5
+        )
+        mock_embed_cls.return_value = mock_service
+        mock_entities.return_value = (50, 10, 10)
+        mock_discover.side_effect = ImportError(
+            "Wiki topic clustering requires the optional 'python-igraph' and "
+            "'leidenalg' packages, which are not installed. "
+            "Install with: pip install 'emdx[wiki]' "
+            "(or, in a dev checkout: poetry install -E wiki)"
+        )
+
+        result = runner.invoke(app, ["labs", "wiki", "setup"])
+        assert result.exit_code == 1
+        assert "pip install" in result.output
+        assert "emdx[wiki]" in result.output
