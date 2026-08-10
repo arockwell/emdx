@@ -933,6 +933,42 @@ def _find_context(
     print(f"Retrieved {len(docs)} docs via {method} search", file=sys.stderr)
 
 
+def _apply_manual_link_boost_to_dicts(results: list[dict[str, Any]]) -> None:
+    """Re-rank plain search-result dicts using the manual-link boost (#1115).
+
+    Mirrors ``hybrid_search.apply_manual_link_boost`` but operates on the
+    dict-shaped results produced by the legacy ``search_documents()`` path
+    (``_find_keyword_search``), so its output fields stay unchanged — only
+    the ordering shifts.
+    """
+    from ..services.hybrid_search import (
+        MANUAL_LINK_BOOST_CAP,
+        MANUAL_LINK_BOOST_PER_LINK,
+        get_manual_link_counts,
+        normalize_fts5_score,
+    )
+
+    doc_ids = [r["id"] for r in results if "id" in r]
+    counts = get_manual_link_counts(doc_ids)
+    if not counts:
+        return
+
+    def _boosted_relevance(result: dict[str, Any]) -> float:
+        if "rank" in result:
+            base = normalize_fts5_score(result["rank"])
+        elif "score" in result:
+            base = result["score"]
+        else:
+            base = 0.0
+        count = counts.get(result["id"], 0)
+        if count and base > 0:
+            boost = min(MANUAL_LINK_BOOST_CAP, MANUAL_LINK_BOOST_PER_LINK * count)
+            base = min(1.0, base * (1.0 + boost))
+        return base
+
+    results.sort(key=_boosted_relevance, reverse=True)
+
+
 def _find_keyword_search(
     search_query: str,
     project: str | None,
@@ -1060,6 +1096,13 @@ def _find_keyword_search(
                     f"{', '.join(no_tag_list)}[/yellow]"
                 )
                 return
+
+    # Boost manually-linked documents (#1115). Only meaningful when we have
+    # real text relevance (a search_query) to boost against — tag-only
+    # listings have no relevance score. Re-ranks in place without touching
+    # displayed fields, so --json/plain output shape is unchanged.
+    if search_query and results:
+        _apply_manual_link_boost_to_dicts(results)
 
     # Handle different output formats
     if ids_only:

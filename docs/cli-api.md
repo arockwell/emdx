@@ -51,6 +51,8 @@ emdx save --file notes.md --auto-link
 ### **emdx find**
 Search documents with hybrid (default when index exists), keyword, or semantic search. Also supports listing, similar-doc lookup, RAG Q&A, and context retrieval.
 
+**Manual-link ranking boost:** Documents with incoming *manual* links (created via `emdx maintain link --to`, see below) rank higher than equally text-relevant documents without one. This applies consistently across `keyword`, `semantic`, and `hybrid` modes. Manual links are a deliberate human signal — stronger than the automatic similarity/title/entity links `emdx save` and `emdx maintain link` create on their own — so a document another document was explicitly linked to is more likely to be the answer a search is looking for than one that merely shares vocabulary with the query. The boost is capped and multiplicative: it re-ranks documents that already have text relevance, it never surfaces a document with zero relevance.
+
 ```bash
 # Full-text search (keyword mode)
 emdx find "docker compose"
@@ -737,7 +739,7 @@ backends requires one `emdx maintain index` to rebuild (old vectors are
 ignored, not corrupted).
 
 #### **emdx maintain link**
-Create semantic links between related documents (moved from `emdx ai link`).
+Create semantic links between related documents (moved from `emdx ai link`). Also supports manually curating a link between two specific documents.
 
 ```bash
 # Create links for a specific document
@@ -748,12 +750,19 @@ emdx maintain link --all
 
 # Adjust similarity threshold and max links
 emdx maintain link 42 --threshold 0.6 --max 3
+
+# Manually link two specific documents you know are related, bypassing
+# similarity search. Manual links get a ranking boost in `emdx find`
+# (see the Manual-link ranking boost note above). Upgrades an existing
+# automatic link between the pair to manual if one already exists.
+emdx maintain link 42 --to 57
 ```
 
 **Options:**
 - `--all` - Backfill links for all indexed documents
 - `--threshold, -t FLOAT` - Minimum similarity (0-1, default: 0.5)
 - `--max, -m INTEGER` - Maximum links per document (default: 5)
+- `--to INTEGER` - Manually link `doc_id` to this specific document ID instead of discovering similar ones automatically (mutually exclusive with `--all`)
 
 #### **emdx maintain unlink**
 Remove a link between two documents (moved from `emdx ai unlink`).

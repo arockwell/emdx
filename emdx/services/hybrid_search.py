@@ -103,6 +103,13 @@ class HybridSearchResult:
 # Higher k reduces the impact of high rankings from a single list.
 RRF_K = 60
 
+# Ranking boost for documents with manual (deliberately curated, via
+# `emdx maintain link --to`) links, as opposed to automatic similarity/
+# title/entity links. A modest multiplicative boost per manual link, capped
+# so it can't outweigh text relevance — see #1115.
+MANUAL_LINK_BOOST_PER_LINK = 0.1
+MANUAL_LINK_BOOST_CAP = 0.3
+
 
 # ── Free functions ───────────────────────────────────────────────────
 
@@ -170,6 +177,61 @@ def rrf_score(
     if semantic_rank is not None:
         score += 1.0 / (k + semantic_rank)
     return score
+
+
+def get_manual_link_counts(doc_ids: list[int]) -> dict[int, int]:
+    """Count manual links per document, either direction.
+
+    Manual links (``link_type = 'manual'``, created via
+    ``emdx maintain link --to``) are deliberate, human-curated connections,
+    as opposed to automatic similarity/title/entity links. Links are treated
+    as bidirectional here, consistent with how they're displayed elsewhere
+    (``emdx view --links``, ``document_links.get_linked_doc_ids``).
+    """
+    if not doc_ids:
+        return {}
+    with db.get_connection() as conn:
+        placeholders = ",".join("?" * len(doc_ids))
+        cursor = conn.execute(
+            f"""
+            SELECT doc_id, COUNT(*) FROM (
+                SELECT source_doc_id AS doc_id FROM document_links
+                WHERE link_type = 'manual' AND source_doc_id IN ({placeholders})
+                UNION ALL
+                SELECT target_doc_id AS doc_id FROM document_links
+                WHERE link_type = 'manual' AND target_doc_id IN ({placeholders})
+            )
+            GROUP BY doc_id
+            """,
+            [*doc_ids, *doc_ids],
+        )
+        return {row[0]: row[1] for row in cursor.fetchall()}
+
+
+def apply_manual_link_boost(results: list[HybridSearchResult]) -> None:
+    """Boost the score of results with manual (curated) links, in place.
+
+    A document another document was deliberately linked to is more likely
+    to be the "answer" a search is looking for than one that merely shares
+    vocabulary with the query (see #1115). Documents with zero relevance
+    are never boosted — this re-ranks candidates that are already relevant,
+    it doesn't surface irrelevant ones. Re-sorts `results` by score after
+    boosting.
+    """
+    if not results:
+        return
+
+    counts = get_manual_link_counts([r.doc_id for r in results])
+    if not counts:
+        return
+
+    for r in results:
+        count = counts.get(r.doc_id, 0)
+        if count and r.score > 0:
+            boost = min(MANUAL_LINK_BOOST_CAP, MANUAL_LINK_BOOST_PER_LINK * count)
+            r.score = min(1.0, r.score * (1.0 + boost))
+
+    results.sort(key=lambda r: r.score, reverse=True)
 
 
 # ── Service ──────────────────────────────────────────────────────────
@@ -692,6 +754,8 @@ class HybridSearchService:
         for r in results:
             r.score = r.keyword_score
 
+        apply_manual_link_boost(results)
+
         # Fetch tags
         self._populate_tags(results)
         return results
@@ -742,6 +806,8 @@ class HybridSearchService:
                     snippet=match.snippet,
                 )
             )
+
+        apply_manual_link_boost(results)
 
         self._populate_tags(results)
         self._populate_doc_types(results)
@@ -813,8 +879,8 @@ class HybridSearchService:
                 )
             )
 
-            if len(results) >= limit:
-                break
+        apply_manual_link_boost(results)
+        results = results[:limit]
 
         self._populate_tags(results)
         self._populate_doc_types(results)
@@ -901,7 +967,7 @@ class HybridSearchService:
                 )
             )
 
-        merged.sort(key=lambda r: r.score, reverse=True)
+        apply_manual_link_boost(merged)
 
         if merged:
             max_rrf = merged[0].score

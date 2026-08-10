@@ -273,6 +273,7 @@ emdx status --mirror                   # Reflective KB summary (narrative)
 # Maintenance (stable)
 emdx maintain index                    # Build/update embedding index
 emdx maintain link --all               # Auto-link related documents
+emdx maintain link 42 --to 57          # Manually curate a link (ranks higher in `find`)
 # Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
 # Configure via `maintain.auto_link_on_save` setting.
 emdx maintain backup                   # Create compressed daily backup
