@@ -124,6 +124,24 @@ def link_exists(source_doc_id: int, target_doc_id: int) -> bool:
         return cursor.fetchone() is not None
 
 
+def set_link_manual(source_doc_id: int, target_doc_id: int) -> bool:
+    """Promote an existing link (either direction) to a manual link.
+
+    Used when a human explicitly links two documents that already have an
+    automatic (similarity/title/entity) link between them — the deliberate
+    signal should take precedence. Returns True if a link was updated.
+    """
+    with db_connection.get_connection() as conn:
+        cursor = conn.execute(
+            "UPDATE document_links SET link_type = 'manual', similarity_score = 1.0 "
+            "WHERE (source_doc_id = ? AND target_doc_id = ?) "
+            "OR (source_doc_id = ? AND target_doc_id = ?)",
+            (source_doc_id, target_doc_id, target_doc_id, source_doc_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def get_link_count(doc_id: int) -> int:
     """Get the number of links for a document."""
     with db_connection.get_connection() as conn:

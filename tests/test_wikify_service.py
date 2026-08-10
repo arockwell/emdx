@@ -152,6 +152,28 @@ class TestTitleMatchWikify:
         result = title_match_wikify(5031)
         assert result.links_created == 0
 
+    def test_skips_generic_section_header_titles(self, isolate_test_database: Any) -> None:
+        """Regression test for #1114: a doc titled "Summary" (a common markdown
+        section header) shouldn't get spuriously linked from every document that
+        happens to contain a "## Summary" or "## Results" header in its body.
+        """
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            _create_doc(conn, 5032, "Summary", "A short summary snippet.")
+            _create_doc(conn, 5033, "Results", "Some results snippet.")
+            _create_doc(
+                conn,
+                5034,
+                "My Real Document Title",
+                "## Summary\n\nSome content here.\n\n## Results\n\nMore content.",
+            )
+
+        result = title_match_wikify(5034)
+        assert result.links_created == 0
+        assert 5032 not in result.linked_doc_ids
+        assert 5033 not in result.linked_doc_ids
+
     def test_skips_already_linked(self, isolate_test_database: Any) -> None:
         from emdx.database import db
         from emdx.database.document_links import create_link

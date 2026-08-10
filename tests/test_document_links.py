@@ -6,6 +6,7 @@ import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 
 from emdx.database.document_links import (
     create_link,
@@ -354,3 +355,93 @@ class TestLinkService:
 
         assert result.links_created == 0
         mock_links.create_links_batch.assert_not_called()
+
+
+class TestCreateManualLink:
+    """Test the `emdx maintain link --to` manual-link CLI helper (#1115)."""
+
+    def _make_docs(self, conn, titles):
+        """Insert docs with auto-assigned IDs (session DB is shared across tests)."""
+        ids = []
+        for title in titles:
+            cursor = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                (title, f"Content for {title}"),
+            )
+            ids.append(cursor.lastrowid)
+        conn.commit()
+        return ids
+
+    def test_creates_manual_link(self, isolate_test_database):
+        from emdx.commands.maintain_index import _create_manual_link
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            source_id, target_id = self._make_docs(conn, ["Raw Research", "Synthesis"])
+
+        _create_manual_link(source_id, target_id)
+
+        assert link_exists(source_id, target_id)
+        links = get_links_for_document(target_id)
+        manual_links = [lnk for lnk in links if lnk["link_type"] == "manual"]
+        assert len(manual_links) == 1
+        assert manual_links[0]["similarity_score"] == pytest.approx(1.0)
+
+    def test_rejects_self_link(self, isolate_test_database):
+        from emdx.commands.maintain_index import _create_manual_link
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            (doc_id,) = self._make_docs(conn, ["Solo Doc"])
+
+        with pytest.raises(typer.Exit):
+            _create_manual_link(doc_id, doc_id)
+
+        assert not link_exists(doc_id, doc_id)
+
+    def test_rejects_missing_document(self, isolate_test_database):
+        from emdx.commands.maintain_index import _create_manual_link
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            (doc_id,) = self._make_docs(conn, ["Exists"])
+
+        nonexistent_id = 10**9
+        with pytest.raises(typer.Exit):
+            _create_manual_link(doc_id, nonexistent_id)
+
+        assert not link_exists(doc_id, nonexistent_id)
+
+    def test_idempotent_on_existing_link(self, isolate_test_database):
+        from emdx.commands.maintain_index import _create_manual_link
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            doc_a, doc_b = self._make_docs(conn, ["Doc A", "Doc B"])
+
+        _create_manual_link(doc_a, doc_b)
+        # Second call should not raise and should not create a duplicate link
+        _create_manual_link(doc_a, doc_b)
+
+        assert get_link_count(doc_a) == 1
+
+    def test_upgrades_existing_automatic_link_to_manual(self, isolate_test_database):
+        """An existing auto/title_match/entity_match link should be promoted,
+        not silently left as-is, when a human deliberately links the same pair.
+        """
+        from emdx.commands.maintain_index import _create_manual_link
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        with db.get_connection() as conn:
+            doc_a, doc_b = self._make_docs(conn, ["Doc A", "Doc B"])
+
+        create_link(doc_a, doc_b, similarity_score=0.6, method="title_match")
+
+        _create_manual_link(doc_a, doc_b)
+
+        assert get_link_count(doc_a) == 1
+        links = get_links_for_document(doc_a)
+        assert len(links) == 1
+        assert links[0]["link_type"] == "manual"
+        assert links[0]["similarity_score"] == pytest.approx(1.0)

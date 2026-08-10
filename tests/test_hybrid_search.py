@@ -2,11 +2,17 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from emdx.services.hybrid_search import (
+    MANUAL_LINK_BOOST_CAP,
+    MANUAL_LINK_BOOST_PER_LINK,
     RRF_K,
     HybridSearchResult,
     HybridSearchService,
     SearchMode,
+    apply_manual_link_boost,
+    get_manual_link_counts,
     normalize_fts5_score,
     normalize_fts5_scores_minmax,
     rrf_score,
@@ -339,3 +345,200 @@ class TestHybridMerging:
         # Rank 20 in both: 2/80 = 0.025
         # Both at rank 20 still wins because of two contributions
         assert rank20_both > rank1_one_list
+
+
+class TestGetManualLinkCounts:
+    """Tests for get_manual_link_counts (#1115)."""
+
+    def _insert_docs(self, conn, titles):
+        """Insert docs with auto-assigned IDs (session DB is shared across tests)."""
+        ids = []
+        for title in titles:
+            cursor = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                (title, f"Content for {title}"),
+            )
+            ids.append(cursor.lastrowid)
+        return ids
+
+    def test_empty_doc_ids_returns_empty(self, isolate_test_database):
+        assert get_manual_link_counts([]) == {}
+
+    def test_no_links_returns_empty(self, isolate_test_database):
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            (doc_id,) = self._insert_docs(conn, ["Lonely Doc"])
+            conn.commit()
+
+        assert get_manual_link_counts([doc_id]) == {}
+
+    def test_counts_manual_links_only(self, isolate_test_database):
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        with db.get_connection() as conn:
+            synthesis, raw_a, raw_b, auto_target = self._insert_docs(
+                conn, ["Synthesis Doc", "Raw Doc A", "Raw Doc B", "Auto-linked Doc"]
+            )
+            conn.commit()
+
+        create_link(raw_a, synthesis, similarity_score=1.0, method="manual")
+        create_link(raw_b, synthesis, similarity_score=1.0, method="manual")
+        # An automatic link to a third doc should not count toward the boost
+        create_link(synthesis, auto_target, similarity_score=0.9, method="auto")
+
+        counts = get_manual_link_counts([synthesis, raw_a, raw_b, auto_target])
+        assert counts[synthesis] == 2
+        assert counts.get(auto_target, 0) == 0
+
+    def test_counts_both_directions(self, isolate_test_database):
+        """A manual link counts for a doc whether it's the source or target."""
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        with db.get_connection() as conn:
+            doc_a, doc_b = self._insert_docs(conn, ["Doc A", "Doc B"])
+            conn.commit()
+
+        create_link(doc_a, doc_b, similarity_score=1.0, method="manual")
+
+        counts = get_manual_link_counts([doc_a, doc_b])
+        assert counts[doc_a] == 1
+        assert counts[doc_b] == 1
+
+
+class TestApplyManualLinkBoost:
+    """Tests for apply_manual_link_boost (#1115)."""
+
+    def _make_result(self, doc_id, score, source="keyword"):
+        return HybridSearchResult(
+            doc_id=doc_id,
+            title=f"Doc {doc_id}",
+            project=None,
+            score=score,
+            keyword_score=score,
+            semantic_score=0.0,
+            source=source,
+            snippet="",
+        )
+
+    def _insert_docs(self, conn, titles):
+        """Insert docs with auto-assigned IDs (session DB is shared across tests)."""
+        ids = []
+        for title in titles:
+            cursor = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                (title, f"Content for {title}"),
+            )
+            ids.append(cursor.lastrowid)
+        return ids
+
+    def test_empty_results_is_noop(self, isolate_test_database):
+        results = []
+        apply_manual_link_boost(results)
+        assert results == []
+
+    def test_zero_relevance_docs_never_boosted(self, isolate_test_database):
+        """A doc with 0 text relevance isn't surfaced just for being linked."""
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        with db.get_connection() as conn:
+            zero_doc_id, linked_id = self._insert_docs(conn, ["A", "B"])
+            conn.commit()
+        create_link(zero_doc_id, linked_id, similarity_score=1.0, method="manual")
+
+        results = [self._make_result(zero_doc_id, 0.0), self._make_result(linked_id, 0.5)]
+        apply_manual_link_boost(results)
+
+        zero_doc = next(r for r in results if r.doc_id == zero_doc_id)
+        assert zero_doc.score == 0.0
+
+    def test_manually_linked_doc_ranks_above_equal_relevance_doc(self, isolate_test_database):
+        """Same base score, but the manually-linked doc should rank first."""
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        with db.get_connection() as conn:
+            unlinked_id, linked_id, citing_id = self._insert_docs(conn, ["A", "B", "C"])
+            conn.commit()
+        # linked_id is manually linked from citing_id; unlinked_id has no links at all
+        create_link(citing_id, linked_id, similarity_score=1.0, method="manual")
+
+        results = [
+            self._make_result(unlinked_id, 0.5),
+            self._make_result(linked_id, 0.5),
+        ]
+        apply_manual_link_boost(results)
+
+        assert results[0].doc_id == linked_id
+        assert results[0].score > results[1].score
+        assert results[1].score == pytest.approx(0.5)
+
+    def test_boost_is_capped(self, isolate_test_database):
+        """Many manual links don't produce an unbounded boost."""
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        with db.get_connection() as conn:
+            ids = self._insert_docs(conn, [f"D{i}" for i in range(10)])
+            conn.commit()
+
+        target, *others = ids
+        for other in others:
+            create_link(other, target, similarity_score=1.0, method="manual")
+
+        results = [self._make_result(target, 0.5)]
+        apply_manual_link_boost(results)
+
+        max_expected = min(1.0, 0.5 * (1.0 + MANUAL_LINK_BOOST_CAP))
+        assert results[0].score == pytest.approx(max_expected)
+        assert MANUAL_LINK_BOOST_PER_LINK * 9 > MANUAL_LINK_BOOST_CAP  # sanity: cap actually bites
+
+
+class TestKeywordSearchManualLinkBoostIntegration:
+    """End-to-end regression test for #1115 through the real FTS5 keyword path.
+
+    A manually-linked "synthesis" doc should outrank an equally
+    keyword-relevant "raw legwork" doc that has no manual links.
+    """
+
+    def test_manually_linked_doc_outranks_equal_keyword_match(self, isolate_test_database):
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        query_text = "zzqfluxcalib zzqfluxcalib"
+        with db.get_connection() as conn:
+            raw_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Raw Legwork", query_text),
+            ).lastrowid
+            synthesis_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Synthesis Answer", query_text),
+            ).lastrowid
+            # A source doc that cites the synthesis answer as authoritative
+            citing_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Citing Doc", "unrelated content"),
+            ).lastrowid
+            conn.commit()
+
+        create_link(citing_id, synthesis_id, similarity_score=1.0, method="manual")
+
+        service = HybridSearchService()
+        results = service._search_keyword(query_text, limit=10, project=None)
+
+        doc_ids = [r.doc_id for r in results]
+        assert raw_id in doc_ids
+        assert synthesis_id in doc_ids
+
+        raw = next(r for r in results if r.doc_id == raw_id)
+        synthesis = next(r for r in results if r.doc_id == synthesis_id)
+
+        # Equal keyword relevance before the boost...
+        assert raw.keyword_score == pytest.approx(synthesis.keyword_score)
+        # ...but the manually-linked doc ranks strictly higher after it.
+        assert synthesis.score > raw.score
+        assert results.index(synthesis) < results.index(raw)

@@ -125,18 +125,37 @@ def create_links(
     cross_project: bool = typer.Option(
         False, "--cross-project", help="Match across all projects (default: same project only)"
     ),
+    to: int | None = typer.Option(
+        None,
+        "--to",
+        help="Manually link doc_id to this specific document ID, bypassing similarity "
+        "search. Manual links get a ranking boost in `emdx find` (see its --help).",
+    ),
 ) -> None:
     """Create semantic links for a document (or all documents).
 
     By default, only matches documents within the same project.
     Use --cross-project to match across all projects.
 
+    Use --to <id> to manually curate a link between two specific documents you
+    already know are related, instead of discovering similar ones automatically.
+    Manual links are a stronger, deliberate signal and rank higher in `emdx find`
+    than the same document would without one.
+
     Examples:
         emdx maintain link 42
         emdx maintain link 0 --all
         emdx maintain link 42 --threshold 0.6 --max 3
         emdx maintain link 42 --cross-project
+        emdx maintain link 42 --to 57
     """
+    if to is not None:
+        if all_docs:
+            console.print("[red]--to cannot be combined with --all[/red]")
+            raise typer.Exit(1)
+        _create_manual_link(doc_id, to)
+        return
+
     try:
         from ..services.link_service import auto_link_all, auto_link_document
     except ImportError as e:
@@ -183,6 +202,63 @@ def create_links(
             console.print(
                 f"[yellow]No similar documents found above {threshold:.0%} threshold[/yellow]"
             )
+
+
+def _create_manual_link(source_id: int, target_id: int) -> None:
+    """Create a deliberate, curated link between two specific documents.
+
+    Unlike similarity-based auto-linking, this records that a human decided
+    two documents are related. See #1115: manual links get a ranking boost
+    in `emdx find` since they're a stronger signal than shared vocabulary.
+    """
+    from ..database import db, document_links
+
+    if source_id == target_id:
+        console.print("[red]Cannot link a document to itself[/red]")
+        raise typer.Exit(1)
+
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id FROM documents WHERE id IN (?, ?) AND is_deleted = 0",
+            (source_id, target_id),
+        ).fetchall()
+    found_ids = {row[0] for row in rows}
+    missing = {source_id, target_id} - found_ids
+    if missing:
+        ids = ", ".join(f"#{i}" for i in sorted(missing))
+        console.print(f"[red]Document(s) not found: {ids}[/red]")
+        raise typer.Exit(1)
+
+    if document_links.link_exists(source_id, target_id):
+        existing = next(
+            (
+                lnk
+                for lnk in document_links.get_links_for_document(source_id)
+                if {lnk["source_doc_id"], lnk["target_doc_id"]} == {source_id, target_id}
+            ),
+            None,
+        )
+        if existing and existing["link_type"] == "manual":
+            console.print(f"[yellow]#{source_id} and #{target_id} are already linked[/yellow]")
+            return
+
+        # An automatic (similarity/title/entity) link already exists — the
+        # deliberate human signal takes precedence, so upgrade it.
+        document_links.set_link_manual(source_id, target_id)
+        console.print(
+            f"[green]Upgraded existing link between #{source_id} and #{target_id} "
+            "to manual[/green]"
+        )
+        return
+
+    link_id = document_links.create_link(
+        source_id, target_id, similarity_score=1.0, method="manual"
+    )
+    if link_id is None:
+        console.print(f"[red]Failed to link #{source_id} and #{target_id}[/red]")
+        raise typer.Exit(1)
+
+    console.print(f"[green]Manually linked #{source_id} ↔ #{target_id}[/green]")
 
 
 def remove_link(

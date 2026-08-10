@@ -472,6 +472,63 @@ class TestFindCommand:
         assert result.exit_code == 0
         mock_search_tags.assert_called_once_with(["python"], mode="all", project=None, limit=10)
 
+    @patch("emdx.commands.core.get_tags_for_documents")
+    @patch("emdx.commands.core.search_documents")
+    def test_find_keyword_mode_boosts_manual_link(self, mock_search, mock_get_tags):
+        """#1115: --mode keyword (the legacy FTS path) also applies the
+        manual-link ranking boost, reordering equally-ranked results.
+        """
+        from emdx.database import db
+        from emdx.database.document_links import create_link
+
+        with db.get_connection() as conn:
+            raw_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Raw Legwork", "content"),
+            ).lastrowid
+            synthesis_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Synthesis Answer", "content"),
+            ).lastrowid
+            citing_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Citing Doc", "content"),
+            ).lastrowid
+            conn.commit()
+
+        create_link(citing_id, synthesis_id, similarity_score=1.0, method="manual")
+
+        # search_documents returns them in this (unboosted) order, tied on rank
+        mock_search.return_value = [
+            SearchHit.from_row(
+                {
+                    "id": raw_id,
+                    "title": "Raw Legwork",
+                    "project": None,
+                    "created_at": datetime(2024, 1, 1),
+                    "access_count": 0,
+                    "rank": -5.0,
+                }
+            ),
+            SearchHit.from_row(
+                {
+                    "id": synthesis_id,
+                    "title": "Synthesis Answer",
+                    "project": None,
+                    "created_at": datetime(2024, 1, 1),
+                    "access_count": 0,
+                    "rank": -5.0,
+                }
+            ),
+        ]
+        mock_get_tags.return_value = {raw_id: [], synthesis_id: []}
+
+        result = runner.invoke(app, ["find", "tied query", "--mode", "keyword", "--json"])
+        assert result.exit_code == 0
+        payload = json.loads(_out(result))
+        ids_in_order = [row["id"] for row in payload]
+        assert ids_in_order.index(synthesis_id) < ids_in_order.index(raw_id)
+
 
 # ---------------------------------------------------------------------------
 # view command
