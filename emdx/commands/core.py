@@ -624,8 +624,10 @@ def find(
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
             tag_mode = "any" if any_tags else "all"
 
-            # Get docs matching tags
-            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit * 2)
+            # Get ALL docs matching tags (unbounded) so tag filtering doesn't
+            # drop hybrid results that fall outside a truncated, recency-ordered
+            # candidate set — see #1118.
+            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=None)
             tag_doc_ids = {doc["id"] for doc in tag_results}
 
             # Filter hybrid results to only include docs with matching tags
@@ -958,8 +960,13 @@ def _find_keyword_search(
 
         # If we have both tags and search query, we need to combine results
         if search_query:
-            # Get documents matching tags
-            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+            # Get ALL documents matching the tags (unbounded) so that the
+            # keyword/tag intersection below isn't computed against a
+            # truncated candidate set. search_by_tags orders by most-recently
+            # created, so capping it to `limit` here would silently drop
+            # older tagged documents that actually match the keyword query,
+            # producing false "0 results" (see #1118).
+            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=None)
             tag_doc_ids = {doc["id"] for doc in tag_results}
 
             # Get documents matching search query
