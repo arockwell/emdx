@@ -549,7 +549,15 @@ def find(
     try:
         # Handle --all: list all documents
         if all_docs:
-            _find_list_all(project, limit, json_output, doc_type=doc_type)
+            _find_list_all(
+                project,
+                limit,
+                json_output,
+                doc_type=doc_type,
+                tags=tags,
+                any_tags=any_tags,
+                no_tags=no_tags,
+            )
             return
 
         # Handle --recent: show recently accessed documents
@@ -736,12 +744,34 @@ def _find_list_all(
     limit: int,
     json_output: bool,
     doc_type: str | None = "user",
+    tags: str | None = None,
+    any_tags: bool = False,
+    no_tags: str | None = None,
 ) -> None:
     """List all documents (replaces old `list` command)."""
     from emdx.models.documents import list_documents
     from emdx.utils.text_formatting import truncate_title
 
-    docs = list_documents(project=project, limit=limit, doc_type=doc_type)
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        tag_mode = "any" if any_tags else "all"
+        docs = [
+            Document.from_partial_row(dict(row))
+            for row in search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+        ]
+    else:
+        docs = list_documents(project=project, limit=limit, doc_type=doc_type)
+
+    all_tags_map = get_tags_for_documents([doc.id for doc in docs])
+
+    if no_tags:
+        no_tag_list = [t.strip() for t in no_tags.split(",") if t.strip()]
+        if no_tag_list:
+            docs = [
+                doc
+                for doc in docs
+                if not any(tag in all_tags_map.get(doc.id, []) for tag in no_tag_list)
+            ]
 
     if not docs:
         console.print("[yellow]No documents found[/yellow]")
@@ -751,6 +781,7 @@ def _find_list_all(
         json_docs = []
         for doc in docs:
             d = doc.to_dict()
+            d["tags"] = all_tags_map.get(doc.id, [])
             json_docs.append(d)
         print(json.dumps(json_docs, indent=2))
         return
