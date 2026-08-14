@@ -195,6 +195,15 @@ def run() -> None:
     Supports `emdx tag 42 active` shorthand for `emdx tag add 42 active`:
         When `tag` is followed by something that is NOT a known subcommand
         (i.e. a doc ID or flag), insert `add` automatically.
+
+    Supports `emdx list` / `emdx recent [N]` as working shorthand for
+    `emdx find --all` / `emdx find --recent N` (see #1130):
+        `list` and `recent` are registered as top-level *name* aliases for
+        `find`, but aliasing only renames the resolved command — it doesn't
+        imply a flag, so a bare `emdx list` still hit find's "provide search
+        terms..." error. Inject the flag the alias name implies whenever the
+        rest of the invocation doesn't already supply search criteria of its
+        own.
     """
     import sys
 
@@ -207,7 +216,72 @@ def run() -> None:
     # When the first arg after `tag` is not a known subcommand, insert `add`.
     _rewrite_tag_shorthand(sys.argv)
 
+    # Shorthand: `emdx list` → `emdx find --all`, `emdx recent [N]` →
+    # `emdx find --recent [N]`.
+    _rewrite_list_recent_shorthand(sys.argv)
+
     app()
+
+
+# Flags that already give `find` valid search criteria on their own — when
+# any of these follow `list`/`recent`, the alias shorthand below leaves the
+# invocation untouched rather than injecting a possibly-conflicting flag.
+_FIND_CRITERIA_FLAGS = {
+    "--all",
+    "-a",
+    "--tags",
+    "--tag",
+    "--tag-search",
+    "-t",
+    "--recent",
+    "--similar",
+    "--context",
+    "--created-after",
+    "--created-before",
+    "--modified-after",
+    "--modified-before",
+}
+
+
+def _rewrite_list_recent_shorthand(argv: list[str]) -> None:
+    """Insert the implied flag after a bare `list`/`recent` alias invocation.
+
+    `emdx list` -> `emdx find --all`
+    `emdx recent` -> `emdx find --recent 10`
+    `emdx recent 20` -> `emdx find --recent 20`
+
+    Left untouched (mutation-free) when the rest of the invocation already
+    supplies find criteria of its own (`--tags`, `--all`, a non-numeric
+    search query, etc.) — those cases keep working exactly as a plain
+    `find` alias, same as before this shorthand existed.
+    Mutates argv in-place.
+    """
+    try:
+        idx = next(i for i in range(1, len(argv)) if argv[i] in ("list", "recent"))
+    except StopIteration:
+        return
+
+    cmd = argv[idx]
+    rest = argv[idx + 1 :]
+
+    if rest and rest[0] in ("--help", "-h"):
+        return
+
+    if any(token in _FIND_CRITERIA_FLAGS for token in rest):
+        return
+
+    has_query = bool(rest) and not rest[0].startswith("-")
+
+    if cmd == "list":
+        if not has_query:
+            argv.insert(idx + 1, "--all")
+    else:  # recent
+        if has_query and rest[0].isdigit():
+            # `emdx recent 20` -> `emdx find --recent 20`
+            argv[idx + 1] = "--recent"
+            argv.insert(idx + 2, rest[0])
+        elif not has_query:
+            argv[idx + 1 : idx + 1] = ["--recent", "10"]
 
 
 def _rewrite_tag_shorthand(argv: list[str]) -> None:

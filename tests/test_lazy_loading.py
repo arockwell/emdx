@@ -328,6 +328,105 @@ class TestCLIIntegration:
         assert "epic" in result.output.lower()
 
 
+class TestListRecentShorthand:
+    """GH #1130: `list`/`recent` are registered as top-level *name* aliases
+    for `find`, but aliasing only renames the resolved command — it doesn't
+    imply a flag. Bare `emdx list`/`emdx recent` used to still hit find's
+    "provide search terms, tags, or date filters" error. The
+    `_rewrite_list_recent_shorthand` argv rewrite (applied in `run()`,
+    mirroring the existing `_rewrite_tag_shorthand` pattern) fixes that by
+    injecting the flag the alias name implies.
+    """
+
+    def test_bare_list_gets_all_flag(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "list"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "list", "--all"]
+
+    def test_bare_recent_gets_default_recent_flag(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "recent"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "recent", "--recent", "10"]
+
+    def test_recent_with_numeric_positional_becomes_recent_flag(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "recent", "20"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "recent", "--recent", "20"]
+
+    def test_list_help_is_not_rewritten(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "list", "--help"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "list", "--help"]
+
+    def test_list_with_explicit_all_is_unchanged(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "list", "--all"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "list", "--all"]
+
+    def test_list_with_tags_is_unchanged(self) -> None:
+        """Already-valid find criteria (--tags) is left alone — no --all injected."""
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "list", "--tags", "python"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "list", "--tags", "python"]
+
+    def test_list_with_search_query_is_unchanged(self) -> None:
+        """A real search query after `list` is left as a plain find alias."""
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "list", "docker"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "list", "docker"]
+
+    def test_recent_with_other_flags_gets_default_recent_flag(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "recent", "--json"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "recent", "--recent", "10", "--json"]
+
+    def test_no_list_or_recent_token_is_unchanged(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "find", "docker"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "find", "docker"]
+
+    def test_bare_list_end_to_end(self) -> None:
+        """The rewritten argv actually resolves through `find --all`, not
+        find's "provide search terms..." error (the bug reported in #1130).
+        """
+        from emdx.main import _rewrite_list_recent_shorthand, app
+
+        argv = ["emdx", "list"]
+        _rewrite_list_recent_shorthand(argv)
+        result = runner.invoke(app, argv[1:])
+
+        assert result.exit_code == 0
+        assert "Provide search terms" not in result.output
+
+    def test_bare_recent_end_to_end(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand, app
+
+        argv = ["emdx", "recent"]
+        _rewrite_list_recent_shorthand(argv)
+        result = runner.invoke(app, argv[1:])
+
+        assert result.exit_code == 0
+        assert "Provide search terms" not in result.output
+
+
 class TestLazyRegistry:
     """Test the lazy command registry."""
 
