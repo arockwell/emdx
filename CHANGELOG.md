@@ -5,11 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.34.0] - 2026-08-14
 
-### Fixed
+**Search that stops lying to you, and briefings that focus.** A wave of silent-wrong-results bugs in `find` is gone: keyword+tag searches no longer return 0 results when real matches exist, `--all --tags` actually filters, and same-day rows stop vanishing from `briefing --since`. On top of that, `emdx briefing` gains `--tags`/`--any-tags` scoping so you can get a temporal digest of one area instead of the whole KB, and the CLI now works under typer 0.26+.
 
-- **typer 0.26+ compatibility** — typer 0.26 vendors its own rewritten click (`typer._click`) in which `Group` no longer exists as a separate class, which broke `LazyTyperGroup`'s subcommand dispatch (`emdx task --help` failed with "No such option '--help'", `emdx trash` printed nothing, `emdx maintain --auto` skipped its sub-steps). The lazy placeholder now derives from `TyperGroup` and cross-hierarchy checks are duck-typed, so the CLI works under typer 0.24–0.27. The dependency range is widened to `>=0.24.1,<0.28.0`.
+### 🚀 Major Features
+
+#### Tag-scoped briefings (#1121, #1133)
+
+`emdx briefing --tags <tags>` scopes the briefing to one area of the KB instead of summarizing everything. Documents are matched directly by tag; tasks are matched via their linked gameplan/source/output document. `--any-tags` switches from AND to OR semantics, mirroring `find`. `--save` synthesis, the JSON output (new `tags_filter` field), and the human header all reflect the scope.
+
+### 🔧 Improvements
+
+- **Bare `emdx list` and `emdx recent` now work** (#1130, #1132) — the 0.33.1 aliases resolved the command name but still required find criteria; a bare `emdx list` now implies `find --all`, and `emdx recent [N]` implies `find --recent N`
+- **Manually-curated links rank higher** (#1115, #1117) — `emdx maintain link A --to B` links now outrank auto-generated ones in `find` results
+- **typer 0.26+ compatibility** (#1113) — typer 0.26 vendors its own rewritten click (`typer._click`) in which `Group` no longer exists as a separate class, which broke `LazyTyperGroup`'s subcommand dispatch (`emdx task --help` failed with "No such option '--help'", `emdx trash` printed nothing, `emdx maintain --auto` skipped its sub-steps). The lazy placeholder now derives from `TyperGroup` and cross-hierarchy checks are duck-typed, so the CLI works under typer 0.24–0.27. The dependency range is widened to `>=0.24.1,<0.28.0`.
+- **`emdx --version` reports the installed version** (#1109, #1110, #1112) — the version is derived from package metadata instead of a hardcoded string, so it reflects what's actually installed (e.g. after `uv tool upgrade`); also drops the obsolete `typer[all]` extras warning
+
+### 🐛 Bug Fixes
+
+- **Keyword+tag search returning 0 results despite real matches** (#1118, #1119, #1132) — both the hybrid and keyword paths truncated each side of the text/tag intersection to `--limit` *before* intersecting, so older or weakly-ranked matches were dropped entirely; both sides now use a wide candidate pool and truncate after intersecting
+- **`find --all` silently ignored `--tags`** (#1126, #1127) — the `--all` branch never received the tag flags and reported `tags: null` in JSON; it now filters via the same tag path as keyword search and reports real tags
+- **`briefing --since` dropped same-day rows** (#1124, #1125) — the cutoff was formatted with a `T` separator while SQLite's `CURRENT_TIMESTAMP` uses a space, and the lexicographic comparison silently excluded rows created earlier the same day
+- **`save --task` rejected `KEY-N` alias IDs** (#1128, #1129) — `--task COLO-51` now resolves through the same `resolve_task_id()` as every `task` subcommand instead of failing Click's int parsing
+- **`title_match` false links** (#1114, #1117) — overly-eager title matching no longer creates spurious document links
+- **Wiki clustering crashed on standard installs** (#1120, #1122) — `ModuleNotFoundError` when optional clustering dependencies weren't installed
+
+[0.34.0]: https://github.com/arockwell/emdx/compare/v0.33.1...v0.34.0
 
 ## [0.33.1] - 2026-08-04
 

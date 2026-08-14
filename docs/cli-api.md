@@ -90,11 +90,11 @@ emdx find "config" --json
 # Show snippet previews (default behavior, explicit)
 emdx find "database" --snippets
 
-# List all documents (replaces old `emdx list` command)
+# List all documents (bare `emdx list` is shorthand for this)
 emdx find --all
 emdx find --all --project "emdx"
 
-# Show recently accessed documents (replaces old `emdx recent` command)
+# Show recently accessed documents (bare `emdx recent [N]` is shorthand)
 emdx find --recent 10
 
 # Find similar documents (replaces old `emdx ai similar` command)
