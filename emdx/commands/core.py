@@ -37,6 +37,7 @@ from emdx.models.tags import (
     get_tags_for_documents,
     search_by_tags,
 )
+from emdx.models.types import TaskRef
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.output import console, is_non_interactive, print_json
@@ -285,8 +286,10 @@ def save(
     cross_project: bool = typer.Option(
         False, "--cross-project", help="Allow auto-links across projects"
     ),
-    task: int | None = typer.Option(
-        None, "--task", help="Link saved document to a task as its output"
+    task: TaskRef | None = typer.Option(
+        None,
+        "--task",
+        help="Link saved document to a task as its output (accepts numeric ID or KEY-N alias)",
     ),
     mark_done: bool = typer.Option(
         False, "--done", help="Also mark the linked task as done (requires --task)"
@@ -306,18 +309,25 @@ def save(
             console.print(f"[red]Error: {msg}[/red]")
         raise typer.Exit(1)
 
-    # Validate task exists before doing any work
+    # Resolve and validate task exists before doing any work
+    resolved_task: int | None = None
+    task_display_id: str | None = None
     if task is not None:
-        from emdx.models.tasks import get_task
+        from emdx.models.tasks import get_task, resolve_task_id
 
-        linked_task = get_task(task)
-        if not linked_task:
-            msg = f"Task #{task} not found"
+        resolved_task = resolve_task_id(task)
+        if resolved_task is None:
+            msg = f"Task not found: {task}"
             if json_output:
                 print_json({"error": msg})
             else:
                 console.print(f"[red]Error: {msg}[/red]")
             raise typer.Exit(1)
+        linked_task = get_task(resolved_task)
+        if linked_task and linked_task.epic_key and linked_task.epic_seq:
+            task_display_id = f"{linked_task.epic_key}-{linked_task.epic_seq}"
+        else:
+            task_display_id = f"#{resolved_task}"
 
     # Step 1: Get input content
     input_content = get_input_content(input, file_path=file)
@@ -393,13 +403,13 @@ def save(
                 console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
 
     # Step 6.7: Link to task if specified
-    if task is not None:
+    if resolved_task is not None:
         from emdx.models.tasks import update_task
 
         update_kwargs: dict[str, Any] = {"output_doc_id": doc_id}
         if mark_done:
             update_kwargs["status"] = "done"
-        update_task(task, **update_kwargs)
+        update_task(resolved_task, **update_kwargs)
 
     # Step 7: Auto-tagging if requested
     if auto_tag:
@@ -418,8 +428,8 @@ def save(
             "project": metadata.project,
             "tags": applied_tags,
         }
-        if task is not None:
-            result["task_id"] = task
+        if resolved_task is not None:
+            result["task_id"] = resolved_task
         if supersede_target:
             result["superseded_id"] = supersede_target.id
         print_json(result)
@@ -428,11 +438,11 @@ def save(
     display_save_result(doc_id, metadata, applied_tags, supersede_target)
 
     # Step 8.5: Display task link
-    if task is not None:
+    if resolved_task is not None:
         if mark_done:
-            console.print(f"   [dim]Task:[/dim] #{task} [green](done)[/green]")
+            console.print(f"   [dim]Task:[/dim] {task_display_id} [green](done)[/green]")
         else:
-            console.print(f"   [dim]Task:[/dim] #{task}")
+            console.print(f"   [dim]Task:[/dim] {task_display_id}")
 
     # Step 9: Show tag suggestions if requested
     if suggest_tags and not auto_tag:

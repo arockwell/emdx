@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from emdx.commands.core import InputContent, app, generate_title, get_input_content
 from emdx.models.document import Document
 from emdx.models.search import SearchHit
+from emdx.models.task import Task
 
 runner = CliRunner()
 
@@ -256,13 +257,21 @@ class TestSaveCommand:
         data = json.loads(result.stdout)
         assert data == {"id": 7, "title": "Piped Doc", "project": None, "tags": []}
 
+    @patch("emdx.models.tasks.resolve_task_id")
     @patch("emdx.models.tasks.update_task")
     @patch("emdx.models.tasks.get_task")
     @patch("emdx.commands.core.apply_tags")
     @patch("emdx.commands.core.create_document")
     @patch("emdx.commands.core.detect_project")
     def test_save_json_output_with_task(
-        self, mock_detect, mock_create, mock_tags, mock_get_task, mock_update_task, tmp_path
+        self,
+        mock_detect,
+        mock_create,
+        mock_tags,
+        mock_get_task,
+        mock_update_task,
+        mock_resolve,
+        tmp_path,
     ):
         """--json with --task still links the doc to the task and reports task_id."""
         f = tmp_path / "doc.md"
@@ -271,7 +280,8 @@ class TestSaveCommand:
         mock_detect.return_value = None
         mock_create.return_value = 99
         mock_tags.return_value = []
-        mock_get_task.return_value = {"id": 5, "title": "Research task", "status": "open"}
+        mock_resolve.return_value = 5
+        mock_get_task.return_value = Task(id=5, title="Research task", status="open")
         mock_update_task.return_value = True
 
         result = runner.invoke(app, ["save", "--file", str(f), "--task", "5", "--done", "--json"])
