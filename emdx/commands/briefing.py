@@ -80,9 +80,23 @@ def _parse_since(since: str) -> datetime:
     return datetime.now() - timedelta(days=1)
 
 
+def _since_sql_str(since: datetime) -> str:
+    """Format a cutoff datetime to match SQLite's CURRENT_TIMESTAMP format.
+
+    Columns like created_at/completed_at/updated_at are populated via SQLite's
+    ``CURRENT_TIMESTAMP`` (space-separated, e.g. "2026-08-10 00:00:00"), while
+    ``datetime.isoformat()`` produces a 'T'-separated string. Comparing those
+    with a plain SQL ``>=`` is a lexicographic string comparison, so a 'T'
+    (0x54) sorts after a space (0x20) at the same position — same-day rows can
+    then compare as *older* than a same-day cutoff and get silently dropped.
+    Formatting both sides the same way avoids that mismatch.
+    """
+    return since.strftime("%Y-%m-%d %H:%M:%S")
+
+
 def _get_documents_created(since: datetime) -> list[dict[str, Any]]:
     """Get documents created since the given datetime."""
-    since_str = since.isoformat()
+    since_str = _since_sql_str(since)
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -102,7 +116,7 @@ def _get_documents_created(since: datetime) -> list[dict[str, Any]]:
 
 def _get_tasks_completed(since: datetime) -> list[dict[str, Any]]:
     """Get tasks completed since the given datetime."""
-    since_str = since.isoformat()
+    since_str = _since_sql_str(since)
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -118,7 +132,7 @@ def _get_tasks_completed(since: datetime) -> list[dict[str, Any]]:
 
 def _get_tasks_added(since: datetime) -> list[dict[str, Any]]:
     """Get tasks created since the given datetime."""
-    since_str = since.isoformat()
+    since_str = _since_sql_str(since)
     with db.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -134,7 +148,7 @@ def _get_tasks_added(since: datetime) -> list[dict[str, Any]]:
 
 def _get_tasks_blocked(since: datetime) -> list[dict[str, Any]]:
     """Get tasks that became blocked since the given datetime."""
-    since_str = since.isoformat()
+    since_str = _since_sql_str(since)
     with db.get_connection() as conn:
         cursor = conn.execute(
             """

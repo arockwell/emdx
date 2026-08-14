@@ -10,7 +10,15 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from emdx.commands.briefing import _build_json_output, _format_relative_time, _parse_since
+from emdx.commands.briefing import (
+    _build_json_output,
+    _format_relative_time,
+    _get_documents_created,
+    _get_tasks_added,
+    _get_tasks_completed,
+    _parse_since,
+)
+from emdx.database import db
 from emdx.main import app as main_app
 
 runner = CliRunner()
@@ -244,3 +252,60 @@ class TestBriefingCommand:
         out = _out(result)
         assert "docs created" in out or "Documents Created" in out
         assert "tasks completed" in out or "Tasks Completed" in out
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: same-day rows must not be dropped due to separator
+# mismatch between the Python-side --since cutoff and SQLite's
+# CURRENT_TIMESTAMP-populated columns (issue #1124).
+# ---------------------------------------------------------------------------
+class TestSameDayCutoffRegression:
+    """created_at/completed_at written with a space separator (SQLite's
+    CURRENT_TIMESTAMP format) must still be included when the --since cutoff
+    covers the same day, even though a naive datetime.isoformat() cutoff
+    uses 'T' as the separator instead.
+    """
+
+    def test_documents_created_same_day_row_included(self) -> None:
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        # One second into today, written the way SQLite's CURRENT_TIMESTAMP would.
+        row_created_at = (today + timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with db.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO documents (title, content, project, created_at, is_deleted) "
+                "VALUES (?, ?, ?, ?, 0)",
+                ("Same-day doc", "content", "test-project", row_created_at),
+            )
+            conn.commit()
+
+        results = _get_documents_created(today)
+        assert any(d["title"] == "Same-day doc" for d in results)
+
+    def test_tasks_completed_same_day_row_included(self) -> None:
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        row_completed_at = (today + timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with db.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO tasks (title, status, completed_at) VALUES (?, 'done', ?)",
+                ("Same-day completed task", row_completed_at),
+            )
+            conn.commit()
+
+        results = _get_tasks_completed(today)
+        assert any(t["title"] == "Same-day completed task" for t in results)
+
+    def test_tasks_added_same_day_row_included(self) -> None:
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        row_created_at = (today + timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with db.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO tasks (title, status, created_at) VALUES (?, 'open', ?)",
+                ("Same-day added task", row_created_at),
+            )
+            conn.commit()
+
+        results = _get_tasks_added(today)
+        assert any(t["title"] == "Same-day added task" for t in results)
