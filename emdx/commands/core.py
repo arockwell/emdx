@@ -37,6 +37,7 @@ from emdx.models.tags import (
     get_tags_for_documents,
     search_by_tags,
 )
+from emdx.models.types import TaskRef
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
 from emdx.utils.output import console, is_non_interactive, print_json
@@ -48,6 +49,24 @@ app = typer.Typer(help="Core CRUD operations for documents")
 # Only lines above (and including) this are stripped on save, so Markdown
 # headings in the document body survive round-trips through the editor.
 EDIT_PREAMBLE_SENTINEL = "# ---- edit below this line; this marker and lines above are removed ----"
+
+# Candidate-pool cap used when combining a keyword/semantic query with a tag
+# filter (see #1118). Both sides of the intersection must be searched with a
+# pool much larger than the user-facing --limit — otherwise a tag-matching
+# document that isn't among the top `limit` text-relevance results (or a
+# text-matching document that isn't among the `limit` most recent tag
+# results) gets silently dropped before the intersection even runs, making
+# valid combined searches return zero results.
+TAG_INTERSECTION_CANDIDATE_LIMIT = 2000
+
+
+def _candidate_limit_for_intersection(limit: int) -> int:
+    """Widen a user-facing result `limit` into a candidate-pool size.
+
+    Used when a result set will be intersected with another filter (e.g.
+    tags) before being truncated to `limit` — see #1118.
+    """
+    return min(max(limit * 20, 200), TAG_INTERSECTION_CANDIDATE_LIMIT)
 
 
 @dataclass
@@ -267,8 +286,10 @@ def save(
     cross_project: bool = typer.Option(
         False, "--cross-project", help="Allow auto-links across projects"
     ),
-    task: int | None = typer.Option(
-        None, "--task", help="Link saved document to a task as its output"
+    task: TaskRef | None = typer.Option(
+        None,
+        "--task",
+        help="Link saved document to a task as its output (accepts numeric ID or KEY-N alias)",
     ),
     mark_done: bool = typer.Option(
         False, "--done", help="Also mark the linked task as done (requires --task)"
@@ -288,18 +309,25 @@ def save(
             console.print(f"[red]Error: {msg}[/red]")
         raise typer.Exit(1)
 
-    # Validate task exists before doing any work
+    # Resolve and validate task exists before doing any work
+    resolved_task: int | None = None
+    task_display_id: str | None = None
     if task is not None:
-        from emdx.models.tasks import get_task
+        from emdx.models.tasks import get_task, resolve_task_id
 
-        linked_task = get_task(task)
-        if not linked_task:
-            msg = f"Task #{task} not found"
+        resolved_task = resolve_task_id(task)
+        if resolved_task is None:
+            msg = f"Task not found: {task}"
             if json_output:
                 print_json({"error": msg})
             else:
                 console.print(f"[red]Error: {msg}[/red]")
             raise typer.Exit(1)
+        linked_task = get_task(resolved_task)
+        if linked_task and linked_task.epic_key and linked_task.epic_seq:
+            task_display_id = f"{linked_task.epic_key}-{linked_task.epic_seq}"
+        else:
+            task_display_id = f"#{resolved_task}"
 
     # Step 1: Get input content
     input_content = get_input_content(input, file_path=file)
@@ -375,13 +403,13 @@ def save(
                 console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
 
     # Step 6.7: Link to task if specified
-    if task is not None:
+    if resolved_task is not None:
         from emdx.models.tasks import update_task
 
         update_kwargs: dict[str, Any] = {"output_doc_id": doc_id}
         if mark_done:
             update_kwargs["status"] = "done"
-        update_task(task, **update_kwargs)
+        update_task(resolved_task, **update_kwargs)
 
     # Step 7: Auto-tagging if requested
     if auto_tag:
@@ -400,8 +428,8 @@ def save(
             "project": metadata.project,
             "tags": applied_tags,
         }
-        if task is not None:
-            result["task_id"] = task
+        if resolved_task is not None:
+            result["task_id"] = resolved_task
         if supersede_target:
             result["superseded_id"] = supersede_target.id
         print_json(result)
@@ -410,11 +438,11 @@ def save(
     display_save_result(doc_id, metadata, applied_tags, supersede_target)
 
     # Step 8.5: Display task link
-    if task is not None:
+    if resolved_task is not None:
         if mark_done:
-            console.print(f"   [dim]Task:[/dim] #{task} [green](done)[/green]")
+            console.print(f"   [dim]Task:[/dim] {task_display_id} [green](done)[/green]")
         else:
-            console.print(f"   [dim]Task:[/dim] #{task}")
+            console.print(f"   [dim]Task:[/dim] {task_display_id}")
 
     # Step 9: Show tag suggestions if requested
     if suggest_tags and not auto_tag:
@@ -610,9 +638,15 @@ def find(
         from emdx.services.hybrid_search import HybridSearchService
 
         hybrid_service = HybridSearchService()
+
+        # When a tag filter will be intersected below, search a much wider
+        # candidate pool than the final --limit so a tag-matching document
+        # that doesn't rank in the top `limit` results isn't silently
+        # dropped before the tag filter even runs (#1118).
+        hybrid_search_limit = _candidate_limit_for_intersection(limit) if tags else limit
         hybrid_results = hybrid_service.search(
             query=search_query,
-            limit=limit,
+            limit=hybrid_search_limit,
             mode=mode,
             extract=extract,
             project=project,
@@ -624,12 +658,18 @@ def find(
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
             tag_mode = "any" if any_tags else "all"
 
-            # Get docs matching tags
-            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit * 2)
+            # Get docs matching tags — likewise uncapped relative to `limit`
+            # so real matches outside the display window aren't lost (#1118).
+            tag_results = search_by_tags(
+                tag_list,
+                mode=tag_mode,
+                project=project,
+                limit=_candidate_limit_for_intersection(limit),
+            )
             tag_doc_ids = {doc["id"] for doc in tag_results}
 
             # Filter hybrid results to only include docs with matching tags
-            hybrid_results = [r for r in hybrid_results if r.doc_id in tag_doc_ids]
+            hybrid_results = [r for r in hybrid_results if r.doc_id in tag_doc_ids][:limit]
 
         # Apply --no-tags filter
         if no_tags:
@@ -994,15 +1034,21 @@ def _find_keyword_search(
 
         # If we have both tags and search query, we need to combine results
         if search_query:
-            # Get documents matching tags
-            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+            # Get documents matching tags. Both this and the search below use
+            # a candidate pool much wider than `limit` — capping either side
+            # to the display limit before intersecting can silently drop
+            # real matches that exist outside that narrow window (#1118).
+            candidate_limit = _candidate_limit_for_intersection(limit)
+            tag_results = search_by_tags(
+                tag_list, mode=tag_mode, project=project, limit=candidate_limit
+            )
             tag_doc_ids = {doc["id"] for doc in tag_results}
 
             # Get documents matching search query
             search_results = search_documents(
                 search_query,
                 project=project,
-                limit=limit * 2,
+                limit=candidate_limit,
                 fuzzy=fuzzy,
                 created_after=created_after,
                 created_before=created_before,

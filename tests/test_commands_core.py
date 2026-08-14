@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from emdx.commands.core import InputContent, app, generate_title, get_input_content
 from emdx.models.document import Document
 from emdx.models.search import SearchHit
+from emdx.models.task import Task
 
 runner = CliRunner()
 
@@ -256,13 +257,21 @@ class TestSaveCommand:
         data = json.loads(result.stdout)
         assert data == {"id": 7, "title": "Piped Doc", "project": None, "tags": []}
 
+    @patch("emdx.models.tasks.resolve_task_id")
     @patch("emdx.models.tasks.update_task")
     @patch("emdx.models.tasks.get_task")
     @patch("emdx.commands.core.apply_tags")
     @patch("emdx.commands.core.create_document")
     @patch("emdx.commands.core.detect_project")
     def test_save_json_output_with_task(
-        self, mock_detect, mock_create, mock_tags, mock_get_task, mock_update_task, tmp_path
+        self,
+        mock_detect,
+        mock_create,
+        mock_tags,
+        mock_get_task,
+        mock_update_task,
+        mock_resolve,
+        tmp_path,
     ):
         """--json with --task still links the doc to the task and reports task_id."""
         f = tmp_path / "doc.md"
@@ -271,7 +280,8 @@ class TestSaveCommand:
         mock_detect.return_value = None
         mock_create.return_value = 99
         mock_tags.return_value = []
-        mock_get_task.return_value = {"id": 5, "title": "Research task", "status": "open"}
+        mock_resolve.return_value = 5
+        mock_get_task.return_value = Task(id=5, title="Research task", status="open")
         mock_update_task.return_value = True
 
         result = runner.invoke(app, ["save", "--file", str(f), "--task", "5", "--done", "--json"])
@@ -528,6 +538,101 @@ class TestFindCommand:
         payload = json.loads(_out(result))
         ids_in_order = [row["id"] for row in payload]
         assert ids_in_order.index(synthesis_id) < ids_in_order.index(raw_id)
+
+    def _seed_query_plus_tag_scenario(self) -> int:
+        """Seed docs reproducing #1118: a keyword+tag combo that must not
+        silently return zero results.
+
+        Creates one old, uniquely-keyword-matching document sharing a tag
+        with many newer documents that don't match the keyword. Before the
+        fix, both `search_by_tags` (ordered newest-first) and the outer
+        search were capped at the default --limit (10), so the old matching
+        document fell outside both candidate windows and the intersection
+        came up empty even though a real match existed.
+
+        Returns the id of the document that should be found.
+        """
+        from emdx.database.documents import save_document
+        from emdx.models.tags import add_tags_to_document
+
+        target_id = save_document(
+            title="Old doc with the unique needle",
+            content="this document mentions zzzneedle exactly once",
+        )
+        add_tags_to_document(target_id, ["regressiontag"])
+
+        # Push 15 newer, tag-sharing but keyword-irrelevant documents on top
+        # of it so `target_id` is not among the 10 most recently created
+        # tagged documents, nor among the top 10 keyword-ranked documents.
+        for i in range(15):
+            newer_id = save_document(
+                title=f"Newer unrelated doc {i}",
+                content="unrelated filler content",
+            )
+            add_tags_to_document(newer_id, ["regressiontag"])
+
+        return target_id
+
+    def _seed_hybrid_search_side_truncation_scenario(self) -> int:
+        """Seed docs reproducing #1118 on the *search* side of the hybrid
+        path specifically: many documents rank above the real answer on
+        keyword relevance alone, but only the answer carries the tag.
+
+        Before the fix, `hybrid_service.search(..., limit=limit)` was called
+        with the outer --limit (10) *before* the tag filter ran, so the
+        weakly-matching but correctly-tagged document was discarded from the
+        candidate pool before the tag intersection even had a chance to see
+        it — even though it was the only document exposed to the tag filter.
+
+        Returns the id of the document that should be found.
+        """
+        from emdx.database.documents import save_document
+        from emdx.models.tags import add_tags_to_document
+
+        # 15 documents that repeat the query term heavily, ranking well
+        # above the real answer on keyword relevance, but not carrying the
+        # tag we're filtering on.
+        for i in range(15):
+            save_document(
+                title=f"Noise doc {i}",
+                content="zzzneedle zzzneedle zzzneedle zzzneedle zzzneedle filler",
+            )
+
+        target_id = save_document(
+            title="The tagged answer",
+            content="this document mentions zzzneedle exactly once",
+        )
+        add_tags_to_document(target_id, ["regressiontag"])
+
+        return target_id
+
+    def test_find_keyword_plus_tags_default_mode(self):
+        """#1118: default (hybrid) search combined with --tags must not
+        silently drop a real match whose text-relevance rank falls outside
+        the top-`limit` window before the tag filter runs.
+        """
+        target_id = self._seed_hybrid_search_side_truncation_scenario()
+
+        result = runner.invoke(app, ["find", "zzzneedle", "--tags", "regressiontag", "--json"])
+        assert result.exit_code == 0
+        payload = json.loads(_out(result))
+        ids = [row["id"] for row in payload]
+        assert target_id in ids
+
+    def test_find_keyword_plus_tags_explicit_keyword_mode(self):
+        """#1118: same regression, exercised via the explicit --mode keyword
+        (FTS-only) path in `_find_keyword_search`.
+        """
+        target_id = self._seed_query_plus_tag_scenario()
+
+        result = runner.invoke(
+            app,
+            ["find", "zzzneedle", "--tags", "regressiontag", "--mode", "keyword", "--json"],
+        )
+        assert result.exit_code == 0
+        payload = json.loads(_out(result))
+        ids = [row["id"] for row in payload]
+        assert target_id in ids
 
 
 # ---------------------------------------------------------------------------

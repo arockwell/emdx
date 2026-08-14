@@ -8,20 +8,42 @@ from datetime import datetime, timedelta
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from emdx.commands.briefing import (
     _build_json_output,
     _format_relative_time,
+    _get_documents_created,
     _get_tag_filtered_doc_ids,
+    _get_tasks_added,
+    _get_tasks_completed,
     _parse_since,
     _parse_tags,
 )
+from emdx.database import db
 from emdx.database.documents import save_document
 from emdx.main import app as main_app
 from emdx.models.tasks import create_task, update_task
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def _clean_created_rows() -> Any:
+    """Remove rows created by these tests from the session-shared test DB.
+
+    Tasks must go first: they hold foreign keys into documents
+    (gameplan_id/source_doc_id/output_doc_id), and leaving them behind makes
+    later modules' blanket `DELETE FROM documents` cleanups fail with
+    FOREIGN KEY constraint errors.
+    """
+    yield
+    with db.get_connection() as conn:
+        conn.execute("DELETE FROM tasks")
+        conn.execute("DELETE FROM document_tags")
+        conn.execute("DELETE FROM documents")
+        conn.commit()
 
 
 def _out(result: Any) -> str:
@@ -390,3 +412,60 @@ class TestBriefingTagsScoping:
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["tags_filter"] is None
+
+
+# ---------------------------------------------------------------------------
+# Regression tests: same-day rows must not be dropped due to separator
+# mismatch between the Python-side --since cutoff and SQLite's
+# CURRENT_TIMESTAMP-populated columns (issue #1124).
+# ---------------------------------------------------------------------------
+class TestSameDayCutoffRegression:
+    """created_at/completed_at written with a space separator (SQLite's
+    CURRENT_TIMESTAMP format) must still be included when the --since cutoff
+    covers the same day, even though a naive datetime.isoformat() cutoff
+    uses 'T' as the separator instead.
+    """
+
+    def test_documents_created_same_day_row_included(self) -> None:
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        # One second into today, written the way SQLite's CURRENT_TIMESTAMP would.
+        row_created_at = (today + timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with db.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO documents (title, content, project, created_at, is_deleted) "
+                "VALUES (?, ?, ?, ?, 0)",
+                ("Same-day doc", "content", "test-project", row_created_at),
+            )
+            conn.commit()
+
+        results = _get_documents_created(today)
+        assert any(d["title"] == "Same-day doc" for d in results)
+
+    def test_tasks_completed_same_day_row_included(self) -> None:
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        row_completed_at = (today + timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with db.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO tasks (title, status, completed_at) VALUES (?, 'done', ?)",
+                ("Same-day completed task", row_completed_at),
+            )
+            conn.commit()
+
+        results = _get_tasks_completed(today)
+        assert any(t["title"] == "Same-day completed task" for t in results)
+
+    def test_tasks_added_same_day_row_included(self) -> None:
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        row_created_at = (today + timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+        with db.get_connection() as conn:
+            conn.execute(
+                "INSERT INTO tasks (title, status, created_at) VALUES (?, 'open', ?)",
+                ("Same-day added task", row_created_at),
+            )
+            conn.commit()
+
+        results = _get_tasks_added(today)
+        assert any(t["title"] == "Same-day added task" for t in results)
