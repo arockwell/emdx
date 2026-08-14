@@ -49,6 +49,24 @@ app = typer.Typer(help="Core CRUD operations for documents")
 # headings in the document body survive round-trips through the editor.
 EDIT_PREAMBLE_SENTINEL = "# ---- edit below this line; this marker and lines above are removed ----"
 
+# Candidate-pool cap used when combining a keyword/semantic query with a tag
+# filter (see #1118). Both sides of the intersection must be searched with a
+# pool much larger than the user-facing --limit — otherwise a tag-matching
+# document that isn't among the top `limit` text-relevance results (or a
+# text-matching document that isn't among the `limit` most recent tag
+# results) gets silently dropped before the intersection even runs, making
+# valid combined searches return zero results.
+TAG_INTERSECTION_CANDIDATE_LIMIT = 2000
+
+
+def _candidate_limit_for_intersection(limit: int) -> int:
+    """Widen a user-facing result `limit` into a candidate-pool size.
+
+    Used when a result set will be intersected with another filter (e.g.
+    tags) before being truncated to `limit` — see #1118.
+    """
+    return min(max(limit * 20, 200), TAG_INTERSECTION_CANDIDATE_LIMIT)
+
 
 @dataclass
 class InputContent:
@@ -610,9 +628,15 @@ def find(
         from emdx.services.hybrid_search import HybridSearchService
 
         hybrid_service = HybridSearchService()
+
+        # When a tag filter will be intersected below, search a much wider
+        # candidate pool than the final --limit so a tag-matching document
+        # that doesn't rank in the top `limit` results isn't silently
+        # dropped before the tag filter even runs (#1118).
+        hybrid_search_limit = _candidate_limit_for_intersection(limit) if tags else limit
         hybrid_results = hybrid_service.search(
             query=search_query,
-            limit=limit,
+            limit=hybrid_search_limit,
             mode=mode,
             extract=extract,
             project=project,
@@ -624,12 +648,18 @@ def find(
             tag_list = [t.strip() for t in tags.split(",") if t.strip()]
             tag_mode = "any" if any_tags else "all"
 
-            # Get docs matching tags
-            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit * 2)
+            # Get docs matching tags — likewise uncapped relative to `limit`
+            # so real matches outside the display window aren't lost (#1118).
+            tag_results = search_by_tags(
+                tag_list,
+                mode=tag_mode,
+                project=project,
+                limit=_candidate_limit_for_intersection(limit),
+            )
             tag_doc_ids = {doc["id"] for doc in tag_results}
 
             # Filter hybrid results to only include docs with matching tags
-            hybrid_results = [r for r in hybrid_results if r.doc_id in tag_doc_ids]
+            hybrid_results = [r for r in hybrid_results if r.doc_id in tag_doc_ids][:limit]
 
         # Apply --no-tags filter
         if no_tags:
@@ -994,15 +1024,21 @@ def _find_keyword_search(
 
         # If we have both tags and search query, we need to combine results
         if search_query:
-            # Get documents matching tags
-            tag_results = search_by_tags(tag_list, mode=tag_mode, project=project, limit=limit)
+            # Get documents matching tags. Both this and the search below use
+            # a candidate pool much wider than `limit` — capping either side
+            # to the display limit before intersecting can silently drop
+            # real matches that exist outside that narrow window (#1118).
+            candidate_limit = _candidate_limit_for_intersection(limit)
+            tag_results = search_by_tags(
+                tag_list, mode=tag_mode, project=project, limit=candidate_limit
+            )
             tag_doc_ids = {doc["id"] for doc in tag_results}
 
             # Get documents matching search query
             search_results = search_documents(
                 search_query,
                 project=project,
-                limit=limit * 2,
+                limit=candidate_limit,
                 fuzzy=fuzzy,
                 created_after=created_after,
                 created_before=created_before,
