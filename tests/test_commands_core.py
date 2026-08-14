@@ -539,6 +539,56 @@ class TestFindCommand:
         ids_in_order = [row["id"] for row in payload]
         assert ids_in_order.index(synthesis_id) < ids_in_order.index(raw_id)
 
+    def test_find_all_with_tags_filters_and_reports_real_tags(self):
+        """GH #1126: --all --tags should filter results (not silently list
+        everything) and report real tags in JSON, not null.
+        """
+        from emdx.database import db
+        from emdx.models.tags import add_tags_to_document
+
+        with db.get_connection() as conn:
+            tagged_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Tagged Doc", "content"),
+            ).lastrowid
+            untagged_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Untagged Doc", "content"),
+            ).lastrowid
+            conn.commit()
+
+        add_tags_to_document(tagged_id, ["distinctive-tag"])
+
+        result = runner.invoke(app, ["find", "--all", "--tags", "distinctive-tag", "--json"])
+        assert result.exit_code == 0
+        payload = json.loads(_out(result))
+        ids = [row["id"] for row in payload]
+
+        # Only the tagged doc should be present -- the untagged (but more
+        # recent, since it was inserted later) doc must not leak through.
+        assert tagged_id in ids
+        assert untagged_id not in ids
+
+        tagged_row = next(row for row in payload if row["id"] == tagged_id)
+        assert tagged_row["tags"] == ["distinctive-tag"]
+
+    def test_find_all_without_tags_lists_everything(self):
+        """--all with no --tags keeps listing all documents (no regression)."""
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            doc_id = conn.execute(
+                "INSERT INTO documents (title, content) VALUES (?, ?)",
+                ("Untagged Only Doc", "content"),
+            ).lastrowid
+            conn.commit()
+
+        result = runner.invoke(app, ["find", "--all", "--json"])
+        assert result.exit_code == 0
+        payload = json.loads(_out(result))
+        ids = [row["id"] for row in payload]
+        assert doc_id in ids
+
     def _seed_query_plus_tag_scenario(self) -> int:
         """Seed docs reproducing #1118: a keyword+tag combo that must not
         silently return zero results.
