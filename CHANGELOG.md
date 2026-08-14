@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Bare numeric task IDs could resolve to the wrong task in a different category** (#1134) — `resolve_task_id()` fell back to matching a bare integer against `epic_seq` (a per-category sequence number, not globally unique) whenever no task had that exact database ID. Since `epic_seq` restarts at 1 for every category, this let mutating commands like `task done`, `task wontdo`, and `task delete` silently act on an unrelated task in a different category when given a bare number instead of the `KEY-N` form. Bare numeric IDs now resolve only against the database primary key; `KEY-N` remains the way to reference a task by its per-category sequence number.
 - **typer 0.26+ compatibility** — typer 0.26 vendors its own rewritten click (`typer._click`) in which `Group` no longer exists as a separate class, which broke `LazyTyperGroup`'s subcommand dispatch (`emdx task --help` failed with "No such option '--help'", `emdx trash` printed nothing, `emdx maintain --auto` skipped its sub-steps). The lazy placeholder now derives from `TyperGroup` and cross-hierarchy checks are duck-typed, so the CLI works under typer 0.24–0.27. The dependency range is widened to `>=0.24.1,<0.28.0`.
 
 ## [0.33.1] - 2026-08-04
