@@ -1723,6 +1723,12 @@ emdx briefing --json
 emdx briefing --save
 emdx briefing --save --hours 8
 emdx briefing --save --model sonnet
+
+# Scope to a tag instead of the whole KB — documents are matched directly,
+# tasks are matched via their linked gameplan/source/output document
+emdx briefing --tags sentry-investigation --since "30 days ago"
+emdx briefing --tags a,b --any-tags     # match ANY of the tags instead of ALL
+emdx briefing --tags sentry-investigation --save --hours 24
 ```
 
 ---
