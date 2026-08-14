@@ -23,6 +23,51 @@ from ..database import db
 
 console = Console()
 
+SqlParam = str | int
+
+
+def _parse_tags(tags: str | None) -> list[str]:
+    """Split a comma-separated --tags value into a normalized tag list."""
+    if not tags:
+        return []
+    return [t.strip().lower() for t in tags.split(",") if t.strip()]
+
+
+def _get_tag_filtered_doc_ids(tag_names: list[str], any_tags: bool) -> set[int] | None:
+    """Return document IDs matching the tag filter, or None if no filter is active.
+
+    An empty (non-None) set means the filter is active but matched nothing.
+    """
+    if not tag_names:
+        return None
+
+    with db.get_connection() as conn:
+        placeholders = ",".join("?" * len(tag_names))
+        if any_tags:
+            cursor = conn.execute(
+                f"""
+                SELECT DISTINCT dt.document_id
+                FROM document_tags dt
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE t.name IN ({placeholders})
+                """,
+                tag_names,
+            )
+        else:
+            cursor = conn.execute(
+                f"""
+                SELECT dt.document_id
+                FROM document_tags dt
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE t.name IN ({placeholders})
+                GROUP BY dt.document_id
+                HAVING COUNT(DISTINCT t.name) = ?
+                """,
+                [*tag_names, len(tag_names)],
+            )
+        return {int(row[0]) for row in cursor.fetchall()}
+
+
 app = typer.Typer(help="Show recent emdx activity briefing")
 
 
@@ -80,71 +125,117 @@ def _parse_since(since: str) -> datetime:
     return datetime.now() - timedelta(days=1)
 
 
-def _get_documents_created(since: datetime) -> list[dict[str, Any]]:
-    """Get documents created since the given datetime."""
+def _get_documents_created(
+    since: datetime, tag_doc_ids: set[int] | None = None
+) -> list[dict[str, Any]]:
+    """Get documents created since the given datetime, optionally scoped to a tag filter."""
+    if tag_doc_ids is not None and not tag_doc_ids:
+        return []
+
     since_str = since.isoformat()
+    query = """
+        SELECT id, title, project, created_at,
+               (SELECT GROUP_CONCAT(t.name, ', ')
+                FROM document_tags dt
+                JOIN tags t ON dt.tag_id = t.id
+                WHERE dt.document_id = d.id) as tags
+        FROM documents d
+        WHERE created_at >= ? AND is_deleted = 0
+    """
+    params: list[SqlParam] = [since_str]
+    if tag_doc_ids is not None:
+        placeholders = ",".join("?" * len(tag_doc_ids))
+        query += f" AND d.id IN ({placeholders})"
+        params.extend(tag_doc_ids)
+    query += " ORDER BY created_at DESC"
+
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT id, title, project, created_at,
-                   (SELECT GROUP_CONCAT(t.name, ', ')
-                    FROM document_tags dt
-                    JOIN tags t ON dt.tag_id = t.id
-                    WHERE dt.document_id = d.id) as tags
-            FROM documents d
-            WHERE created_at >= ? AND is_deleted = 0
-            ORDER BY created_at DESC
-            """,
-            (since_str,),
-        )
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
 
-def _get_tasks_completed(since: datetime) -> list[dict[str, Any]]:
-    """Get tasks completed since the given datetime."""
+def _tag_scope_clause(tag_doc_ids: set[int]) -> tuple[str, list[SqlParam]]:
+    """Build a WHERE fragment matching tasks whose linked document is tag-scoped."""
+    placeholders = ",".join("?" * len(tag_doc_ids))
+    clause = (
+        f" AND (gameplan_id IN ({placeholders})"
+        f" OR source_doc_id IN ({placeholders})"
+        f" OR output_doc_id IN ({placeholders}))"
+    )
+    params: list[SqlParam] = [*tag_doc_ids, *tag_doc_ids, *tag_doc_ids]
+    return clause, params
+
+
+def _get_tasks_completed(
+    since: datetime, tag_doc_ids: set[int] | None = None
+) -> list[dict[str, Any]]:
+    """Get tasks completed since the given datetime, optionally scoped to a tag filter."""
+    if tag_doc_ids is not None and not tag_doc_ids:
+        return []
+
     since_str = since.isoformat()
+    query = """
+        SELECT id, title, completed_at, project
+        FROM tasks
+        WHERE status = 'done' AND completed_at >= ?
+    """
+    params: list[SqlParam] = [since_str]
+    if tag_doc_ids is not None:
+        clause, tag_params = _tag_scope_clause(tag_doc_ids)
+        query += clause
+        params.extend(tag_params)
+    query += " ORDER BY completed_at DESC"
+
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT id, title, completed_at, project
-            FROM tasks
-            WHERE status = 'done' AND completed_at >= ?
-            ORDER BY completed_at DESC
-            """,
-            (since_str,),
-        )
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
 
-def _get_tasks_added(since: datetime) -> list[dict[str, Any]]:
-    """Get tasks created since the given datetime."""
+def _get_tasks_added(since: datetime, tag_doc_ids: set[int] | None = None) -> list[dict[str, Any]]:
+    """Get tasks created since the given datetime, optionally scoped to a tag filter."""
+    if tag_doc_ids is not None and not tag_doc_ids:
+        return []
+
     since_str = since.isoformat()
+    query = """
+        SELECT id, title, status, priority, created_at, project
+        FROM tasks
+        WHERE created_at >= ?
+    """
+    params: list[SqlParam] = [since_str]
+    if tag_doc_ids is not None:
+        clause, tag_params = _tag_scope_clause(tag_doc_ids)
+        query += clause
+        params.extend(tag_params)
+    query += " ORDER BY created_at DESC"
+
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT id, title, status, priority, created_at, project
-            FROM tasks
-            WHERE created_at >= ?
-            ORDER BY created_at DESC
-            """,
-            (since_str,),
-        )
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
 
-def _get_tasks_blocked(since: datetime) -> list[dict[str, Any]]:
-    """Get tasks that became blocked since the given datetime."""
+def _get_tasks_blocked(
+    since: datetime, tag_doc_ids: set[int] | None = None
+) -> list[dict[str, Any]]:
+    """Get tasks that became blocked since the given datetime, optionally tag-filtered."""
+    if tag_doc_ids is not None and not tag_doc_ids:
+        return []
+
     since_str = since.isoformat()
+    query = """
+        SELECT id, title, updated_at, project
+        FROM tasks
+        WHERE status = 'blocked' AND updated_at >= ?
+    """
+    params: list[SqlParam] = [since_str]
+    if tag_doc_ids is not None:
+        clause, tag_params = _tag_scope_clause(tag_doc_ids)
+        query += clause
+        params.extend(tag_params)
+    query += " ORDER BY updated_at DESC"
+
     with db.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT id, title, updated_at, project
-            FROM tasks
-            WHERE status = 'blocked' AND updated_at >= ?
-            ORDER BY updated_at DESC
-            """,
-            (since_str,),
-        )
+        cursor = conn.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
 
 
@@ -177,11 +268,17 @@ def _display_human_briefing(
     tasks_completed: list[dict[str, Any]],
     tasks_added: list[dict[str, Any]],
     blockers: list[dict[str, Any]],
+    tag_names: list[str] | None = None,
+    any_tags: bool = False,
 ) -> None:
     """Display briefing in human-readable format using Rich."""
     # Header with time range
     time_range = f"Since {since.strftime('%Y-%m-%d %H:%M')}"
-    console.print(Panel(f"[bold]📊 EMDX Briefing[/bold]\n{time_range}", expand=False))
+    header = f"[bold]📊 EMDX Briefing[/bold]\n{time_range}"
+    if tag_names:
+        joiner = " OR " if any_tags else " AND "
+        header += f"\nTags: {joiner.join(tag_names)}"
+    console.print(Panel(header, expand=False))
     console.print()
 
     # Quick stats summary
@@ -310,6 +407,8 @@ def _build_json_output(
     tasks_completed: list[dict[str, Any]],
     tasks_added: list[dict[str, Any]],
     blockers: list[dict[str, Any]],
+    tag_names: list[str] | None = None,
+    any_tags: bool = False,
 ) -> dict[str, Any]:
     """Build JSON output for --json flag."""
     # Convert comma-joined tag strings to arrays for JSON output
@@ -320,6 +419,9 @@ def _build_json_output(
     return {
         "since": since.isoformat(),
         "generated_at": datetime.now().isoformat(),
+        "tags_filter": {"tags": tag_names, "mode": "any" if any_tags else "all"}
+        if tag_names
+        else None,
         "summary": {
             "documents_created": len(documents),
             "tasks_completed": len(tasks_completed),
@@ -365,12 +467,26 @@ def briefing(
         "-m",
         help="Model for --save synthesis",
     ),
+    tags: str | None = typer.Option(
+        None,
+        "--tags",
+        "-t",
+        help="Scope the briefing to documents/tasks linked to these comma-separated tags",
+    ),
+    any_tags: bool = typer.Option(
+        False,
+        "--any-tags",
+        help="Match ANY of --tags instead of requiring ALL of them",
+    ),
 ) -> None:
     """
     Show what happened in recent emdx activity.
 
     By default shows activity from the last 24 hours.
     Use --save to generate an AI-synthesized session summary and persist it.
+    Use --tags to scope the briefing to a specific area instead of the whole KB —
+    documents are scoped directly by tag, and tasks are scoped via their linked
+    gameplan/source/output document.
 
     Examples:
         emdx briefing
@@ -379,14 +495,18 @@ def briefing(
         emdx briefing --json
         emdx briefing --save                   # AI summary of last 4 hours
         emdx briefing --save --hours 8          # AI summary of last 8 hours
+        emdx briefing --tags sentry-investigation --since '30 days ago'
+        emdx briefing --tags a,b --any-tags     # scoped to docs tagged 'a' OR 'b'
     """
     # If a subcommand was invoked, don't run the default behavior
     if ctx.invoked_subcommand is not None:
         return
 
+    tag_names = _parse_tags(tags)
+
     # Handle --save: AI-synthesized session summary (replaces old `wrapup` command)
     if save:
-        _briefing_save(hours=hours, model=model)
+        _briefing_save(hours=hours, model=model, tag_names=tag_names, any_tags=any_tags)
         return
 
     # Parse since argument (default to 24 hours ago)
@@ -395,21 +515,32 @@ def briefing(
     else:
         since_dt = datetime.now() - timedelta(days=1)
 
+    tag_doc_ids = _get_tag_filtered_doc_ids(tag_names, any_tags)
+
     # Gather data
-    documents = _get_documents_created(since_dt)
-    tasks_completed = _get_tasks_completed(since_dt)
-    tasks_added = _get_tasks_added(since_dt)
-    blockers = _get_tasks_blocked(since_dt)
+    documents = _get_documents_created(since_dt, tag_doc_ids)
+    tasks_completed = _get_tasks_completed(since_dt, tag_doc_ids)
+    tasks_added = _get_tasks_added(since_dt, tag_doc_ids)
+    blockers = _get_tasks_blocked(since_dt, tag_doc_ids)
 
     # Output
     if json_output:
-        output = _build_json_output(since_dt, documents, tasks_completed, tasks_added, blockers)
+        output = _build_json_output(
+            since_dt, documents, tasks_completed, tasks_added, blockers, tag_names, any_tags
+        )
         print(json.dumps(output, indent=2, default=str))
     else:
-        _display_human_briefing(since_dt, documents, tasks_completed, tasks_added, blockers)
+        _display_human_briefing(
+            since_dt, documents, tasks_completed, tasks_added, blockers, tag_names, any_tags
+        )
 
 
-def _briefing_save(hours: int, model: str | None) -> None:
+def _briefing_save(
+    hours: int,
+    model: str | None,
+    tag_names: list[str] | None = None,
+    any_tags: bool = False,
+) -> None:
     """Generate AI summary of recent activity and save to KB."""
     import sys
 
@@ -420,15 +551,33 @@ def _briefing_save(hours: int, model: str | None) -> None:
     tasks = get_tasks_in_window(hours)
     docs = get_docs_in_window(hours)
 
+    tag_scope = ""
+    if tag_names:
+        joiner = " OR " if any_tags else " AND "
+        tag_scope = f" tagged {joiner.join(tag_names)}"
+
+    if tag_names:
+        tag_doc_ids = _get_tag_filtered_doc_ids(tag_names, any_tags)
+        assert tag_doc_ids is not None
+        docs = [d for d in docs if d.id in tag_doc_ids]
+        tasks = [
+            t
+            for t in tasks
+            if t.gameplan_id in tag_doc_ids
+            or t.source_doc_id in tag_doc_ids
+            or t.output_doc_id in tag_doc_ids
+        ]
+
     total_items = len(tasks) + len(docs)
     if total_items == 0:
-        print(f"No activity in the last {hours} hours.")
+        print(f"No activity{tag_scope} in the last {hours} hours.")
         return
 
     # Build synthesis prompt
     sections = []
     sections.append(
-        f"Generate a concise session summary for the last {hours} hours.\n"
+        f"Generate a concise session summary for the last {hours} hours"
+        f"{' for work' + tag_scope if tag_scope else ''}.\n"
         "Focus on: what was accomplished, what's in progress, and what needs attention."
     )
 
@@ -462,9 +611,10 @@ def _briefing_save(hours: int, model: str | None) -> None:
     )
 
     prompt = "\n\n".join(sections)
-    title = f"Session Summary ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    title_suffix = f" [{', '.join(tag_names)}]" if tag_names else ""
+    title = f"Session Summary ({datetime.now().strftime('%Y-%m-%d %H:%M')}){title_suffix}"
 
-    sys.stderr.write(f"briefing: synthesizing {total_items} items...\n")
+    sys.stderr.write(f"briefing: synthesizing {total_items} items{tag_scope}...\n")
 
     system_prompt = (
         "You are a session summarizer. Generate concise, actionable summaries "
@@ -479,8 +629,15 @@ def _briefing_save(hours: int, model: str | None) -> None:
         )
         if result.success and result.output_content:
             print(result.output_content)
-            tags = ["session-summary", "active"]
-            doc_id = save_document(title=title, content=result.output_content, tags=tags)
+            saved_tags = (
+                ["session-summary", "active", *tag_names]
+                if tag_names
+                else [
+                    "session-summary",
+                    "active",
+                ]
+            )
+            doc_id = save_document(title=title, content=result.output_content, tags=saved_tags)
             sys.stderr.write(f"briefing: saved as doc #{doc_id}\n")
         else:
             sys.stderr.write("briefing: synthesis failed\n")
