@@ -152,6 +152,9 @@ def get_input_content(input_arg: str | None, file_path: str | None = None) -> In
     A positional argument that is an existing file path is refused (#1051):
     it almost always means the caller meant -f/--file, and accepting it
     silently records the path string instead of the file's contents.
+
+    A bare "-" positional routes to stdin rather than being saved literally,
+    for the same reason: it is never the content the caller meant.
     """
     import sys
 
@@ -167,6 +170,11 @@ def get_input_content(input_arg: str | None, file_path: str | None = None) -> In
         except Exception as e:
             console.print(f"[red]Error reading file: {e}[/red]")
             raise typer.Exit(1) from e
+
+    # A bare "-" is the POSIX spelling of "read stdin", not content. Taking it
+    # literally saves a 1-char body and drops what the caller piped in.
+    if input_arg == "-":
+        input_arg = None
 
     # Priority 2: Positional argument (skip stdin — content already in hand)
     if input_arg:

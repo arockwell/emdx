@@ -78,6 +78,37 @@ class TestGetInputContent:
         mock_stdin.read.assert_not_called()
 
     @patch("sys.stdin")
+    def test_bare_dash_reads_stdin(self, mock_stdin):
+        """A bare "-" means stdin, not a literal hyphen body."""
+        mock_stdin.isatty.return_value = False
+        mock_stdin.read.return_value = "piped content"
+
+        result = get_input_content("-")
+        assert result.content == "piped content"
+        assert result.source_type == "stdin"
+
+    @patch("sys.stdin")
+    def test_bare_dash_with_empty_stdin_exits(self, mock_stdin):
+        """A "-" with nothing piped fails loudly rather than saving "-"."""
+        import pytest
+        from click.exceptions import Exit
+
+        mock_stdin.isatty.return_value = False
+        mock_stdin.read.return_value = ""
+
+        with pytest.raises(Exit):
+            get_input_content("-")
+
+    @patch("sys.stdin")
+    def test_dash_prefixed_content_is_not_stdin(self, mock_stdin):
+        """Only a bare "-" routes to stdin; a leading hyphen stays content."""
+        mock_stdin.isatty.return_value = True
+
+        result = get_input_content("- a markdown bullet")
+        assert result.content == "- a markdown bullet"
+        assert result.source_type == "direct"
+
+    @patch("sys.stdin")
     def test_file_skips_stdin_probe(self, mock_stdin, tmp_path):
         """--file must never touch stdin, even open non-TTY stdin (GH #1034)."""
         mock_stdin.isatty.return_value = False
