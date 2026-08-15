@@ -174,6 +174,51 @@ class TestTitleMatchWikify:
         assert 5032 not in result.linked_doc_ids
         assert 5033 not in result.linked_doc_ids
 
+    def test_skips_any_title_matching_only_a_body_header(self, isolate_test_database: Any) -> None:
+        """Regression test for #1114's underlying pattern beyond the stopword
+        list: a title that isn't a known stopword still shouldn't link just
+        because it matches a markdown heading line — e.g. judge-doc titles
+        ending in "Verdict" matching a "# ... Verdict" section heading in an
+        unrelated doc's body, the live symptom reported after the initial
+        stopword-list fix.
+        """
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            _create_doc(conn, 5035, "5785 Verdict", "The verdict on KEEP-5785.")
+            _create_doc(
+                conn,
+                5036,
+                "Unrelated Judge Doc",
+                "# KEEP-9999 Verdict\n\nSome unrelated findings here.",
+            )
+
+        result = title_match_wikify(5036)
+        assert result.links_created == 0
+        assert 5035 not in result.linked_doc_ids
+
+    def test_still_links_genuine_body_mention_outside_headers(
+        self, isolate_test_database: Any
+    ) -> None:
+        """A title mentioned in prose (not inside a heading line) should
+        still link — the header-stripping fix must not disable real
+        title_match links.
+        """
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            _create_doc(conn, 5037, "5786 Verdict", "The verdict on KEEP-5786.")
+            _create_doc(
+                conn,
+                5038,
+                "Follow-up Fix",
+                "# Follow-up\n\nThis builds on the 5786 verdict from last week.",
+            )
+
+        result = title_match_wikify(5038)
+        assert result.links_created == 1
+        assert 5037 in result.linked_doc_ids
+
     def test_skips_already_linked(self, isolate_test_database: Any) -> None:
         from emdx.database import db
         from emdx.database.document_links import create_link
