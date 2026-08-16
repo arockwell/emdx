@@ -14,10 +14,8 @@ import json
 
 import typer
 from rich import box
-from rich.console import Console
-from rich.table import Table
 
-from ..utils.output import print_json
+from ..utils.output import Table, console, print_json
 from .types import (
     AccessBucket,
     HealthData,
@@ -32,8 +30,6 @@ from .types import (
     WeeklyActivity,
     WeeklyGrowth,
 )
-
-console = Console()
 
 
 def _get_status_emoji(score: float) -> str:
@@ -562,8 +558,6 @@ def _show_kb_stats(project: str | None = None, detailed: bool = False) -> None:
     console.print(f"[blue]Most Recent:[/blue] {_format_datetime(newest_date)}")
 
     if detailed:
-        from rich.table import Table as RichTable
-
         console.print("\n[bold]Detailed Statistics[/bold]")
         console.print("-" * 40)
 
@@ -576,7 +570,7 @@ def _show_kb_stats(project: str | None = None, detailed: bool = False) -> None:
                     "FROM documents WHERE is_deleted = FALSE "
                     "GROUP BY project ORDER BY doc_count DESC"
                 )
-                project_table = RichTable(title="Documents by Project")
+                project_table = Table(title="Documents by Project")
                 project_table.add_column("Project", style="green")
                 project_table.add_column("Documents", justify="right", style="cyan")
                 project_table.add_column("Total Views", justify="right", style="blue")

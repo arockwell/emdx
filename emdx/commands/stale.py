@@ -16,12 +16,11 @@ from enum import Enum
 from typing import Any
 
 import typer
-from rich.table import Table
 
 from emdx.database import db
 from emdx.models.tags import get_tags_for_documents
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import console
+from emdx.utils.output import Table, console
 from emdx.utils.text_formatting import truncate_title
 
 # Typer sub-app for `emdx maintain stale` backward compatibility

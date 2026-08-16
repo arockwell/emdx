@@ -1,11 +1,10 @@
 """Epic CLI commands — manage task epics (grouped work within categories)."""
 
 import typer
-from rich.table import Table
 
 from emdx.models import tasks
 from emdx.models.types import TaskRef
-from emdx.utils.output import console
+from emdx.utils.output import Table, console
 
 app = typer.Typer(help="Manage task epics")
 

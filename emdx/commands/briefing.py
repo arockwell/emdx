@@ -14,14 +14,11 @@ from datetime import datetime, timedelta
 from typing import Any
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
 from ..config.cli_config import DEFAULT_LLM_MODEL
 from ..database import db
-
-console = Console()
+from ..utils.output import Table, console
 
 SqlParam = str | int
 

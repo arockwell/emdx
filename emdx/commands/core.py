@@ -16,7 +16,6 @@ from typing import Any
 
 import typer
 from rich.panel import Panel
-from rich.table import Table
 
 from emdx.config.cli_config import DEFAULT_LLM_MODEL
 from emdx.database.documents import (
@@ -40,7 +39,7 @@ from emdx.models.tags import (
 from emdx.models.types import TaskRef
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import console, is_non_interactive, print_json
+from emdx.utils.output import Table, console, is_non_interactive, print_json
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Core CRUD operations for documents")
@@ -834,7 +833,6 @@ def _find_list_all(
         print(json.dumps(json_docs, indent=2))
         return
 
-    from rich.table import Table
 
     title = "Knowledge Base Documents"
     if project:
@@ -886,7 +884,6 @@ def _find_recent(
         print(json.dumps(json_docs, indent=2))
         return
 
-    from rich.table import Table
 
     table = Table(title=f"Last {limit} Accessed Documents")
     table.add_column("ID", style="cyan", no_wrap=True)
@@ -951,9 +948,7 @@ def _find_similar(
         return
 
     console.print(f"[bold]Documents similar to #{doc_id} '{source_title}':[/bold]\n")
-    from rich.table import Table as RichTable
-
-    table = RichTable()
+    table = Table()
     table.add_column("ID", style="cyan", width=6)
     table.add_column("Score", style="green", width=6)
     table.add_column("Title", width=50)
@@ -1394,9 +1389,7 @@ def view(
                 return
 
             console.print(f"[bold]Links for #{doc.id} '{doc.title}':[/bold]\n")
-            from rich.table import Table as LinksTable
-
-            table = LinksTable()
+            table = Table()
             table.add_column("ID", style="cyan", width=6)
             table.add_column("Score", style="green", width=6)
             table.add_column("Title", width=50)

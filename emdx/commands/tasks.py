@@ -7,7 +7,6 @@ import re
 from datetime import date, datetime
 
 import typer
-from rich.table import Table
 from rich.text import Text
 
 from emdx.commands.categories import app as categories_app
@@ -16,7 +15,7 @@ from emdx.models import tasks
 from emdx.models.task import Task
 from emdx.models.types import TaskRef
 from emdx.utils.lazy_group import make_alias_group
-from emdx.utils.output import console, is_non_interactive, print_json
+from emdx.utils.output import Table, console, is_non_interactive, print_json
 
 app = typer.Typer(help="Agent work queue", cls=make_alias_group({"create": "add", "show": "view"}))
 app.add_typer(epics_app, name="epic", help="Manage task epics")
