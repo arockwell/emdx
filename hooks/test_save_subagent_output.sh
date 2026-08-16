@@ -3,8 +3,8 @@
 #
 # Stubs `emdx` on PATH so no real save happens, then feeds the hook a JSON
 # payload per case on stdin and asserts whether the stub was invoked.
-# Covers: agent-type narrowing (TOOL-1957 change 1/2), the widened dedup
-# regex (change 3), and the conversational-title skip (change 4).
+# Covers: agent-type narrowing, the widened dedup regex, and the
+# conversational-title skip.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
