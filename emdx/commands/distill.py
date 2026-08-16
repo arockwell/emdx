@@ -10,16 +10,15 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import typer
 
+from emdx.utils.output import console
+
 if TYPE_CHECKING:
     from ..services.synthesis_service import Audience
-from rich.console import Console
 from rich.panel import Panel
 
 from ..database import db
 from ..database.search import search_documents
 from ..models.tags import search_by_tags
-
-console = Console()
 
 app = typer.Typer(help="Distill KB content into audience-aware summaries")
 

@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import typer
-from rich.console import Console
+
+from emdx.utils.output import console
 
 from ..database import db
 from ..database.document_links import get_links_for_document
@@ -23,7 +24,6 @@ from ..models.document import Document
 if TYPE_CHECKING:
     from ..services.hybrid_search import HybridSearchResult
 
-console = Console()
 
 # ── Scoring constants ────────────────────────────────────────────────
 

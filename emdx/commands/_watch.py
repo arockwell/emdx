@@ -6,12 +6,10 @@ import json
 import logging
 from typing import cast
 
-from rich.table import Table
-
 from emdx.database.connection import db_connection
 from emdx.database.types import StandingQueryMatch, StandingQueryRow
 from emdx.utils.datetime_utils import parse_datetime
-from emdx.utils.output import console
+from emdx.utils.output import Table, console
 
 logger = logging.getLogger(__name__)
 

@@ -7,7 +7,6 @@ works as a shorthand for `emdx tag add 42 gameplan`.
 
 import typer
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.table import Table
 
 from emdx.models.documents import get_document
 from emdx.models.tags import (
@@ -20,7 +19,7 @@ from emdx.models.tags import (
 )
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import console, is_non_interactive, print_json
+from emdx.utils.output import Table, console, is_non_interactive, print_json
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Manage document tags")

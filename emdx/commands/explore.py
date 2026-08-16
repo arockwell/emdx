@@ -18,9 +18,7 @@ from datetime import datetime
 from typing import Any, TypedDict
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 from ..database import db
@@ -32,8 +30,8 @@ from ..services.clustering import (
     require_sklearn,
 )
 from ..utils.environment import get_subprocess_env
+from ..utils.output import Table, console
 
-console = Console()
 logger = logging.getLogger(__name__)
 app = typer.Typer(help="Explore what your knowledge base knows")
 

@@ -9,14 +9,13 @@ Consolidates trash, restore, and purge into a subcommand group:
 """
 
 import typer
-from rich.table import Table
 
 from emdx.models.documents import (
     list_deleted_documents,
     purge_deleted_documents,
     restore_document,
 )
-from emdx.utils.output import console, is_non_interactive
+from emdx.utils.output import Table, console, is_non_interactive
 
 app = typer.Typer(help="Manage deleted documents (trash)")
 

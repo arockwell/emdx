@@ -1,10 +1,9 @@
 """Category CLI commands — manage task categories for epic numbering."""
 
 import typer
-from rich.table import Table
 
 from emdx.models import categories
-from emdx.utils.output import console
+from emdx.utils.output import Table, console
 
 app = typer.Typer(help="Manage task categories")
 
