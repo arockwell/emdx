@@ -7,11 +7,10 @@ import json
 from datetime import datetime
 
 import typer
-from rich.table import Table
 
 from emdx.database.connection import db_connection
 from emdx.models.documents import get_document
-from emdx.utils.output import console
+from emdx.utils.output import Table, console
 
 
 def history(

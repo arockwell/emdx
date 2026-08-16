@@ -10,7 +10,6 @@ import subprocess
 from datetime import datetime, timezone
 
 import typer
-from rich.console import Console
 
 from ..database import db
 from ..utils.git import get_git_project
@@ -29,7 +28,6 @@ from .types import (
     WikiPrimeStatus,
 )
 
-console = Console()
 logger = logging.getLogger(__name__)
 
 
