@@ -426,8 +426,42 @@ class TestTaskList:
 
     @patch("emdx.commands.tasks.tasks")
     def test_list_defaults_to_actionable_statuses(self, mock_tasks):
+        """The plain default invocation is open work, which must never be
+        silently hidden behind the 20-row page cap (GH #1014's sibling bug:
+        the cap applied even without --all).
+        """
         mock_tasks.list_tasks.return_value = []
         result = runner.invoke(app, ["list"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["open", "active", "blocked"],
+            limit=-1,
+            epic_key=None,
+            parent_task_id=None,
+            since=None,
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_default_view_with_explicit_limit_respects_it(self, mock_tasks):
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "-n", "5"])
+        assert result.exit_code == 0
+        mock_tasks.list_tasks.assert_called_once_with(
+            status=["open", "active", "blocked"],
+            limit=5,
+            epic_key=None,
+            parent_task_id=None,
+            since=None,
+        )
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_list_explicit_status_still_capped(self, mock_tasks):
+        """Requesting the same statuses explicitly is a deliberate, narrower
+        query and keeps the default page cap (only the bare default view is
+        unlimited).
+        """
+        mock_tasks.list_tasks.return_value = []
+        result = runner.invoke(app, ["list", "-s", "open,active,blocked"])
         assert result.exit_code == 0
         mock_tasks.list_tasks.assert_called_once_with(
             status=["open", "active", "blocked"],
