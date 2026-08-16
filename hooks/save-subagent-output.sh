@@ -44,26 +44,19 @@ msg = data.get("last_assistant_message", "")
 if not msg or len(msg) < 200:
     sys.exit(0)
 
-# Agent types whose final output is worth a knowledge-base record.
 # DRIFT CONTRACT: this set must match the SubagentStop matcher in
 # hooks.json — update both together (the /new-agent skill's checklist).
-#   - built-ins:  explore, plan, general-purpose
-#   - role fleet: worker, auditor, reviewer, scout, verifier,
-#                 epic-runner, recorder, pr-reviewer,
-#                 sentry-issue-investigator
-#   - monitor is excluded on purpose: watch/poll output is transient
-allowed_types = {
-    "explore", "plan", "general-purpose",
-    "worker", "auditor", "reviewer", "scout", "verifier",
-    "epic-runner", "recorder", "pr-reviewer", "sentry-issue-investigator",
-}
+# Only built-in agent types. Role-fleet agents save their own findings
+# per their role files; measured re-read rate on their backstop saves
+# was 3.5% against 22.3% for deliberate saves.
+allowed_types = {"explore", "plan", "general-purpose"}
 if agent_type.lower() not in allowed_types:
     sys.exit(0)
 
 # Backstop, not duplicator: role-fleet agents are instructed to save
 # their own findings and cite the doc id in their final report. A message
 # that already cites a doc id has its content in emdx — skip.
-if re.search(r"(?:emdx|doc)\s*#\d{3,}", msg):
+if re.search(r"(?:emdx|doc)\s*(?:id)?[:\s#*]*#?\*{0,2}\d{3,}", msg, re.I):
     sys.exit(0)
 
 # Check emdx is available
@@ -81,8 +74,20 @@ for line in msg.splitlines():
     if stripped.startswith("#"):
         title = stripped.lstrip("#").strip()[:80]
         break
+has_heading = bool(title)
 if not title:
     title = first_line or f"{agent_type} agent output"
+
+# No heading and the opening line reads as chat, not a title (e.g. "Done.
+# Here's the summary:", "Now I have all I need. Let me write the review.").
+# A doc titled that way is unfindable by search — skip the save instead.
+CONVERSATIONAL_RE = re.compile(
+    r"^(?:done\b|now\b|ok(?:ay)?\b|great\b|perfect\b|sure\b|here'?s\b|"
+    r"here is\b|i'?ve\b|i have\b|let me\b|all\s+.{0,30}\b(?:complete|done|finished)\b)",
+    re.IGNORECASE,
+)
+if not has_heading and CONVERSATIONAL_RE.match(first_line):
+    sys.exit(0)
 
 # --- Tags ---
 tags = ["subagent", f"agent:{agent_type.lower()}"]
