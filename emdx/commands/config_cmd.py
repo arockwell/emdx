@@ -23,7 +23,9 @@ def _format_value(value: object) -> str:
 
 
 @app.command(name="get")
-def get_cmd(key: str = typer.Argument(..., help="Setting key, e.g. maintain.auto_link_on_save")):
+def get_cmd(
+    key: str = typer.Argument(..., help="Setting key, e.g. maintain.auto_link_on_save"),
+) -> None:
     """Print a setting's effective value (set value or default)."""
     value = get_config_value(key)
     if value is None and key not in load_config() and key not in KNOWN_SETTINGS:
