@@ -116,6 +116,24 @@ def _build_title_pattern(normalized_title: str) -> re.Pattern[str]:
     return re.compile(r"\b" + escaped + r"\b", re.IGNORECASE)
 
 
+_HEADING_LINE_RE = re.compile(r"^[ \t]{0,3}#{1,6}[ \t].*$", re.MULTILINE)
+
+
+def _strip_markdown_headers(content: str) -> str:
+    """Remove markdown heading lines from document content.
+
+    A heading like "## Summary" or "# KEEP-5785 Verdict" is document
+    structure, not a genuine mention of another document's title — but it
+    reads identically to one under the word-boundary title match. Any other
+    document titled exactly "Summary" or "Verdict" would otherwise get a
+    spurious 1.0-similarity link from every document that happens to use
+    that word as a section header (issue #1114). Stripping heading lines
+    before matching keeps title_match scoped to real body mentions like
+    "the auth module broke", which is what it's meant to catch.
+    """
+    return _HEADING_LINE_RE.sub("", content)
+
+
 def _load_title_candidates(
     exclude_doc_id: int | None = None,
     project: str | None = None,
@@ -223,7 +241,7 @@ def title_match_wikify(
     if not cross_project:
         scope_project = _get_document_project(doc_id)
 
-    content_lower = content.lower()
+    content_lower = _strip_markdown_headers(content).lower()
     candidates = _load_title_candidates(exclude_doc_id=doc_id, project=scope_project)
 
     # Get existing links to avoid duplicates

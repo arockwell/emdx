@@ -1,0 +1,19 @@
+name: Hooks Version Guard
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Check hooks/ changes bump the plugin version
+      run: |
+        python scripts/check_hooks_version_bump.py \
+          "origin/${{ github.event.pull_request.base.ref }}" \
+          "${{ github.event.pull_request.head.sha }}"

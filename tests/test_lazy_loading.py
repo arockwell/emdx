@@ -403,6 +403,37 @@ class TestListRecentShorthand:
         _rewrite_list_recent_shorthand(argv)
         assert argv == ["emdx", "find", "docker"]
 
+    def test_subcommand_list_is_not_rewritten(self) -> None:
+        """`emdx task list` is `task`'s own `list` verb, not the top-level
+        `list` alias for `find` — it must never get `--all` injected.
+        """
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "task", "list"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "task", "list"]
+
+    def test_nested_dep_list_is_not_rewritten(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "task", "dep", "list", "42"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "task", "dep", "list", "42"]
+
+    def test_tag_list_subcommand_is_not_rewritten(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "tag", "list"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "tag", "list"]
+
+    def test_top_level_list_after_global_flag_is_still_rewritten(self) -> None:
+        from emdx.main import _rewrite_list_recent_shorthand
+
+        argv = ["emdx", "--verbose", "list"]
+        _rewrite_list_recent_shorthand(argv)
+        assert argv == ["emdx", "--verbose", "list", "--all"]
+
     def test_bare_list_end_to_end(self) -> None:
         """The rewritten argv actually resolves through `find --all`, not
         find's "provide search terms..." error (the bug reported in #1130).

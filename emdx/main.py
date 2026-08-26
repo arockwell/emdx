@@ -254,11 +254,20 @@ def _rewrite_list_recent_shorthand(argv: list[str]) -> None:
     supplies find criteria of its own (`--tags`, `--all`, a non-numeric
     search query, etc.) — those cases keep working exactly as a plain
     `find` alias, same as before this shorthand existed.
+
+    Only fires when `list`/`recent` is the top-level command itself (the
+    first non-flag token after `emdx`, skipping leading global flags like
+    `--verbose`). A subcommand's own `list` verb — `emdx task list`,
+    `emdx tag list`, `emdx task dep list` — is a different command with its
+    own flags and must never be rewritten into a `find` invocation.
     Mutates argv in-place.
     """
     try:
-        idx = next(i for i in range(1, len(argv)) if argv[i] in ("list", "recent"))
+        idx = next(i for i in range(1, len(argv)) if not argv[i].startswith("-"))
     except StopIteration:
+        return
+
+    if argv[idx] not in ("list", "recent"):
         return
 
     cmd = argv[idx]

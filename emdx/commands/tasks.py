@@ -7,7 +7,6 @@ import re
 from datetime import date, datetime
 
 import typer
-from rich.table import Table
 from rich.text import Text
 
 from emdx.commands.categories import app as categories_app
@@ -16,7 +15,7 @@ from emdx.models import tasks
 from emdx.models.task import Task
 from emdx.models.types import TaskRef
 from emdx.utils.lazy_group import make_alias_group
-from emdx.utils.output import console, is_non_interactive, print_json
+from emdx.utils.output import Table, console, is_non_interactive, print_json
 
 app = typer.Typer(help="Agent work queue", cls=make_alias_group({"create": "add", "show": "view"}))
 app.add_typer(epics_app, name="epic", help="Manage task epics")
@@ -896,6 +895,7 @@ def list_cmd(
         since_date = since
 
     # --since/--today imply --done when no explicit status is given
+    is_default_open_view = not status and not all and not done and not since_date
     if status:
         status_list: list[str] | None = [s.strip() for s in status.split(",")]
     elif all:
@@ -906,9 +906,12 @@ def list_cmd(
         status_list = ["open", "active", "blocked"]
 
     # --all means all: only cap when the user explicitly passed -n/--limit.
-    # SQLite treats LIMIT -1 as unlimited.
+    # The plain default view (no filters at all) is open work, and open work
+    # must never be silently hidden behind a page cap either — only the
+    # done/closed history views (--done, --since, --today, explicit -s) keep
+    # the default cap. SQLite treats LIMIT -1 as unlimited.
     if limit is None:
-        limit = -1 if all else 20
+        limit = -1 if (all or is_default_open_view) else 20
 
     resolved_epic = _resolve_id(epic) if epic else None
     task_list = tasks.list_tasks(

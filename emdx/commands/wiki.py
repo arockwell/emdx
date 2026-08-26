@@ -23,7 +23,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config.cli_config import DEFAULT_LLM_MODEL
-from ..utils.output import console
+from ..utils.output import Table, console
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +294,6 @@ def wiki_topics(
         emdx maintain wiki topics -e heading -e proper_noun -e concept
         emdx maintain wiki topics --entity-types heading  # Only headings
     """
-    from rich.table import Table
 
     if verbose:
         from ..services.wiki_clustering_service import get_topics
@@ -457,7 +456,6 @@ def wiki_status() -> None:
     )
 
     if topics:
-        from rich.table import Table
 
         # Check if any topic has a model override
         has_overrides = any(t.get("model_override") for t in topics[:20])
@@ -806,7 +804,6 @@ def wiki_entities(
 
     pages = get_entity_pages(tier=tier, limit=limit)
 
-    from rich.table import Table
 
     table = Table(title="Entity Index", box=box.SIMPLE)
     table.add_column("Entity", style="cyan")
@@ -841,7 +838,6 @@ def wiki_list(
         emdx maintain wiki list --stale        # Stale articles only
         emdx maintain wiki list --timing       # Show step-level timing
     """
-    from rich.table import Table
 
     from ..database import db
 
@@ -923,7 +919,6 @@ def wiki_runs_command(
         emdx maintain wiki runs              # Recent runs
         emdx maintain wiki runs -l 20        # More history
     """
-    from rich.table import Table
 
     from ..services.wiki_synthesis_service import list_wiki_runs
 
@@ -1047,7 +1042,6 @@ def wiki_coverage(
     )
 
     if uncovered_rows:
-        from rich.table import Table
 
         table = Table(title="Uncovered Documents", box=box.SIMPLE)
         table.add_column("ID", style="cyan", width=6)

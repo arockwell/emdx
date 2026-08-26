@@ -11,8 +11,6 @@ import json
 from typing import Any, TypedDict
 
 import typer
-from rich.console import Console
-from rich.table import Table
 
 from ..services.clustering import (
     ClusterDocumentDict,
@@ -21,9 +19,8 @@ from ..services.clustering import (
     find_clusters,
     require_sklearn,
 )
-from ..utils.output import is_non_interactive
+from ..utils.output import Table, console, is_non_interactive
 
-console = Console()
 app = typer.Typer(help="Compact documents by AI-powered synthesis")
 
 # Re-export for backwards compatibility with tests that import from here
