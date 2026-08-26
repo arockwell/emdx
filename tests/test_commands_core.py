@@ -91,7 +91,7 @@ class TestGetInputContent:
     def test_bare_dash_with_empty_stdin_exits(self, mock_stdin):
         """A "-" with nothing piped fails loudly rather than saving "-"."""
         import pytest
-        from click.exceptions import Exit
+        from typer import Exit
 
         mock_stdin.isatty.return_value = False
         mock_stdin.read.return_value = ""
