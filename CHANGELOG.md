@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Bare numeric task IDs could resolve to the wrong task in a different category** (#1134) — `resolve_task_id()` fell back to matching a bare integer against `epic_seq` (a per-category sequence number, not globally unique) whenever no task had that exact database ID. Since `epic_seq` restarts at 1 for every category, this let mutating commands like `task done`, `task wontdo`, and `task delete` silently act on an unrelated task in a different category when given a bare number instead of the `KEY-N` form. Bare numeric IDs now resolve only against the database primary key; `KEY-N` remains the way to reference a task by its per-category sequence number.
+
 ## [0.34.0] - 2026-08-14
 
 **Search that stops lying to you, and briefings that focus.** A wave of silent-wrong-results bugs in `find` is gone: keyword+tag searches no longer return 0 results when real matches exist, `--all --tags` actually filters, and same-day rows stop vanishing from `briefing --since`. On top of that, `emdx briefing` gains `--tags`/`--any-tags` scoping so you can get a temporal digest of one area instead of the whole KB, and the CLI now works under typer 0.26+.

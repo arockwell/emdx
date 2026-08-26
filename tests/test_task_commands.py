@@ -1800,3 +1800,25 @@ class TestResolveTaskId:
         mock_conn.execute.return_value = mock_cursor
 
         assert resolve_task_id("TOOL-999") is None
+
+    @patch("emdx.models.tasks.db")
+    def test_bare_integer_never_matches_epic_seq_across_categories(self, mock_db):
+        """Regression test for #1134.
+
+        A bare numeric ID must resolve ONLY against the database primary key.
+        Falling back to an epic_seq match (searched without any category
+        scope) let a mutating command like `task done <bare-int>` silently
+        act on an unrelated task in a different category.
+        """
+        from emdx.models.tasks import resolve_task_id
+
+        mock_conn = MagicMock()
+        mock_db.get_connection.return_value.__enter__ = MagicMock(return_value=mock_conn)
+        mock_db.get_connection.return_value.__exit__ = MagicMock(return_value=False)
+        # No task has primary key id == 3, only the "id" lookup should run.
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = None
+        mock_conn.execute.return_value = mock_cursor
+
+        assert resolve_task_id("3") is None
+        mock_conn.execute.assert_called_once_with("SELECT id FROM tasks WHERE id = ?", (3,))

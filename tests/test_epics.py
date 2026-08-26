@@ -455,16 +455,14 @@ class TestAttachToEpic:
 
 
 class TestResolveTaskIdFallback:
-    """Tests for #872: resolve_task_id falls back to epic_seq for bare ints."""
+    """Tests for resolve_task_id's KEY-N (epic_seq) resolution."""
 
     def test_bare_int_falls_back_to_unique_epic_seq(self) -> None:
-        """When no task with that DB id exists, try epic_seq."""
+        """A category-prefixed identifier resolves via epic_key + epic_seq."""
         task_id = tasks.create_task("Fallback test", epic_key="FLLB")
         task = tasks.get_task(task_id)
         assert task is not None
         seq = task.epic_seq
-        # Only works if no task with DB id == seq exists.
-        # We can test this by using the category-key approach as verification.
         from emdx.models.tasks import resolve_task_id
 
         assert resolve_task_id(f"FLLB-{seq}") == task_id

@@ -183,29 +183,27 @@ def resolve_task_id(identifier: TaskRef) -> int | None:
 
     Accepts:
       - Category-prefixed IDs like "TOOL-12" (looks up by epic_key + epic_seq)
-      - Raw integer IDs like "42" or "#42"
+      - Raw integer IDs like "42" or "#42" (looks up by database primary key only)
 
-    For bare integers, first checks if a task with that database ID exists.
-    If not, falls back to searching by epic_seq (e.g. "49" might match TOOL-49).
-    When the epic_seq fallback finds exactly one match, returns it.
+    A bare integer is matched ONLY against the database primary key (`tasks.id`),
+    which is globally unique. It is never matched against `epic_seq`, since
+    `epic_seq` is a per-category sequence — the same number can legitimately
+    identify a different task in every category (e.g. TOOL-3 and SEC-3 can both
+    exist). Falling back to an epic_seq match for a bare integer would silently
+    resolve to a task in an unintended category (see #1134). Use the "KEY-N"
+    form to reference a task by its per-category sequence number.
 
     Returns the database ID, or None if the format is invalid or task not found.
     """
     identifier = identifier.strip().lstrip("#")
 
-    # Try plain integer first
+    # Try plain integer first — primary key only, never epic_seq (see #1134).
     if identifier.isdigit():
         int_id = int(identifier)
         with db.get_connection() as conn:
-            # Check if a task with this database ID exists
             cursor = conn.execute("SELECT id FROM tasks WHERE id = ?", (int_id,))
             if cursor.fetchone():
                 return int_id
-            # Fall back: look for a task with this epic_seq number
-            cursor = conn.execute("SELECT id FROM tasks WHERE epic_seq = ?", (int_id,))
-            rows = cursor.fetchall()
-            if len(rows) == 1:
-                return int(rows[0][0])
         return None
 
     # Try category-prefixed format (e.g. TOOL-12)
