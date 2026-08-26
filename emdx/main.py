@@ -29,6 +29,7 @@ LAZY_SUBCOMMANDS = {
     "tag": "emdx.commands.tags:app",
     "trash": "emdx.commands.trash:app",
     "epic": "emdx.commands.epics:app",
+    "briefing": "emdx.commands.briefing:app",
 }
 
 # Pre-computed help strings so --help doesn't trigger imports
@@ -43,6 +44,7 @@ LAZY_HELP = {
     "tag": "Manage document tags",
     "trash": "Manage deleted documents",
     "epic": "Manage task epics",
+    "briefing": "Show recent emdx activity briefing",
 }
 
 
@@ -57,7 +59,6 @@ register_aliases({"show": "view", "list": "find", "recent": "find"})
 # EAGER IMPORTS - Core KB commands (fast, always needed)
 # Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
-from emdx.commands.briefing import briefing as briefing_command  # noqa: E402
 from emdx.commands.context import context as context_command  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.db_manage import app as db_app  # noqa: E402
@@ -98,8 +99,9 @@ for command in core_app.registered_commands:
 for command in gist_app.registered_commands:
     app.registered_commands.append(command)
 
-# tag, trash, task, wiki, and maintain are lazy-loaded (see LAZY_SUBCOMMANDS):
-# their modules are heavy enough to dominate CLI startup when imported eagerly
+# tag, trash, task, wiki, maintain, and briefing are lazy-loaded (see
+# LAZY_SUBCOMMANDS): their modules are heavy enough to dominate CLI startup
+# when imported eagerly
 
 # Add db as a subcommand group
 app.add_typer(db_app, name="db", help="Database management")
@@ -112,9 +114,6 @@ app.command(name="prime")(prime_command)
 
 # Add the status command for consolidated project overview
 app.command(name="status")(status_command)
-
-# Add the briefing command for activity summary
-app.command(name="briefing")(briefing_command)
 
 # Add the gui command for interactive TUI browser
 app.command(name="gui")(gui_command)
