@@ -553,6 +553,9 @@ def find(
     Use --context to retrieve docs as plain text for piping to claude.
     Use --recent-days N to scope --context to docs from the last N days.
 
+    Documents manually linked to other documents rank higher in results
+    (a curated link is a stronger relevance signal than shared vocabulary).
+
     For AI-powered search, use: emdx labs ask, emdx labs wander, emdx labs watch.
 
     Examples:
