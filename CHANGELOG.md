@@ -7,9 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+## [0.35.0] - 2026-08-26
 
-- **Bare numeric task IDs could resolve to the wrong task in a different category** (#1134) — `resolve_task_id()` fell back to matching a bare integer against `epic_seq` (a per-category sequence number, not globally unique) whenever no task had that exact database ID. Since `epic_seq` restarts at 1 for every category, this let mutating commands like `task done`, `task wontdo`, and `task delete` silently act on an unrelated task in a different category when given a bare number instead of the `KEY-N` form. Bare numeric IDs now resolve only against the database primary key; `KEY-N` remains the way to reference a task by its per-category sequence number.
+**Task management grows up, and the TUI becomes configurable.** `task update` lets you edit a task's title/description in place instead of burying the current plan under note/log history. A new `emdx config` command introduces a real settings store, and the first setting it honors (`maintain.auto_link_on_save`) fixes a long-standing interactive stall on large knowledge bases. The docs/tasks TUI panels can now be resized via config instead of living with hardcoded splits, and `maintain doctor` adds a read-only scan for a class of previously-undetectable doc corruption.
+
+### 🚀 Major Features
+
+- **`task update` command** (#1137, #1146) — edits a task's title/description directly, mirroring `emdx edit` for docs, and logs a short audit line to the work log
+- **`emdx config` command + `maintain.auto_link_on_save` setting** (#1038, #1151) — new settings store at `~/.config/emdx/config.json` with `config get/set/unset/list`; `save --auto-link/--no-auto-link` now defaults to this setting (true when unset), and turning it off skips the synchronous embedding work that was the main interactive stall on large KBs
+- **Configurable TUI panel sizes** (#891, #1151) — the docs and tasks browsers now read `ui.list_height` and `ui.sidebar_width` from config instead of hardcoding the list/preview and sidebar splits
+- **`maintain doctor` scan** (#1086, #1150) — read-only scan for docs damaged by the pre-#1051 path-as-content bug (a doc body that is just a single-line filesystem path), reporting whether the source file is still recoverable; `--json` for scripting
+
+### 🔧 Improvements
+
+- **`find --help` documents the manual-link ranking boost** (#1115, #1147) — the boost was already covered in `docs/cli-api.md` and the changelog, but not discoverable from the command's own `--help`
+- **`briefing` command lazy-loads** (#1148) — moved onto the existing lazy-loading registry used by maintain/labs/wiki/task/tag/trash/epic, dropping ~14ms of cumulative import cost from every CLI invocation that doesn't use it
+- **`sentence-transformers` requirement widened** to permit 6.0.0 (#1144)
+
+### 🐛 Bug Fixes
+
+- **Bare numeric task IDs could resolve to the wrong task in a different category** (#1134, #1135) — `resolve_task_id()` fell back to matching a bare integer against `epic_seq` (a per-category sequence number, not globally unique) whenever no task had that exact database ID. Since `epic_seq` restarts at 1 for every category, this let mutating commands like `task done`, `task wontdo`, and `task delete` silently act on an unrelated task in a different category when given a bare number instead of the `KEY-N` form. Bare numeric IDs now resolve only against the database primary key; `KEY-N` remains the way to reference a task by its per-category sequence number.
+- **Flaky typer/click Exit-class test** (#1145) — a test asserted on `click.exceptions.Exit` while the code under test raises `typer.Exit`, which resolves to typer's vendored click fork; the two classes never matched, so the test failed on every run
+
+[0.35.0]: https://github.com/arockwell/emdx/compare/v0.34.0...v0.35.0
 
 ## [0.34.0] - 2026-08-14
 
