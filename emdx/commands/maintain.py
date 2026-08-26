@@ -9,6 +9,7 @@ operations, breaking bidirectional dependencies between commands and services.
 from __future__ import annotations
 
 import logging
+import re
 
 # Removed CommandDefinition import - using standard typer pattern
 from typing import TYPE_CHECKING
@@ -881,6 +882,77 @@ def compact_command(
 
 
 app.command(name="compact")(compact_command)
+
+
+# Matches a body that is nothing but a filesystem path: absolute or
+# home-relative, single token, no spaces. The damage shape left behind by
+# the pre-#1051 path-as-content bug.
+_PATH_BODY_RE = re.compile(r"^(?:/|~/)[^\s]+$")
+
+
+def doctor_command(
+    json_output: bool = typer.Option(False, "--json", help="Output results as JSON"),
+) -> None:
+    """Scan for documents damaged by known bugs.
+
+    Currently detects path-as-content damage (#1051): docs whose entire
+    body is a file path, saved before the positional-path guard existed.
+    Read-only — reports findings, never mutates.
+    """
+    import json as json_mod
+    from pathlib import Path
+
+    from emdx.database import db
+
+    with db.get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, title, TRIM(content) AS body FROM documents
+            WHERE is_deleted = FALSE
+              AND length(content) < 512
+              AND TRIM(content) NOT LIKE '%' || char(10) || '%'
+            ORDER BY id
+            """
+        ).fetchall()
+
+    damaged = []
+    for row in rows:
+        body = row["body"]
+        if not _PATH_BODY_RE.match(body):
+            continue
+        try:
+            file_exists = Path(body).expanduser().is_file()
+        except OSError:
+            file_exists = False
+        damaged.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "path": body,
+                "file_exists": file_exists,
+            }
+        )
+
+    if json_output:
+        print(json_mod.dumps({"damaged": damaged, "count": len(damaged)}))
+        return
+
+    if not damaged:
+        print("No damaged documents found.")
+        return
+
+    print(f"Found {len(damaged)} doc(s) whose body is a file path, not content (#1051):\n")
+    for doc in damaged:
+        print(f"  #{doc['id']}  {doc['title']}")
+        print(f"      stored path: {doc['path']}")
+        if doc["file_exists"]:
+            print(f"      file exists — recover with: emdx edit {doc['id']} --file {doc['path']}")
+        else:
+            print("      file missing — content lost (consider: emdx delete)")
+    print("\nRead-only report — nothing was changed.")
+
+
+app.command(name="doctor")(doctor_command)
 
 # Register index/link commands from maintain_index as direct subcommands
 from emdx.commands.maintain_index import (  # noqa: E402
