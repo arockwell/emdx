@@ -722,6 +722,91 @@ class TestTaskListDateFilters:
         )
 
 
+class TestTaskUpdate:
+    """Tests for task update command."""
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_update_title(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 1
+        mock_tasks.get_task.side_effect = [
+            Task.from_row({"id": 1, "title": "Old title"}),
+            Task.from_row({"id": 1, "title": "New title"}),
+        ]
+        result = runner.invoke(app, ["update", "1", "--title", "New title"])
+        assert result.exit_code == 0
+        out = _out(result)
+        assert "Updated" in out
+        assert "New title" in out
+        mock_tasks.update_task.assert_called_once_with(1, title="New title")
+        mock_tasks.log_progress.assert_called_once_with(1, "Updated title")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_update_description(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 2
+        mock_tasks.get_task.side_effect = [
+            Task.from_row({"id": 2, "title": "Task", "description": "Old"}),
+            Task.from_row({"id": 2, "title": "Task", "description": "New description"}),
+        ]
+        result = runner.invoke(app, ["update", "2", "-D", "New description"])
+        assert result.exit_code == 0
+        mock_tasks.update_task.assert_called_once_with(2, description="New description")
+        mock_tasks.log_progress.assert_called_once_with(2, "Updated description")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_update_title_and_description(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 3
+        mock_tasks.get_task.side_effect = [
+            Task.from_row({"id": 3, "title": "Old", "description": "Old"}),
+            Task.from_row({"id": 3, "title": "New", "description": "New"}),
+        ]
+        result = runner.invoke(app, ["update", "3", "--title", "New", "-D", "New"])
+        assert result.exit_code == 0
+        mock_tasks.update_task.assert_called_once_with(3, title="New", description="New")
+        mock_tasks.log_progress.assert_called_once_with(3, "Updated title and description")
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_update_no_fields_errors(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 4
+        mock_tasks.get_task.return_value = Task.from_row({"id": 4, "title": "Task"})
+        result = runner.invoke(app, ["update", "4"])
+        assert result.exit_code == 1
+        assert "Nothing to update" in _out(result)
+        mock_tasks.update_task.assert_not_called()
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_update_empty_title_errors(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 5
+        mock_tasks.get_task.return_value = Task.from_row({"id": 5, "title": "Task"})
+        result = runner.invoke(app, ["update", "5", "--title", "   "])
+        assert result.exit_code == 1
+        assert "cannot be empty" in _out(result)
+        mock_tasks.update_task.assert_not_called()
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_update_task_not_found(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 999
+        mock_tasks.get_task.return_value = None
+        result = runner.invoke(app, ["update", "999", "--title", "X"])
+        assert result.exit_code == 1
+        assert "not found" in _out(result)
+
+    @patch("emdx.commands.tasks.tasks")
+    def test_update_json(self, mock_tasks):
+        mock_tasks.resolve_task_id.return_value = 6
+        mock_tasks.get_task.side_effect = [
+            Task.from_row({"id": 6, "title": "Old", "description": ""}),
+            Task.from_row({"id": 6, "title": "New", "description": ""}),
+        ]
+        result = runner.invoke(app, ["update", "6", "--title", "New", "--json"])
+        assert result.exit_code == 0
+        assert '"title": "New"' in result.stdout
+        assert '"updated": [' in result.stdout
+
+    def test_update_requires_task_id(self):
+        result = runner.invoke(app, ["update"])
+        assert result.exit_code != 0
+
+
 class TestTaskDelete:
     """Tests for task delete command."""
 
