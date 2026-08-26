@@ -1017,6 +1017,78 @@ def priority(
 
 
 @app.command()
+def update(
+    task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
+    title: str | None = typer.Option(None, "--title", help="New title"),
+    description: str | None = typer.Option(None, "-D", "--description", help="New description"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Edit a task's title and/or description in place.
+
+    Unlike 'note'/'log', which append to the work log, this rewrites the
+    field itself — use it when the title or description is now wrong
+    (stale plan, superseded branch name), not to record progress.
+
+    Examples:
+        emdx task update 42 --title "Fix the auth bug (v2)"
+        emdx task update 42 -D "Fix landed on a different branch than planned"
+        emdx task update TOOL-12 --title "New title" -D "New description"
+    """
+    task_id = _resolve_id(task_id_str, json_output=json_output)
+    task = tasks.get_task(task_id)
+    if not task:
+        msg = f"Task {task_id_str} not found"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise typer.Exit(1)
+
+    if title is None and description is None:
+        msg = "Nothing to update — pass --title and/or --description"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise typer.Exit(1)
+
+    if title is not None and not title.strip():
+        msg = "Task title cannot be empty"
+        if json_output:
+            print_json({"error": msg})
+        else:
+            console.print(f"[red]{msg}[/red]")
+        raise typer.Exit(1)
+
+    kwargs: dict[str, str] = {}
+    changed: list[str] = []
+    if title is not None:
+        kwargs["title"] = title
+        changed.append("title")
+    if description is not None:
+        kwargs["description"] = description
+        changed.append("description")
+
+    tasks.update_task(task_id, **kwargs)
+    tasks.log_progress(task_id, f"Updated {' and '.join(changed)}")
+
+    updated_task = tasks.get_task(task_id) or task
+
+    if json_output:
+        print_json(
+            {
+                "id": task_id,
+                "title": updated_task.title,
+                "description": updated_task.description,
+                "updated": changed,
+            }
+        )
+    else:
+        display = _display_id(updated_task)
+        console.print(f"[green]✅ Updated:[/green] {display} {updated_task.title}")
+
+
+@app.command()
 def delete(
     task_id_str: str = typer.Argument(..., metavar="TASK_ID", help=TASK_ID_HELP),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
