@@ -2,21 +2,23 @@
 """
 Main CLI entry point for emdx
 
-This module uses lazy loading for heavy commands to improve startup performance.
-Core KB commands (save, find, view, tag, etc.) are imported eagerly since they're
-fast. Heavy commands (distill, explore, etc.) are only imported when
-actually invoked.
+This module uses lazy loading to keep startup cost off every invocation (#1067).
+Only the core KB commands (save, find, view, edit, delete) and the db group are
+imported eagerly; every other command — sub-apps (task, tag, maintain, ...) and
+standalone commands (status, prime, context, ...) — is only imported when
+actually invoked, via the registry below.
 """
 
 import typer
 
-from emdx import __version__
 from emdx.utils.lazy_group import LazyTyperGroup, register_aliases, register_lazy_commands
 
 # =============================================================================
-# LAZY COMMANDS - Heavy features (defer import until invoked)
+# LAZY COMMANDS - defer import until invoked
 # =============================================================================
 # Format: "command_name": "module.path:object_name"
+# The target may be a Typer sub-app (dispatched as a group) or a plain
+# command function (wrapped in a single Typer command on load).
 # IMPORTANT: Register BEFORE any Typer app creation
 LAZY_SUBCOMMANDS = {
     "explore": "emdx.commands.explore:app",
@@ -30,9 +32,23 @@ LAZY_SUBCOMMANDS = {
     "trash": "emdx.commands.trash:app",
     "epic": "emdx.commands.epics:app",
     "briefing": "emdx.commands.briefing:app",
+    "config": "emdx.commands.config_cmd:app",
+    "context": "emdx.commands.context:context",
+    "diff": "emdx.commands.history:diff",
+    "gist": "emdx.commands.gist:create",
+    "gui": "emdx.ui.gui:gui",
+    "history": "emdx.commands.history:history",
+    "prime": "emdx.commands.prime:prime",
+    "serve": "emdx.commands.serve:serve",
+    "setup": "emdx.commands.setup:setup",
+    "stale": "emdx.commands.stale:stale_command",
+    "status": "emdx.commands.status:status",
+    "touch": "emdx.commands.stale:touch_command",
 }
 
-# Pre-computed help strings so --help doesn't trigger imports
+# Pre-computed help strings so --help doesn't trigger imports.
+# These must match the first line of each command's docstring so `emdx --help`
+# reads the same as it would with eager registration.
 LAZY_HELP = {
     "explore": "Explore what your knowledge base knows",
     "distill": "Distill KB content into audience-aware summaries",
@@ -45,6 +61,18 @@ LAZY_HELP = {
     "trash": "Manage deleted documents",
     "epic": "Manage task epics",
     "briefing": "Show recent emdx activity briefing",
+    "config": "Manage emdx settings",
+    "context": "Walk the wiki link graph and assemble a context bundle.",
+    "diff": "Show diff between current content and a previous version.",
+    "gist": "Create or update a GitHub Gist from a document.",
+    "gui": "TUI browser for the EMDX knowledge base.",
+    "history": "Show version history for a document.",
+    "prime": "Output priming context for Claude Code session injection.",
+    "serve": "Start a JSON-RPC server over stdin/stdout for IDE integrations.",
+    "setup": "Install emdx integrations (Claude Code skills).",
+    "stale": "Show documents needing review, grouped by urgency tier.",
+    "status": "Show knowledge base status and health.",
+    "touch": "Mark documents as reviewed without incrementing view count.",
 }
 
 
@@ -59,19 +87,8 @@ register_aliases({"show": "view", "list": "find", "recent": "find"})
 # EAGER IMPORTS - Core KB commands (fast, always needed)
 # Imports are after lazy registration - this is intentional for the loading pattern
 # =============================================================================
-from emdx.commands.config_cmd import app as config_app  # noqa: E402
-from emdx.commands.context import context as context_command  # noqa: E402
 from emdx.commands.core import app as core_app  # noqa: E402
 from emdx.commands.db_manage import app as db_app  # noqa: E402
-from emdx.commands.gist import app as gist_app  # noqa: E402
-from emdx.commands.history import diff as diff_command  # noqa: E402
-from emdx.commands.history import history as history_command  # noqa: E402
-from emdx.commands.prime import prime as prime_command  # noqa: E402
-from emdx.commands.serve import serve as serve_command  # noqa: E402
-from emdx.commands.setup import setup as setup_command  # noqa: E402
-from emdx.commands.stale import stale_command, touch_command  # noqa: E402
-from emdx.commands.status import status as status_command  # noqa: E402
-from emdx.ui.gui import gui as gui_command  # noqa: E402
 
 # Create main app with lazy loading support
 app = typer.Typer(
@@ -97,45 +114,13 @@ for command in core_app.registered_commands:
     app.registered_commands.append(command)
 
 
-# Gist commands
-for command in gist_app.registered_commands:
-    app.registered_commands.append(command)
-
-# tag, trash, task, wiki, maintain, and briefing are lazy-loaded (see
-# LAZY_SUBCOMMANDS): their modules are heavy enough to dominate CLI startup
-# when imported eagerly
+# Everything else — tag, trash, task, wiki, maintain, briefing, config, and
+# the standalone commands (context, prime, status, gui, serve, gist,
+# history/diff, stale/touch) — is lazy-loaded (see LAZY_SUBCOMMANDS): the
+# combined imports otherwise dominate CLI startup (#1067)
 
 # Add db as a subcommand group
 app.add_typer(db_app, name="db", help="Database management")
-
-# Add config as a subcommand group
-app.add_typer(config_app, name="config", help="Manage emdx settings")
-
-# Add the context command for graph-aware context assembly
-app.command(name="context")(context_command)
-
-# Add the prime command for Claude session priming
-app.command(name="prime")(prime_command)
-
-# Add the status command for consolidated project overview
-app.command(name="status")(status_command)
-
-# Add the gui command for interactive TUI browser
-app.command(name="gui")(gui_command)
-
-# Add the serve command for IDE integrations (JSON-RPC over stdin/stdout)
-app.command(name="serve")(serve_command)
-
-# Add the setup command for installing integrations (Claude Code skills)
-app.command(name="setup")(setup_command)
-
-# Add history/diff commands for document versioning
-app.command(name="history")(history_command)
-app.command(name="diff")(diff_command)
-
-# Add knowledge decay commands (top-level shortcuts for maintain stale)
-app.command(name="stale")(stale_command)
-app.command(name="touch")(touch_command)
 
 
 # Callback for global options
@@ -172,6 +157,10 @@ def main(
     """
     # Handle --version flag
     if version:
+        # Deferred: emdx.__version__ resolves via importlib.metadata (~14ms),
+        # which shouldn't be paid on invocations that never print the version
+        from emdx import __version__
+
         typer.echo(f"emdx {__version__}")
         raise typer.Exit()
 
