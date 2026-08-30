@@ -31,8 +31,9 @@ echo "Gameplan content" | emdx save --title "Auth Gameplan" --tags "gameplan,act
 # Save from command output
 ls -la | emdx save --title "Directory Listing"
 
-# Save and auto-link to related documents
-emdx save --file notes.md --auto-link
+# Save and auto-link to related documents synchronously
+# (by default linking is deferred to `emdx maintain index`)
+emdx save --file notes.md --sync-link
 
 ```
 
@@ -41,7 +42,8 @@ emdx save --file notes.md --auto-link
 - `--title, -t TEXT` - Custom title (auto-detected from filename if not provided)
 - `--tags TEXT` - Comma-separated tags
 - `--project, -p TEXT` - Override project detection
-- `--auto-link/--no-auto-link` - Auto-link to semantically similar documents (default: the `maintain.auto_link_on_save` setting, true if unset)
+- `--auto-link/--no-auto-link` - Auto-link to semantically similar documents (default: the `maintain.auto_link_on_save` setting, true if unset). Linking is deferred by default: the doc is queued and `emdx maintain index` (or `emdx maintain link --pending`) embeds + links it out of band, so `save` never loads the embedding model
+- `--sync-link/--defer-link` - Embed + auto-link synchronously during save, the pre-deferral behavior (default: the `maintain.sync_link_on_save` setting, false if unset)
 - `--cross-project` - Allow auto-links across projects
 - `--auto-tag` - Automatically apply suggested tags
 - `--suggest-tags` - Show tag suggestions after saving
@@ -308,8 +310,11 @@ Persistent settings, stored in `~/.config/emdx/config.json`.
 # Show all settings (defaults + anything explicitly set)
 emdx config list
 
-# Turn off synchronous auto-linking so saves stay fast on large KBs
+# Turn off auto-link scheduling on save entirely
 emdx config set maintain.auto_link_on_save false
+
+# Restore the old synchronous embed-on-save behavior
+emdx config set maintain.sync_link_on_save true
 
 # Check a setting's effective value
 emdx config get maintain.auto_link_on_save
@@ -331,7 +336,8 @@ emdx config unset maintain.auto_link_on_save
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `maintain.auto_link_on_save` | `true` | Run semantic auto-linking synchronously on `emdx save`. Turn off for fast saves on large KBs, then run `emdx maintain index` and `emdx maintain link --all` out of band. The `--auto-link/--no-auto-link` flags override this per call. |
+| `maintain.auto_link_on_save` | `true` | Whether `emdx save` schedules semantic auto-linking at all. Linking is deferred by default — the doc is queued and `emdx maintain index` embeds + links it out of band, so saves stay fast on large KBs. The `--auto-link/--no-auto-link` flags override this per call. |
+| `maintain.sync_link_on_save` | `false` | Embed + auto-link synchronously during `emdx save` (the pre-deferral behavior). Slower on large KBs. The `--sync-link/--defer-link` flags override this per call. |
 | `ui.list_height` | `40` | TUI: height % of the top list band in the docs and tasks browsers; the preview/detail pane gets the rest. Clamped to 10–90. Takes effect on next `emdx gui` launch. |
 | `ui.sidebar_width` | `30` | TUI: width % of the right sidebar in the docs and tasks browsers; the list gets the rest. Clamped to 10–90. Takes effect on next `emdx gui` launch. |
 
@@ -781,6 +787,13 @@ emdx maintain index --clear
 - `--stats` - Show index statistics
 - `--clear` - Clear all embeddings
 
+**Deferred auto-linking catch-up:** `emdx save` defers semantic linking by
+default — each saved doc is queued, and `emdx maintain index` drains that
+queue after indexing: queued docs are embedded and auto-linked using the
+project scope recorded at save time. Run it periodically (or
+`emdx maintain link --pending` for the link pass alone) to keep the index
+and link graph caught up.
+
 **Embedding backend:** emdx embeds with all-MiniLM-L6-v2, preferring the
 fastembed (ONNX) backend when installed — ~0.4s cold start vs ~5.5s for
 torch-based sentence-transformers, which remains the fallback. Set
@@ -799,6 +812,9 @@ emdx maintain link 42
 # Backfill links for all indexed documents
 emdx maintain link --all
 
+# Embed + link only the docs queued by `emdx save` (deferred auto-linking)
+emdx maintain link --pending
+
 # Adjust similarity threshold and max links
 emdx maintain link 42 --threshold 0.6 --max 3
 
@@ -811,6 +827,7 @@ emdx maintain link 42 --to 57
 
 **Options:**
 - `--all` - Backfill links for all indexed documents
+- `--pending` - Embed + link documents queued by `emdx save` (deferred auto-linking); not combinable with a doc ID, `--all`, or `--to`
 - `--threshold, -t FLOAT` - Minimum similarity (0-1, default: 0.5)
 - `--max, -m INTEGER` - Maximum links per document (default: 5)
 - `--to INTEGER` - Manually link `doc_id` to this specific document ID instead of discovering similar ones automatically (mutually exclusive with `--all`)
@@ -1180,6 +1197,33 @@ Shows relationship data for the selected document in a collapsible bottom panel.
 - `?` - Help
 
 ## 🔗 **Integration Commands**
+
+### **emdx setup**
+Install emdx integrations. Currently installs the bundled Claude Code skills into your personal skills directory (`~/.claude/skills/`) — useful after a pip/uv install, where the repo's `skills/` directory isn't available for `--plugin-dir`.
+
+```bash
+# Install Claude Code skills (default component)
+emdx setup
+
+# Explicit component name
+emdx setup claude-skills
+
+# Preview without copying anything
+emdx setup --dry-run
+
+# Overwrite previously installed skills (e.g. after upgrading emdx)
+emdx setup --force
+
+# Install somewhere else (e.g. a project's .claude/skills)
+emdx setup --target-dir ./.claude/skills
+```
+
+Skills are installed as `emdx-<name>` directories (`emdx-save`, `emdx-tasks`, ...) and invoked in Claude Code as `/emdx-<name>`. Re-running is idempotent: existing skills are skipped unless `--force` is given.
+
+**Options:**
+- `--force` - Overwrite skills that already exist
+- `--dry-run` - Show what would be done without copying anything
+- `--target-dir PATH` - Install into this directory instead of `~/.claude/skills`
 
 ### **emdx serve**
 Start a JSON-RPC server over stdin/stdout for IDE integrations. Avoids the ~700ms Python cold-start overhead per CLI invocation by keeping a persistent process.

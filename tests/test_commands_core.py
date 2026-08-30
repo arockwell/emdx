@@ -268,6 +268,7 @@ class TestSaveCommand:
             "title": "doc",
             "project": "test-proj",
             "tags": ["python"],
+            "auto_link": "deferred",
         }
 
     @patch("emdx.commands.core.apply_tags")
@@ -286,7 +287,13 @@ class TestSaveCommand:
         )
         assert result.exit_code == 0
         data = json.loads(result.stdout)
-        assert data == {"id": 7, "title": "Piped Doc", "project": None, "tags": []}
+        assert data == {
+            "id": 7,
+            "title": "Piped Doc",
+            "project": None,
+            "tags": [],
+            "auto_link": "deferred",
+        }
 
     @patch("emdx.models.tasks.resolve_task_id")
     @patch("emdx.models.tasks.update_task")

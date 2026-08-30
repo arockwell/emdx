@@ -50,6 +50,17 @@ class DocumentLinkDetail(TypedDict):
     link_type: str
 
 
+class PendingAutoLink(TypedDict):
+    """A document queued for deferred embedding + auto-linking (#1038).
+
+    project_scope is the project to scope the auto-link pass to
+    (None = match across all projects).
+    """
+
+    document_id: int
+    project_scope: str | None
+
+
 # ── Wiki types ────────────────────────────────────────────────────────
 
 

@@ -93,6 +93,75 @@ def auto_link_document(
     )
 
 
+@dataclass
+class PendingLinkSummary:
+    """Result of draining the deferred auto-link queue (#1038)."""
+
+    docs_processed: int
+    links_created: int
+    docs_skipped: int  # deleted/missing docs dequeued without linking
+    docs_failed: int  # errors — left queued for the next run
+    no_index: bool = False  # True when there is no embedding index at all
+
+
+def process_pending_links(
+    threshold: float = DEFAULT_THRESHOLD,
+    max_links: int = DEFAULT_MAX_LINKS,
+) -> PendingLinkSummary:
+    """Embed and auto-link documents queued by `emdx save` (#1038).
+
+    Saves defer embedding + semantic linking by default; this drains the
+    pending_auto_links queue: each queued document is embedded (if not
+    already) and auto-linked using the project scope recorded at save
+    time. Deleted/missing documents are dequeued without linking. If no
+    embedding index exists yet, the queue is left untouched — run
+    `emdx maintain index` first.
+    """
+    from ..database import db, pending_links
+
+    pending = pending_links.get_pending()
+    if not pending:
+        return PendingLinkSummary(0, 0, 0, 0)
+
+    from .embedding_service import EmbeddingService
+
+    service = EmbeddingService()
+    if service.stats().indexed_documents == 0:
+        # auto_link_document would no-op without an index; keep the queue
+        # so the docs get linked once an index exists.
+        return PendingLinkSummary(0, 0, 0, 0, no_index=True)
+
+    processed = links = skipped = failed = 0
+    for item in pending:
+        doc_id = item["document_id"]
+        with db.get_connection() as conn:
+            row = conn.execute(
+                "SELECT is_deleted FROM documents WHERE id = ?", (doc_id,)
+            ).fetchone()
+        if row is None or row[0]:
+            pending_links.remove(doc_id)
+            skipped += 1
+            continue
+        try:
+            result = auto_link_document(
+                doc_id,
+                threshold=threshold,
+                max_links=max_links,
+                project=item["project_scope"],
+            )
+        except Exception:
+            logger.warning(
+                "Deferred auto-link failed for doc %d — leaving it queued", doc_id, exc_info=True
+            )
+            failed += 1
+            continue
+        pending_links.remove(doc_id)
+        processed += 1
+        links += result.links_created
+
+    return PendingLinkSummary(processed, links, skipped, failed)
+
+
 def auto_link_all(
     threshold: float = DEFAULT_THRESHOLD,
     max_links: int = DEFAULT_MAX_LINKS,

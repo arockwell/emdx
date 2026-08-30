@@ -271,12 +271,14 @@ emdx status --vitals                   # KB vitals dashboard
 emdx status --mirror                   # Reflective KB summary (narrative)
 
 # Maintenance (stable)
-emdx maintain index                    # Build/update embedding index
+emdx maintain index                    # Build/update embedding index + catch up deferred links
 emdx maintain link --all               # Auto-link related documents
+emdx maintain link --pending           # Embed + link docs queued by `emdx save`
 emdx maintain link 42 --to 57          # Manually curate a link (ranks higher in `find`)
-# Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
-# Configure via `emdx config set maintain.auto_link_on_save false` for fast
-# saves on large KBs (then index/link out of band with the commands above).
+# Note: `emdx save` schedules auto-linking by default (--auto-link/--no-auto-link)
+# but DEFERS the embedding work — saves stay fast, and `emdx maintain index`
+# catches up out of band. Use --sync-link (or `emdx config set
+# maintain.sync_link_on_save true`) for the old synchronous embed-on-save.
 emdx maintain backup                   # Create compressed daily backup
 emdx maintain backup --list            # List existing backups
 emdx maintain backup --restore <file>  # Restore from a backup
@@ -311,6 +313,10 @@ emdx labs maintain cloud-backup upload # Cloud backup to Gists
 emdx history 42                        # Show version history for doc #42
 emdx diff 42                           # Diff current vs previous version
 emdx diff 42 1                         # Diff current vs version 1
+
+# Setup
+emdx setup                             # Install Claude Code skills to ~/.claude/skills
+emdx setup --dry-run                   # Preview; --force overwrites, --target-dir overrides
 
 # Database
 emdx db status                         # Show active DB path and reason
@@ -399,6 +405,8 @@ Version files that must stay in sync: `pyproject.toml`, `emdx/__init__.py`, `.cl
 ## Claude Code Plugin
 
 emdx ships as a Claude Code plugin with skills in the `skills/` directory at the repo root. Users install it with `--plugin-dir` or via a marketplace. Skills are namespaced as `/emdx:<skill>`.
+
+For pip/uv installs (no repo checkout), `emdx setup` copies the bundled skills into `~/.claude/skills/` as `emdx-<skill>` directories (invoked as `/emdx-<skill>`). The skills are bundled into the wheel as `emdx/skills` via the `packages` mapping in `pyproject.toml`; `skills/__init__.py` exists only so poetry-core will package the directory.
 
 **Available skills:** `/emdx:bootstrap`, `/emdx:investigate`, `/emdx:prioritize`, `/emdx:research`, `/emdx:review`, `/emdx:save`, `/emdx:tasks`, `/emdx:work`
 
