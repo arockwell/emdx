@@ -22,6 +22,14 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
     "Topic :: Text Processing :: Indexing",
 ]
+# Bundle repo-root skills/ into the wheel as emdx/skills so `emdx setup`
+# can install them from a pip/uv install (issue #1033). The skills/ dir
+# stays at the repo root because the Claude Code plugin manifest
+# (.claude-plugin/plugin.json) depends on that location.
+packages = [
+    { include = "emdx" },
+    { include = "skills", to = "emdx" },
+]
 
 [tool.poetry.dependencies]
 python = "^3.11"

@@ -1181,6 +1181,33 @@ Shows relationship data for the selected document in a collapsible bottom panel.
 
 ## 🔗 **Integration Commands**
 
+### **emdx setup**
+Install emdx integrations. Currently installs the bundled Claude Code skills into your personal skills directory (`~/.claude/skills/`) — useful after a pip/uv install, where the repo's `skills/` directory isn't available for `--plugin-dir`.
+
+```bash
+# Install Claude Code skills (default component)
+emdx setup
+
+# Explicit component name
+emdx setup claude-skills
+
+# Preview without copying anything
+emdx setup --dry-run
+
+# Overwrite previously installed skills (e.g. after upgrading emdx)
+emdx setup --force
+
+# Install somewhere else (e.g. a project's .claude/skills)
+emdx setup --target-dir ./.claude/skills
+```
+
+Skills are installed as `emdx-<name>` directories (`emdx-save`, `emdx-tasks`, ...) and invoked in Claude Code as `/emdx-<name>`. Re-running is idempotent: existing skills are skipped unless `--force` is given.
+
+**Options:**
+- `--force` - Overwrite skills that already exist
+- `--dry-run` - Show what would be done without copying anything
+- `--target-dir PATH` - Install into this directory instead of `~/.claude/skills`
+
 ### **emdx serve**
 Start a JSON-RPC server over stdin/stdout for IDE integrations. Avoids the ~700ms Python cold-start overhead per CLI invocation by keeping a persistent process.
 

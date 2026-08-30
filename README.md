@@ -49,6 +49,14 @@ Use emdx as a [Claude Code](https://docs.anthropic.com/en/docs/claude-code) plug
 $ claude --plugin-dir /path/to/emdx
 ```
 
+Installed via `uv tool install` or pip (no repo checkout)? Install the same skills into your personal skills directory instead:
+
+```bash
+$ emdx setup            # copies skills to ~/.claude/skills/emdx-*
+```
+
+They're then invoked as `/emdx-<skill>` (e.g. `/emdx-save`) rather than `/emdx:<skill>`. Re-run with `--force` after upgrading emdx.
+
 Skills give Claude Code native access to your knowledge base — save research, manage tasks, and maintain session memory without leaving the conversation.
 
 | Skill | What it does | Invoke |

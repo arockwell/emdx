@@ -68,6 +68,7 @@ from emdx.commands.history import diff as diff_command  # noqa: E402
 from emdx.commands.history import history as history_command  # noqa: E402
 from emdx.commands.prime import prime as prime_command  # noqa: E402
 from emdx.commands.serve import serve as serve_command  # noqa: E402
+from emdx.commands.setup import setup as setup_command  # noqa: E402
 from emdx.commands.stale import stale_command, touch_command  # noqa: E402
 from emdx.commands.status import status as status_command  # noqa: E402
 from emdx.ui.gui import gui as gui_command  # noqa: E402
@@ -124,6 +125,9 @@ app.command(name="gui")(gui_command)
 
 # Add the serve command for IDE integrations (JSON-RPC over stdin/stdout)
 app.command(name="serve")(serve_command)
+
+# Add the setup command for installing integrations (Claude Code skills)
+app.command(name="setup")(setup_command)
 
 # Add history/diff commands for document versioning
 app.command(name="history")(history_command)
