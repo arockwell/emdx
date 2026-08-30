@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from collections.abc import Generator
 
@@ -18,6 +19,13 @@ from emdx.utils.lazy_group import (
 )
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(output: str) -> str:
+    """Strip ANSI styling; in CI rich colorizes help and splits option names."""
+    return _ANSI_RE.sub("", output)
 
 
 @pytest.fixture(autouse=True)
@@ -465,8 +473,8 @@ class TestLazyFunctionCommands:
         result = runner.invoke(app, ["stale", "--help"])
 
         assert result.exit_code == 0
-        assert "--tier" in result.output
-        assert "install-completion" not in result.output
+        assert "--tier" in _plain(result.output)
+        assert "install-completion" not in _plain(result.output)
 
     def test_function_command_invokes(self) -> None:
         """A lazily-loaded function command runs end to end."""
