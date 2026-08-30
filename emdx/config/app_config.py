@@ -7,9 +7,13 @@ the ``EMDX_CONFIG_FILE`` environment variable).
 Known settings:
 
 - ``maintain.auto_link_on_save`` (bool, default True): whether ``emdx save``
-  runs semantic auto-linking synchronously. Turning this off makes saves
-  fast on large knowledge bases; run ``emdx maintain index`` and
-  ``emdx maintain link --all`` out of band to catch up (#1038).
+  schedules semantic auto-linking at all. Linking is deferred by default —
+  the doc is queued and ``emdx maintain index`` embeds + links it out of
+  band, so saves stay fast on large knowledge bases (#1038).
+- ``maintain.sync_link_on_save`` (bool, default False): embed + auto-link
+  synchronously during ``emdx save`` (the pre-#1038 behavior). Slower on
+  large knowledge bases; ``--sync-link`` / ``--defer-link`` override
+  per call.
 - ``ui.list_height`` / ``ui.sidebar_width`` (int %, defaults 40/30): TUI
   panel sizes — see ``emdx/ui/layout_config.py`` (#891).
 """
@@ -28,6 +32,7 @@ ConfigValue = str | int | float | bool | None
 # compatibility) but `emdx config list` shows these even when unset.
 KNOWN_SETTINGS: dict[str, ConfigValue] = {
     "maintain.auto_link_on_save": True,
+    "maintain.sync_link_on_save": False,
     # TUI panel sizes (#891) — percentages, clamped to 10-90 at load
     "ui.list_height": 40,
     "ui.sidebar_width": 30,

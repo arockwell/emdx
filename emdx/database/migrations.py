@@ -3102,6 +3102,28 @@ def migration_20260302_160000_add_wiki_quality_index(
     conn.commit()
 
 
+def migration_20260829_120000_add_pending_auto_links(
+    conn: sqlite3.Connection,
+) -> None:
+    """Add pending_auto_links queue for deferred embedding + auto-linking (#1038).
+
+    `emdx save` no longer embeds documents synchronously by default — it
+    records the document here, and `emdx maintain index` (or
+    `emdx maintain link --pending`) embeds and auto-links queued documents
+    out of band. project_scope is the project the auto-link pass should be
+    scoped to (NULL = match across all projects, mirroring what the
+    synchronous path would have passed to auto_link_document).
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS pending_auto_links (
+            document_id INTEGER PRIMARY KEY,
+            project_scope TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+
+
 # List of all migrations in order
 MIGRATIONS: list[tuple[str, str, Callable]] = [
     ("0", "Create documents table", migration_000_create_documents_table),
@@ -3187,6 +3209,11 @@ MIGRATIONS: list[tuple[str, str, Callable]] = [
         "20260302_160000",
         "Add index on wiki_articles.quality_score",
         migration_20260302_160000_add_wiki_quality_index,
+    ),
+    (
+        "20260829_120000",
+        "Add pending_auto_links queue for deferred auto-linking",
+        migration_20260829_120000_add_pending_auto_links,
     ),
 ]
 

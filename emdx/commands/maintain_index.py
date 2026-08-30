@@ -87,10 +87,13 @@ def index_embeddings(
     )
     console.print(f"[dim]Chunk index: {idx_stats.indexed_chunks} chunks[/dim]")
 
+    from ..database import pending_links
+
+    pending_count = pending_links.count()
     needs_doc_index = idx_stats.indexed_documents < idx_stats.total_documents or force
     needs_chunk_index = chunks and (idx_stats.indexed_chunks == 0 or force)
 
-    if not needs_doc_index and not needs_chunk_index:
+    if not needs_doc_index and not needs_chunk_index and pending_count == 0:
         console.print("[green]Index is already up to date![/green]")
         return
 
@@ -116,10 +119,63 @@ def index_embeddings(
             progress.update(task, completed=True)
         console.print(f"[green]Indexed {chunk_count} chunks[/green]")
 
+    # Catch-up pass: auto-link docs queued by `emdx save` (deferred by
+    # default since #1038 so save never loads the embedding model).
+    if pending_count > 0:
+        _process_pending(threshold=None, max_links=None)
+
+
+def _process_pending(threshold: float | None, max_links: int | None) -> None:
+    """Drain the deferred auto-link queue and report the outcome."""
+    from ..services.link_service import (
+        DEFAULT_MAX_LINKS,
+        DEFAULT_THRESHOLD,
+        process_pending_links,
+    )
+
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Auto-linking pending documents...", total=None)
+            summary = process_pending_links(
+                threshold=DEFAULT_THRESHOLD if threshold is None else threshold,
+                max_links=DEFAULT_MAX_LINKS if max_links is None else max_links,
+            )
+            progress.update(task, completed=True)
+    except ImportError as e:
+        # AI extras not installed — queue is kept for when they are
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1) from None
+
+    if summary.no_index:
+        console.print(
+            "[yellow]No embedding index yet — pending documents kept queued. "
+            "Run `emdx maintain index` first.[/yellow]"
+        )
+        return
+    console.print(
+        f"[green]Auto-linked {summary.docs_processed} pending document(s), "
+        f"created {summary.links_created} link(s)[/green]"
+    )
+    if summary.docs_skipped:
+        console.print(f"[dim]Skipped {summary.docs_skipped} deleted document(s)[/dim]")
+    if summary.docs_failed:
+        console.print(
+            f"[yellow]{summary.docs_failed} document(s) failed — left queued for retry[/yellow]"
+        )
+
 
 def create_links(
-    doc_id: int = typer.Argument(..., help="Document ID to create links for"),
+    doc_id: int | None = typer.Argument(None, help="Document ID to create links for"),
     all_docs: bool = typer.Option(False, "--all", help="Backfill links for all documents"),
+    pending: bool = typer.Option(
+        False,
+        "--pending",
+        help="Embed + link documents queued by `emdx save` (deferred auto-linking)",
+    ),
     threshold: float = typer.Option(0.5, "--threshold", "-t", help="Minimum similarity (0-1)"),
     max_links: int = typer.Option(5, "--max", "-m", help="Maximum links per document"),
     cross_project: bool = typer.Option(
@@ -142,16 +198,30 @@ def create_links(
     Manual links are a stronger, deliberate signal and rank higher in `emdx find`
     than the same document would without one.
 
+    Use --pending to embed + link only the documents queued by `emdx save`
+    (auto-linking is deferred by default since #1038).
+
     Examples:
         emdx maintain link 42
-        emdx maintain link 0 --all
+        emdx maintain link --all
+        emdx maintain link --pending
         emdx maintain link 42 --threshold 0.6 --max 3
         emdx maintain link 42 --cross-project
         emdx maintain link 42 --to 57
     """
+    if pending:
+        if all_docs or to is not None or doc_id is not None:
+            console.print("[red]--pending cannot be combined with a doc ID, --all, or --to[/red]")
+            raise typer.Exit(1)
+        _process_pending(threshold=threshold, max_links=max_links)
+        return
+
     if to is not None:
         if all_docs:
             console.print("[red]--to cannot be combined with --all[/red]")
+            raise typer.Exit(1)
+        if doc_id is None:
+            console.print("[red]--to requires a source document ID[/red]")
             raise typer.Exit(1)
         _create_manual_link(doc_id, to)
         return
@@ -161,6 +231,10 @@ def create_links(
     except ImportError as e:
         console.print(f"[red]{e}[/red]")
         raise typer.Exit(1) from None
+
+    if not all_docs and doc_id is None:
+        console.print("[red]Error: provide a document ID, --all, or --pending[/red]")
+        raise typer.Exit(1)
 
     if all_docs:
         with Progress(
@@ -177,6 +251,7 @@ def create_links(
             progress.update(task, completed=True)
         console.print(f"[green]Created {total} links across all documents[/green]")
     else:
+        assert doc_id is not None  # guarded above; narrows int | None for mypy
         # Look up the document's project for scoping
         doc_project: str | None = None
         if not cross_project:
