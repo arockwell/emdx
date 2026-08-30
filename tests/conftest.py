@@ -72,6 +72,7 @@ def isolate_test_database(
             "emdx.database.search",
             "emdx.database.groups",
             "emdx.database.document_links",
+            "emdx.database.pending_links",
             "emdx.models.events",
             "emdx.commands.history",
         ]

@@ -115,9 +115,26 @@ class TestConfigCli:
 
 
 class TestSaveHonorsAutoLinkSetting:
-    """`emdx save` reads maintain.auto_link_on_save when no flag is given (#1038)."""
+    """`emdx save` reads maintain.auto_link_on_save / sync_link_on_save (#1038).
+
+    Auto-linking is deferred by default: the doc is queued in
+    pending_auto_links and auto_link_document is NOT called during save.
+    """
+
+    def _queued_doc_ids(self) -> list[int]:
+        from emdx.database import pending_links
+
+        return [item["document_id"] for item in pending_links.get_pending()]
+
+    def _clear_queue(self) -> None:
+        from emdx.database import db
+
+        with db.get_connection() as conn:
+            conn.execute("DELETE FROM pending_auto_links")
+            conn.commit()
 
     def _save(self, *extra_args: str) -> object:
+        self._clear_queue()
         with (
             patch("emdx.commands.core.display_save_result"),
             patch("emdx.commands.core.apply_tags", return_value=[]),
@@ -129,20 +146,41 @@ class TestSaveHonorsAutoLinkSetting:
             assert result.exit_code == 0, result.output
         return mock_link
 
-    def test_auto_links_by_default(self) -> None:
+    def test_defers_auto_link_by_default(self) -> None:
         mock_link = self._save()
-        mock_link.assert_called_once()
+        mock_link.assert_not_called()
+        assert self._queued_doc_ids() == [42]
 
     def test_setting_false_skips_auto_link(self) -> None:
         set_config_value("maintain.auto_link_on_save", False)
         mock_link = self._save()
         mock_link.assert_not_called()
+        assert self._queued_doc_ids() == []
 
     def test_explicit_flag_overrides_setting(self) -> None:
         set_config_value("maintain.auto_link_on_save", False)
         mock_link = self._save("--auto-link")
-        mock_link.assert_called_once()
+        mock_link.assert_not_called()
+        assert self._queued_doc_ids() == [42]
 
     def test_no_auto_link_flag_still_works(self) -> None:
         mock_link = self._save("--no-auto-link")
         mock_link.assert_not_called()
+        assert self._queued_doc_ids() == []
+
+    def test_sync_link_flag_links_synchronously(self) -> None:
+        mock_link = self._save("--sync-link")
+        mock_link.assert_called_once()
+        assert self._queued_doc_ids() == []
+
+    def test_sync_link_setting_links_synchronously(self) -> None:
+        set_config_value("maintain.sync_link_on_save", True)
+        mock_link = self._save()
+        mock_link.assert_called_once()
+        assert self._queued_doc_ids() == []
+
+    def test_defer_link_flag_overrides_sync_setting(self) -> None:
+        set_config_value("maintain.sync_link_on_save", True)
+        mock_link = self._save("--defer-link")
+        mock_link.assert_not_called()
+        assert self._queued_doc_ids() == [42]

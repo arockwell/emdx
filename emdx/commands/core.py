@@ -296,6 +296,13 @@ def save(
     cross_project: bool = typer.Option(
         False, "--cross-project", help="Allow auto-links across projects"
     ),
+    sync_link: bool | None = typer.Option(
+        None,
+        "--sync-link/--defer-link",
+        help="Embed + auto-link synchronously during save instead of deferring "
+        "to `emdx maintain index` (default: maintain.sync_link_on_save setting, "
+        "false if unset)",
+    ),
     task: TaskRef | None = typer.Option(
         None,
         "--task",
@@ -396,28 +403,53 @@ def save(
     except Exception as e:
         if not json_output:
             console.print(f"   [yellow]Entity wikify skipped: {e}[/yellow]")
-    # Step 6.6: Auto-link to similar documents. Flag wins when given;
-    # otherwise the maintain.auto_link_on_save setting decides (default on).
-    # Turning it off keeps saves fast on large KBs (#1038) — run
-    # `emdx maintain index` / `emdx maintain link --all` to catch up.
-    if auto_link is None:
+    # Step 6.6: Auto-link to similar documents. Flags win when given;
+    # otherwise the maintain.auto_link_on_save / maintain.sync_link_on_save
+    # settings decide. By default linking is DEFERRED (#1038): the doc is
+    # queued and embedding + linking happen in `emdx maintain index` (or
+    # `emdx maintain link --pending`), so save never loads the embedding
+    # model. --sync-link restores the old synchronous behavior.
+    if auto_link is None or sync_link is None:
         from emdx.config.app_config import get_config_value
 
-        auto_link = bool(get_config_value("maintain.auto_link_on_save"))
+        if auto_link is None:
+            auto_link = bool(get_config_value("maintain.auto_link_on_save"))
+        if sync_link is None:
+            sync_link = bool(get_config_value("maintain.sync_link_on_save"))
+    link_mode = "off"
     if auto_link:
-        try:
-            from emdx.services.link_service import auto_link_document
+        # Scope to same project unless --cross-project is set
+        scope_project = None if cross_project else final_project
+        if sync_link:
+            link_mode = "sync"
+            try:
+                from emdx.services.link_service import auto_link_document
 
-            # Scope to same project unless --cross-project is set
-            scope_project = None if cross_project else final_project
-            link_result = auto_link_document(doc_id, project=scope_project)
-            if link_result.links_created > 0 and not json_output:
-                console.print(f"   [dim]Linked to {link_result.links_created} similar doc(s)[/dim]")
-        except ImportError:
-            pass  # AI extras not installed — silently skip
-        except Exception as e:
-            if not json_output:
-                console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
+                link_result = auto_link_document(doc_id, project=scope_project)
+                if link_result.links_created > 0 and not json_output:
+                    console.print(
+                        f"   [dim]Linked to {link_result.links_created} similar doc(s)[/dim]"
+                    )
+            except ImportError:
+                pass  # AI extras not installed — silently skip
+            except Exception as e:
+                if not json_output:
+                    console.print(f"   [yellow]Auto-link skipped: {e}[/yellow]")
+        else:
+            link_mode = "deferred"
+            try:
+                from emdx.database import pending_links
+
+                pending_links.enqueue(doc_id, scope_project)
+                if not json_output:
+                    console.print(
+                        "   [dim]Semantic linking deferred — "
+                        "'emdx maintain index' will catch up[/dim]"
+                    )
+            except Exception as e:
+                link_mode = "off"
+                if not json_output:
+                    console.print(f"   [yellow]Auto-link deferral skipped: {e}[/yellow]")
 
     # Step 6.7: Link to task if specified
     if resolved_task is not None:
@@ -444,6 +476,7 @@ def save(
             "title": metadata.title,
             "project": metadata.project,
             "tags": applied_tags,
+            "auto_link": link_mode,
         }
         if resolved_task is not None:
             result["task_id"] = resolved_task

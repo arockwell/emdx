@@ -271,12 +271,14 @@ emdx status --vitals                   # KB vitals dashboard
 emdx status --mirror                   # Reflective KB summary (narrative)
 
 # Maintenance (stable)
-emdx maintain index                    # Build/update embedding index
+emdx maintain index                    # Build/update embedding index + catch up deferred links
 emdx maintain link --all               # Auto-link related documents
+emdx maintain link --pending           # Embed + link docs queued by `emdx save`
 emdx maintain link 42 --to 57          # Manually curate a link (ranks higher in `find`)
-# Note: `emdx save` auto-links new docs by default (--auto-link/--no-auto-link).
-# Configure via `emdx config set maintain.auto_link_on_save false` for fast
-# saves on large KBs (then index/link out of band with the commands above).
+# Note: `emdx save` schedules auto-linking by default (--auto-link/--no-auto-link)
+# but DEFERS the embedding work — saves stay fast, and `emdx maintain index`
+# catches up out of band. Use --sync-link (or `emdx config set
+# maintain.sync_link_on_save true`) for the old synchronous embed-on-save.
 emdx maintain backup                   # Create compressed daily backup
 emdx maintain backup --list            # List existing backups
 emdx maintain backup --restore <file>  # Restore from a backup
