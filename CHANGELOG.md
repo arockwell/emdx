@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-08-30
+
+**Fast saves, fast startup, and installs that finish the job.** The three open issues all land at once: `emdx save` no longer blocks on the embedding model, CLI startup cost drops by lazy-loading everything non-core, and a new `emdx setup` command installs the Claude Code skills that previously never shipped in the wheel.
+
+### 🚀 Major Features
+
+- **`emdx setup` command** (#1033, #1153) — installs the Claude Code skills into `~/.claude/skills/`; the `skills/` directory is now bundled in the wheel (it previously lived only at the repo root and never shipped), so `uv tool install emdx && emdx setup` works on a fresh machine
+
+### 🔧 Improvements
+
+- **`save` is no longer embedding-bound** (#1038, #1154) — auto-linking's synchronous embedding-model load is deferred off the save path onto a new `pending_auto_links` queue drained by `maintain index`; saves complete in ~0.45s on large KBs, and `--sync-link` opts back into the old inline behavior
+- **CLI startup nearly halved via lazy imports** (#1067, #1155) — every non-core command module, `rich`, and the version lookup now import only when actually invoked; `import emdx.main` drops 41ms → 24ms and `--help` 70ms → 60ms
+
+### 🐛 Bug Fixes
+
+- **Lazy-command path silently dropped flags** (#1155) — commands dispatched through the lazy registry lost their options (e.g. `emdx history 42 --json` ran without `--json`); flags now pass through correctly
+
+[0.36.0]: https://github.com/arockwell/emdx/compare/v0.35.0...v0.36.0
+
 ## [0.35.0] - 2026-08-26
 
 **Task management grows up, and the TUI becomes configurable.** `task update` lets you edit a task's title/description in place instead of burying the current plan under note/log history. A new `emdx config` command introduces a real settings store, and the first setting it honors (`maintain.auto_link_on_save`) fixes a long-standing interactive stall on large knowledge bases. The docs/tasks TUI panels can now be resized via config instead of living with hardcoded splits, and `maintain doctor` adds a read-only scan for a class of previously-undetectable doc corruption.
