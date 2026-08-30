@@ -7,6 +7,7 @@ from collections.abc import Generator
 
 import click
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from emdx.utils.lazy_group import (
@@ -326,6 +327,223 @@ class TestCLIIntegration:
 
         assert result.exit_code == 0
         assert "epic" in result.output.lower()
+
+
+class TestLazyFunctionCommands:
+    """Standalone function commands loaded through the lazy registry (#1067).
+
+    Unlike task/tag/etc. these are not Typer sub-apps: the registry entry
+    points at a plain command function ("module:function"), which
+    LazyCommand wraps in a single Typer command on first use.
+    """
+
+    # Modules holding the lazily-loaded standalone commands — none of these
+    # may be imported by a bare `emdx --help`.
+    FUNCTION_COMMAND_MODULES = [
+        "emdx.commands.config_cmd",
+        "emdx.commands.context",
+        "emdx.commands.gist",
+        "emdx.commands.history",
+        "emdx.commands.prime",
+        "emdx.commands.serve",
+        "emdx.commands.stale",
+        "emdx.commands.status",
+        "emdx.ui.gui",
+    ]
+
+    @staticmethod
+    def _fresh_app() -> typer.Typer:
+        """Reload emdx.main so its lazy registrations are (re)applied.
+
+        The autouse registry-restore fixture snapshots the registry before
+        each test; if emdx.main is first imported *inside* an earlier test,
+        the restore empties the registry again. Reloading makes each test
+        self-sufficient regardless of import order (same pattern as
+        TestCLIIntegration).
+        """
+        import importlib
+
+        import emdx.main
+
+        importlib.reload(emdx.main)
+        return emdx.main.app
+
+    def test_help_does_not_load_function_command_modules(self) -> None:
+        """`emdx --help` must not import any standalone command module."""
+        import importlib
+
+        # Pop (not just check) so a load during --help is observable; restore
+        # the *original* module objects afterwards — later tests' mock patches
+        # must keep targeting the instances their test modules imported.
+        saved = {
+            mod: sys.modules.pop(mod) for mod in self.FUNCTION_COMMAND_MODULES if mod in sys.modules
+        }
+        try:
+            import emdx.main
+
+            importlib.reload(emdx.main)
+            from emdx.main import app
+
+            result = runner.invoke(app, ["--help"])
+
+            assert result.exit_code == 0
+            loaded = [m for m in self.FUNCTION_COMMAND_MODULES if m in sys.modules]
+            assert loaded == [], f"Eagerly loaded on --help: {loaded}"
+        finally:
+            sys.modules.update(saved)
+
+    def test_import_emdx_main_does_not_import_rich(self) -> None:
+        """Importing emdx.main must not pay for rich's console/table imports.
+
+        rich modules cost ~10ms of the startup floor; they are deferred behind
+        lazy proxies in emdx.utils.output and function-level imports in
+        emdx.commands.core. A subprocess gives an honest cold-import check —
+        in-process reloads can't, because cached modules skip their imports.
+        """
+        import subprocess
+
+        code = (
+            "import sys; import emdx.main; "
+            "loaded = [m for m in sys.modules if m.startswith('rich')]; "
+            "sys.exit(0 if not loaded else print(loaded) or 1)"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"rich imported at startup: {result.stdout}"
+
+    def test_all_commands_listed_in_help(self) -> None:
+        """Every command (eager and lazy) appears in `emdx --help`."""
+        app = self._fresh_app()
+
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        expected = [
+            # eager core
+            "save",
+            "find",
+            "view",
+            "edit",
+            "delete",
+            "db",
+            # lazy sub-apps
+            "task",
+            "tag",
+            "trash",
+            "epic",
+            "briefing",
+            "maintain",
+            "labs",
+            "wiki",
+            "explore",
+            "distill",
+            "compact",
+            "config",
+            # lazy function commands
+            "context",
+            "prime",
+            "status",
+            "serve",
+            "gist",
+            "gui",
+            "history",
+            "diff",
+            "stale",
+            "touch",
+        ]
+        missing = [name for name in expected if name not in result.output]
+        assert missing == [], f"Commands missing from --help: {missing}"
+
+    def test_function_command_help_shows_real_options(self) -> None:
+        """Sub-help loads the real command: its options render exactly, and
+        no --install-completion/--show-completion leak in from the wrapper."""
+        app = self._fresh_app()
+
+        result = runner.invoke(app, ["stale", "--help"])
+
+        assert result.exit_code == 0
+        assert "--tier" in result.output
+        assert "install-completion" not in result.output
+
+    def test_function_command_invokes(self) -> None:
+        """A lazily-loaded function command runs end to end."""
+        app = self._fresh_app()
+
+        result = runner.invoke(app, ["status", "--json"])
+
+        assert result.exit_code == 0
+        assert '"total_documents"' in result.output
+
+    def test_function_command_parses_options_after_positionals(
+        self, tmp_path: object, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Options after positional arguments must be parsed, not dropped.
+
+        The LazyCommand placeholder derives from TyperGroup, whose group-style
+        parsing holds tokens after the first positional back as "subcommand
+        args" — `cmd 42 --json` would silently ignore `--json`. LazyCommand
+        now delegates make_context() to the real command for function targets,
+        so parsing is exactly the real command's.
+        """
+        import pathlib
+
+        import typer
+
+        assert isinstance(tmp_path, pathlib.Path)
+        (tmp_path / "lazy_sample_cmd.py").write_text(
+            "import typer\n"
+            "\n"
+            "\n"
+            "def sample(\n"
+            '    doc: str = typer.Argument(..., help="Doc"),\n'
+            '    version: int = typer.Argument(None, help="Version"),\n'
+            '    json_output: bool = typer.Option(False, "--json"),\n'
+            '    limit: int = typer.Option(10, "--limit", "-n"),\n'
+            ") -> None:\n"
+            '    """Sample command."""\n'
+            "    print(f'doc={doc} version={version} json={json_output} limit={limit}')\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+
+        register_lazy_commands(
+            {"sample": "lazy_sample_cmd:sample"},
+            {"sample": "Sample command."},
+        )
+        app = typer.Typer(cls=LazyTyperGroup)
+        app.info.cls = LazyTyperGroup
+
+        @app.callback()
+        def _main() -> None:
+            """Root."""
+
+        # Trailing long option
+        result = runner.invoke(app, ["sample", "42", "--json"])
+        assert result.exit_code == 0, result.output
+        assert "doc=42 version=None json=True limit=10" in result.output
+
+        # Options interspersed after both positionals, including a short flag
+        result = runner.invoke(app, ["sample", "42", "7", "--json", "-n", "5"])
+        assert result.exit_code == 0, result.output
+        assert "doc=42 version=7 json=True limit=5" in result.output
+
+        # Option before positionals still works
+        result = runner.invoke(app, ["sample", "--json", "42"])
+        assert result.exit_code == 0, result.output
+        assert "doc=42 version=None json=True limit=10" in result.output
+
+    def test_version_flag_still_works(self) -> None:
+        """--version resolves the lazily-computed emdx.__version__."""
+        from emdx import __version__
+
+        app = self._fresh_app()
+
+        result = runner.invoke(app, ["--version"])
+
+        assert result.exit_code == 0
+        assert f"emdx {__version__}" in result.output
 
 
 class TestListRecentShorthand:

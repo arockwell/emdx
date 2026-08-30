@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import typer
-from rich.panel import Panel
 
 from emdx.config.cli_config import DEFAULT_LLM_MODEL
 from emdx.database.documents import (
@@ -39,7 +38,7 @@ from emdx.models.tags import (
 from emdx.models.types import TaskRef
 from emdx.services.auto_tagger import AutoTagger
 from emdx.ui.formatting import format_tags
-from emdx.utils.output import Table, console, is_non_interactive, print_json
+from emdx.utils.output import console, is_non_interactive, print_json
 from emdx.utils.text_formatting import truncate_title
 
 app = typer.Typer(help="Core CRUD operations for documents")
@@ -810,6 +809,7 @@ def _find_list_all(
 ) -> None:
     """List all documents (replaces old `list` command)."""
     from emdx.models.documents import list_documents
+    from emdx.utils.output import Table
     from emdx.utils.text_formatting import truncate_title
 
     if tags:
@@ -846,7 +846,6 @@ def _find_list_all(
         print(json.dumps(json_docs, indent=2))
         return
 
-
     title = "Knowledge Base Documents"
     if project:
         title += f" - Project: {project}"
@@ -879,6 +878,7 @@ def _find_recent(
 ) -> None:
     """Show recently accessed documents (replaces old `recent` command)."""
     from emdx.models.documents import get_recent_documents
+    from emdx.utils.output import Table
     from emdx.utils.text_formatting import truncate_title
 
     docs = get_recent_documents(limit=limit, doc_type=doc_type)
@@ -896,7 +896,6 @@ def _find_recent(
             json_docs.append(d)
         print(json.dumps(json_docs, indent=2))
         return
-
 
     table = Table(title=f"Last {limit} Accessed Documents")
     table.add_column("ID", style="cyan", no_wrap=True)
@@ -927,6 +926,8 @@ def _find_similar(
     json_output: bool,
 ) -> None:
     """Find documents similar to a given document."""
+    from emdx.utils.output import Table
+
     try:
         from ..services.embedding_service import EmbeddingService
     except ImportError as e:
@@ -1402,6 +1403,8 @@ def view(
                 return
 
             console.print(f"[bold]Links for #{doc.id} '{doc.title}':[/bold]\n")
+            from emdx.utils.output import Table
+
             table = Table()
             table.add_column("ID", style="cyan", width=6)
             table.add_column("Score", style="green", width=6)
@@ -1467,6 +1470,7 @@ def _view_review(doc: Document) -> None:
     import shutil
 
     from rich.markup import escape
+    from rich.panel import Panel
 
     if not shutil.which("claude"):
         console.print(
@@ -1581,6 +1585,8 @@ def _print_view_header_plain(doc: Document, doc_tags: list[str]) -> None:
 
 def _print_view_header_rich(doc: Document, doc_tags: list[str]) -> None:
     """Print a rich panel header for document view, matching the TUI."""
+    from rich.panel import Panel
+
     content = doc.content
     word_count = len(content.split())
     char_count = len(content)
@@ -1900,6 +1906,8 @@ def delete(
             f"\n[bold]{'Would delete' if dry_run else 'Will delete'} "
             f"{len(docs_to_delete)} document(s):[/bold]\n"
         )
+
+        from emdx.utils.output import Table
 
         table = Table(show_header=True, header_style="bold cyan")
         table.add_column("ID", style="cyan", width=6)

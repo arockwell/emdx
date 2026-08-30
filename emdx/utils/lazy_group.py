@@ -250,6 +250,12 @@ class LazyCommand(TyperGroup):
         if isinstance(cmd_object, typer.Typer):
             from typer.main import get_command, get_group
 
+            # Sub-commands never carry --install-completion/--show-completion
+            # when registered eagerly via add_typer; suppress them here too
+            # (get_command/get_group would otherwise add them, since a
+            # standalone Typer app defaults to add_completion=True).
+            cmd_object._add_completion = False
+
             # Check if it has multiple commands (use group) or single (use command)
             if len(cmd_object.registered_commands) > 1 or cmd_object.registered_groups:
                 cmd: Any = get_group(cmd_object)
@@ -265,8 +271,12 @@ class LazyCommand(TyperGroup):
 
         # Check if it's a callable (function decorated for Typer)
         if callable(cmd_object):
-            # Wrap the function in a Typer command
-            temp_app = typer.Typer()
+            # Wrap the function in a Typer command. rich_markup_mode matches
+            # the main app's setting so help text renders identically to an
+            # eager registration on the main app; add_completion=False keeps
+            # the wrapper from adding --install-completion/--show-completion
+            # options that a plain `app.command()` registration wouldn't have.
+            temp_app = typer.Typer(add_completion=False, rich_markup_mode="rich")
             temp_app.command(name=self.name)(cmd_object)
             from typer.main import get_command
 
@@ -290,6 +300,34 @@ class LazyCommand(TyperGroup):
         if _is_group(real_cmd):
             return real_cmd.get_command(ctx, cmd_name)
         return None
+
+    def make_context(
+        self,
+        info_name: str | None,
+        args: list[str],
+        parent: ClickContext | None = None,
+        **extra: Any,
+    ) -> Any:
+        """Build the parse context, delegating to the real command for functions.
+
+        This placeholder inherits group-style parsing from ``TyperGroup``,
+        which stops treating tokens as options after the first positional
+        argument (they'd be held back as "subcommand args"). For a function
+        command like ``emdx history 42 --json`` that would silently drop
+        ``--json``. Delegating context creation to the real command gives
+        exactly its parsing, usage line, and error behavior — and since the
+        returned context's ``.command`` is the real command, the parent group
+        invokes it directly, bypassing this placeholder entirely.
+
+        Group targets keep the placeholder's own context (and the bare
+        invocation handling in ``invoke()``); their subcommand resolution
+        already delegates via ``get_command``/``list_commands``.
+        """
+        real_cmd = self._load_real_command()
+        if _is_group(real_cmd):
+            return super().make_context(info_name, args, parent=parent, **extra)
+        self.parent_group._loaded_commands[self.name or ""] = real_cmd
+        return real_cmd.make_context(info_name, args, parent=parent, **extra)
 
     def invoke(self, ctx: ClickContext) -> Any:
         """Invoke the command (loads the real command first)."""
