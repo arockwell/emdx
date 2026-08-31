@@ -49,7 +49,8 @@ def get_db_path() -> Path:
     1. EMDX_TEST_DB — test isolation (unchanged)
     2. EMDX_DB — explicit override
     3. Dev checkout detection → <project-root>/.emdx/dev.db
-    4. Production default → ~/.config/emdx/knowledge.db
+    4. Named KB (--kb, EMDX_KB, kb.dirs mapping, kb.default) → ~/.config/emdx/kb/<name>.db
+    5. Production default → ~/.config/emdx/knowledge.db
     """
     # 1. Test isolation
     test_db = os.environ.get("EMDX_TEST_DB")
@@ -72,6 +73,13 @@ def get_db_path() -> Path:
             print(f"Using dev database at {dev_db}", file=sys.stderr)
         return dev_db
 
-    # 4. Production default
+    # 4. Named knowledge base (--kb / EMDX_KB / kb.dirs mapping / kb.default)
+    from .knowledge_bases import DEFAULT_KB, require_kb
+
+    selection = require_kb()
+    if selection.name != DEFAULT_KB:
+        return selection.path
+
+    # 5. Production default
     EMDX_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     return EMDX_CONFIG_DIR / "knowledge.db"

@@ -42,7 +42,8 @@ When running via `poetry run emdx` (editable install), emdx automatically uses a
 1. `EMDX_TEST_DB` — test isolation (set by pytest fixtures)
 2. `EMDX_DB` — explicit override (e.g. `EMDX_DB=/tmp/test.db poetry run emdx status`)
 3. Dev checkout detection → `<project-root>/.emdx/dev.db`
-4. Production default → `~/.config/emdx/knowledge.db`
+4. Named KB (`--kb` / `EMDX_KB` / `kb.dirs.*` directory mapping / `kb.default`) → `~/.config/emdx/kb/<name>.db`
+5. Production default (`default` KB) → `~/.config/emdx/knowledge.db`
 
 **Commands:**
 - `emdx db status` — show active DB path and reason
@@ -322,6 +323,15 @@ emdx setup --dry-run                   # Preview; --force overwrites, --target-d
 emdx db status                         # Show active DB path and reason
 emdx db path                           # Print just the path (for scripts)
 emdx db copy-from-prod                 # Copy production DB to dev DB
+
+# Named knowledge bases — isolated DBs, nothing leaks between them
+emdx kb list                           # All KBs, active one marked *
+emdx kb current                        # Active KB and why it was chosen
+emdx kb create propolis                # New empty KB at ~/.config/emdx/kb/propolis.db
+emdx --kb propolis find "query"        # One-off: any command, --kb before the subcommand
+EMDX_KB=propolis emdx task ready       # Same via env (forwarded by agent hooks/shims)
+emdx kb map propolis ~/dev/propolis    # Auto-select when running inside that directory
+emdx kb use propolis                   # Make it the default (kb.default); --clear reverts
 
 # Settings
 emdx config list                       # Show all settings

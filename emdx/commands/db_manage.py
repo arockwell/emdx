@@ -26,7 +26,13 @@ def status() -> None:
     elif _is_dev_checkout():
         reason = "dev checkout detected (editable install)"
     else:
-        reason = "production default"
+        from ..config.knowledge_bases import DEFAULT_KB, resolve_kb
+
+        sel = resolve_kb()
+        if sel.name == DEFAULT_KB:
+            reason = "production default"
+        else:
+            reason = f"knowledge base '{sel.name}' ({sel.reason})"
 
     print(f"Active DB:    {db_path}")
     print(f"Reason:       {reason}")

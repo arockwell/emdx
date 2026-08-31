@@ -33,6 +33,7 @@ LAZY_SUBCOMMANDS = {
     "epic": "emdx.commands.epics:app",
     "briefing": "emdx.commands.briefing:app",
     "config": "emdx.commands.config_cmd:app",
+    "kb": "emdx.commands.kb_cmd:app",
     "context": "emdx.commands.context:context",
     "diff": "emdx.commands.history:diff",
     "gist": "emdx.commands.gist:create",
@@ -62,6 +63,7 @@ LAZY_HELP = {
     "epic": "Manage task epics",
     "briefing": "Show recent emdx activity briefing",
     "config": "Manage emdx settings",
+    "kb": "Named knowledge bases (isolated databases)",
     "context": "Walk the wiki link graph and assemble a context bundle.",
     "diff": "Show diff between current content and a previous version.",
     "gist": "Create or update a GitHub Gist from a document.",
@@ -130,6 +132,13 @@ def main(
     version: bool = typer.Option(False, "--version", "-V", help="Show version and exit"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose output"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress non-error output"),
+    kb: str | None = typer.Option(
+        None,
+        "--kb",
+        help="Use a named knowledge base for this invocation (see `emdx kb list`)",
+        envvar="EMDX_KB",
+        show_envvar=True,
+    ),
 ) -> None:
     """
     emdx - A knowledge base for developers and AI agents
@@ -169,11 +178,31 @@ def main(
         typer.echo("Error: --verbose and --quiet are mutually exclusive", err=True)
         raise typer.Exit(1)
 
-    # Ensure database schema is up to date (idempotent, runs pending migrations)
-    if ctx.invoked_subcommand is not None:
-        from emdx.database import db
+    # --kb selects a named knowledge base; export it so every get_db_path()
+    # call in this process (and child processes) agrees on the choice.
+    from emdx.config.knowledge_bases import KnowledgeBaseError
 
-        db.ensure_schema()
+    try:
+        if kb:
+            import os
+
+            os.environ["EMDX_KB"] = kb
+            # The global connection resolved its path at import time (before
+            # this flag was parsed) — re-point it so the whole process agrees.
+            from emdx.config.settings import get_db_path
+            from emdx.database import connection
+
+            connection.db_connection.db_path = get_db_path()
+
+        # Ensure database schema is up to date (idempotent, runs pending migrations)
+        # `emdx kb create` must be able to target a KB that doesn't exist yet.
+        if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "kb":
+            from emdx.database import db
+
+            db.ensure_schema()
+    except KnowledgeBaseError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1) from None
 
 
 # Known subcommands of `emdx tag` — used for shorthand routing

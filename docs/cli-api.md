@@ -299,9 +299,43 @@ emdx db copy-from-prod
 
 | Command | Description |
 |---------|-------------|
-| `status` | Show active DB path and reason (env var, dev checkout, or production) |
+| `status` | Show active DB path and reason (env var, dev checkout, named KB, or production) |
 | `path` | Print just the path (machine-friendly, for scripts) |
 | `copy-from-prod` | Copy production DB to dev DB for local development |
+
+### **emdx kb**
+Named knowledge bases: several fully isolated databases (own FTS index, embeddings, tasks, tags) under one install. `default` is the classic `~/.config/emdx/knowledge.db`; every other KB lives at `~/.config/emdx/kb/<name>.db`. Names are arbitrary — a client, a project, a domain.
+
+```bash
+# See what exists and which one is active (marked *)
+emdx kb list
+emdx kb current
+
+# Create one, then use it for a single command (--kb goes before the subcommand)
+emdx kb create propolis
+emdx --kb propolis save --file notes.md
+EMDX_KB=propolis emdx task ready       # same thing via the environment
+
+# Pick it automatically whenever you run emdx inside a directory
+emdx kb map propolis ~/dev/propolis ~/dev/propolis-worktrees
+emdx kb map --remove propolis ~/dev/propolis-worktrees
+
+# Make it the default everywhere (persisted as kb.default)
+emdx kb use propolis
+emdx kb use --clear
+```
+
+**Resolution order** (first hit wins): `--kb` → `EMDX_KB` → deepest matching `kb.dirs.<name>` directory → `kb.default` → `default`. `EMDX_DB` / `EMDX_TEST_DB` and dev-checkout detection still take precedence over all of these. Selecting a KB that does not exist is an error (`emdx kb create` first) so a typo never silently creates an empty knowledge base.
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| `list [--json]` | All knowledge bases with size, path, directory mappings; active one marked `*` |
+| `current [--json]` | Active KB, its path, and why it was chosen |
+| `create <name>` | Create an empty KB (runs migrations); names: `[a-z0-9][a-z0-9_-]*` |
+| `use [<name>] [--clear]` | Set (or show / clear) the default KB — the `kb.default` setting |
+| `map <name> [dirs...] [--remove]` | Map directories (default: cwd) to a KB — the `kb.dirs.<name>` setting |
 
 ### **emdx config**
 Persistent settings, stored in `~/.config/emdx/config.json`.
@@ -338,6 +372,8 @@ emdx config unset maintain.auto_link_on_save
 |---------|---------|-------------|
 | `maintain.auto_link_on_save` | `true` | Whether `emdx save` schedules semantic auto-linking at all. Linking is deferred by default — the doc is queued and `emdx maintain index` embeds + links it out of band, so saves stay fast on large KBs. The `--auto-link/--no-auto-link` flags override this per call. |
 | `maintain.sync_link_on_save` | `false` | Embed + auto-link synchronously during `emdx save` (the pre-deferral behavior). Slower on large KBs. The `--sync-link/--defer-link` flags override this per call. |
+| `kb.default` | `"default"` | Named knowledge base used when neither `--kb`/`EMDX_KB` nor a directory mapping applies. Set with `emdx kb use`. |
+| `kb.dirs.<name>` | — | Colon-separated directories; running emdx inside one selects knowledge base `<name>`. Set with `emdx kb map`. |
 | `ui.list_height` | `40` | TUI: height % of the top list band in the docs and tasks browsers; the preview/detail pane gets the rest. Clamped to 10–90. Takes effect on next `emdx gui` launch. |
 | `ui.sidebar_width` | `30` | TUI: width % of the right sidebar in the docs and tasks browsers; the list gets the rest. Clamped to 10–90. Takes effect on next `emdx gui` launch. |
 
