@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🚀 Major Features
+
+- **Named knowledge bases** — several fully isolated KBs (own FTS index, embeddings, tasks, tags) under one install. `emdx kb create <name>` / `list` / `current` / `use` / `map`; select per invocation with the global `--kb <name>` flag or `EMDX_KB`, per directory with `emdx kb map <name> <dir>` (`kb.dirs.<name>` setting), or globally with `emdx kb use <name>` (`kb.default` setting). `default` remains `~/.config/emdx/knowledge.db`, others live at `~/.config/emdx/kb/<name>.db`. Selecting a KB that doesn't exist is an error rather than a silent empty database. `emdx db status` explains which KB is active and why.
+
 ## [0.36.0] - 2026-08-30
 
 **Fast saves, fast startup, and installs that finish the job.** The three open issues all land at once: `emdx save` no longer blocks on the embedding model, CLI startup cost drops by lazy-loading everything non-core, and a new `emdx setup` command installs the Claude Code skills that previously never shipped in the wheel.

@@ -14,6 +14,11 @@ Known settings:
   synchronously during ``emdx save`` (the pre-#1038 behavior). Slower on
   large knowledge bases; ``--sync-link`` / ``--defer-link`` override
   per call.
+- ``kb.default`` (str, default "default"): which named knowledge base to use
+  when neither ``--kb``/``EMDX_KB`` nor a directory mapping applies.
+- ``kb.dirs.<name>`` (str, colon-separated directories): commands run from
+  inside one of these directories use knowledge base ``<name>`` — see
+  ``emdx kb map`` and ``emdx/config/knowledge_bases.py``.
 - ``ui.list_height`` / ``ui.sidebar_width`` (int %, defaults 40/30): TUI
   panel sizes — see ``emdx/ui/layout_config.py`` (#891).
 """
@@ -33,6 +38,8 @@ ConfigValue = str | int | float | bool | None
 KNOWN_SETTINGS: dict[str, ConfigValue] = {
     "maintain.auto_link_on_save": True,
     "maintain.sync_link_on_save": False,
+    # Named knowledge bases — see config/knowledge_bases.py
+    "kb.default": "default",
     # TUI panel sizes (#891) — percentages, clamped to 10-90 at load
     "ui.list_height": 40,
     "ui.sidebar_width": 30,
