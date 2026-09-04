@@ -679,6 +679,10 @@ app.command(name="freshness")(freshness)
 def backup_command(
     list_backups: bool = typer.Option(False, "--list", "-l", help="List existing backups"),
     restore: str = typer.Option(None, "--restore", "-r", help="Restore from a backup file"),
+    allow_different_db: bool = typer.Option(
+        False, "--allow-different-db", help="Allow restoring a foreign or unverified backup"
+    ),
+    daily: bool = typer.Option(False, "--daily", help="Skip if this database was backed up today"),
     no_compress: bool = typer.Option(False, "--no-compress", help="Skip gzip compression"),
     no_retention: bool = typer.Option(
         False, "--no-retention", help="Disable automatic pruning (keep all backups)"
@@ -749,7 +753,7 @@ def backup_command(
                 print(msg)
             raise typer.Exit(code=1)
 
-        result = svc.restore_backup(restore_path)
+        result = svc.restore_backup(restore_path, allow_different_db=allow_different_db)
         if json_output:
             print(
                 json_mod.dumps(
@@ -780,6 +784,13 @@ def backup_command(
         elif not quiet:
             print(msg)
         raise typer.Exit(code=1)
+
+    if daily and svc.has_backup_today():
+        if json_output:
+            print(json_mod.dumps({"success": True, "skipped": True, "message": "Backed up today"}))
+        elif not quiet:
+            print("Already backed up today.")
+        return
 
     result = svc.create_backup(compress=not no_compress)
     if json_output:

@@ -16,10 +16,18 @@ class DatabaseConnection:
     """SQLite database connection manager for emdx"""
 
     def __init__(self, db_path: Path | None = None):
-        if db_path is None:
-            self.db_path = get_db_path()
-        else:
-            self.db_path = db_path
+        # Defer selection until CLI options have been parsed, then pin it.
+        self._db_path = db_path
+
+    @property
+    def db_path(self) -> Path:
+        if self._db_path is None:
+            self._db_path = get_db_path()
+        return self._db_path
+
+    @db_path.setter
+    def db_path(self, path: Path) -> None:
+        self._db_path = path
 
     @contextmanager
     def get_connection(self) -> Generator[sqlite3.Connection, None, None]:

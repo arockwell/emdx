@@ -2,6 +2,7 @@
 
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # Re-export constants for backward compatibility
@@ -42,44 +43,46 @@ def _is_dev_checkout() -> bool:
         return False
 
 
-def get_db_path() -> Path:
-    """Get the database path with environment and dev-checkout awareness.
+@dataclass(frozen=True)
+class DatabaseSelection:
+    """Effective destination; overrides need not correspond to a named KB."""
 
-    Priority:
-    1. EMDX_TEST_DB — test isolation (unchanged)
-    2. EMDX_DB — explicit override
-    3. Dev checkout detection → <project-root>/.emdx/dev.db
-    4. Named KB (--kb, EMDX_KB, kb.dirs mapping, kb.default) → ~/.config/emdx/kb/<name>.db
-    5. Production default → ~/.config/emdx/knowledge.db
+    name: str | None
+    path: Path
+    reason: str
+
+
+def resolve_database(*, require_exists: bool = True) -> DatabaseSelection:
+    """Resolve the effective database without creating files or directories.
+
+    Test/explicit paths and checkout isolation precede named KB selectors.
+    Inspection commands may report a missing named KB so it can be repaired.
     """
-    # 1. Test isolation
-    test_db = os.environ.get("EMDX_TEST_DB")
-    if test_db:
-        return Path(test_db)
-
-    # 2. Explicit override
-    explicit_db = os.environ.get("EMDX_DB")
-    if explicit_db:
-        path = Path(explicit_db)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
-
-    # 3. Dev checkout → local .emdx/dev.db
+    for variable in ("EMDX_TEST_DB", "EMDX_DB"):
+        value = os.environ.get(variable)
+        if value:
+            return DatabaseSelection(None, Path(value), f"{variable} environment variable")
     if _is_dev_checkout():
-        dev_dir = _project_root() / ".emdx"
-        dev_db = dev_dir / "dev.db"
-        if not dev_db.exists():
-            dev_dir.mkdir(parents=True, exist_ok=True)
-            print(f"Using dev database at {dev_db}", file=sys.stderr)
-        return dev_db
+        return DatabaseSelection(
+            None, _project_root() / ".emdx" / "dev.db", "dev checkout detected (editable install)"
+        )
 
-    # 4. Named knowledge base (--kb / EMDX_KB / kb.dirs mapping / kb.default)
-    from .knowledge_bases import DEFAULT_KB, require_kb
+    from .knowledge_bases import DEFAULT_KB, require_kb, resolve_kb
 
-    selection = require_kb()
-    if selection.name != DEFAULT_KB:
-        return selection.path
+    selection = require_kb() if require_exists else resolve_kb()
+    if selection.name == DEFAULT_KB:
+        return DatabaseSelection(DEFAULT_KB, EMDX_CONFIG_DIR / "knowledge.db", selection.reason)
+    return DatabaseSelection(selection.name, selection.path, selection.reason)
 
-    # 5. Production default
-    EMDX_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    return EMDX_CONFIG_DIR / "knowledge.db"
+
+def get_db_path() -> Path:
+    """Get the effective path, creating its parent directory when appropriate."""
+    selection = resolve_database()
+    if (
+        selection.reason == "dev checkout detected (editable install)"
+        and not selection.path.exists()
+    ):
+        print(f"Using dev database at {selection.path}", file=sys.stderr)
+    if not os.environ.get("EMDX_TEST_DB"):
+        selection.path.parent.mkdir(parents=True, exist_ok=True)
+    return selection.path

@@ -7,6 +7,7 @@ optional gzip compression and logarithmic retention.
 from __future__ import annotations
 
 import gzip
+import hashlib
 import logging
 import os
 import shutil
@@ -15,6 +16,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from ..config.constants import (
     BACKUP_DAILY_DAYS,
@@ -22,6 +24,7 @@ from ..config.constants import (
     BACKUP_WEEKLY_DAYS,
     BACKUP_YEARLY_DAYS,
     EMDX_BACKUP_DIR,
+    EMDX_CONFIG_DIR,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,8 +51,13 @@ class BackupService:
         backup_dir: Path | None = None,
         retention: bool = True,
     ) -> None:
-        self.db_path = db_path
-        self.backup_dir = backup_dir or EMDX_BACKUP_DIR
+        self.db_path = db_path.expanduser().resolve()
+        self.database_identity = str(self.db_path)
+        self.is_default_database = self.db_path == (EMDX_CONFIG_DIR / "knowledge.db").resolve()
+        root = (backup_dir or EMDX_BACKUP_DIR).expanduser().resolve()
+        # Keep historical production backups accessible at their original location.
+        namespace = hashlib.sha256(self.database_identity.encode()).hexdigest()
+        self.backup_dir = root if self.is_default_database else root / namespace
         self.retention = retention
 
     def create_backup(self, compress: bool = True) -> BackupResult:
@@ -62,7 +70,7 @@ class BackupService:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d_%H%M%S")
-        backup_name = f"emdx-backup-{timestamp}.db"
+        backup_name = f"emdx-backup-{timestamp}_{uuid4().hex}.db"
         backup_path = self.backup_dir / backup_name
 
         try:
@@ -71,6 +79,10 @@ class BackupService:
             dst = sqlite3.connect(backup_path)
             try:
                 src.backup(dst)
+                # Reserved backup-only table: a live-table collision fails without altering data.
+                dst.execute("CREATE TABLE _emdx_backup_source (database_path TEXT)")
+                dst.execute("INSERT INTO _emdx_backup_source VALUES (?)", (self.database_identity,))
+                dst.commit()
             finally:
                 dst.close()
                 src.close()
@@ -122,20 +134,26 @@ class BackupService:
             return False
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
         prefix = f"emdx-backup-{today}"
-        return any(self.backup_dir.glob(f"{prefix}*"))
+        return any(path.name.startswith(prefix) for path in self.list_backups())
 
     def list_backups(self) -> list[Path]:
         """List all backup files, newest first."""
         if not self.backup_dir.exists():
             return []
         backups = sorted(
-            self.backup_dir.glob("emdx-backup-*"),
+            (
+                path
+                for path in self.backup_dir.glob("emdx-backup-*")
+                if path.is_file() and (path.name.endswith(".db") or path.name.endswith(".db.gz"))
+            ),
             key=lambda p: p.name,
             reverse=True,
         )
         return backups
 
-    def restore_backup(self, backup_path: Path) -> BackupResult:
+    def restore_backup(
+        self, backup_path: Path, *, allow_different_db: bool = False
+    ) -> BackupResult:
         """Restore the knowledge base from a backup file.
 
         Handles both compressed (.db.gz) and uncompressed (.db) backups.
@@ -181,6 +199,26 @@ class BackupService:
             # Validate before touching the live DB
             check_conn = sqlite3.connect(temp_restore)
             try:
+                has_source = check_conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='_emdx_backup_source'"
+                ).fetchone()
+                if has_source:
+                    source = check_conn.execute(
+                        "SELECT database_path FROM _emdx_backup_source"
+                    ).fetchall()
+                    owned = source == [(self.database_identity,)]
+                else:
+                    # Old backups have no provenance: trust only the legacy default location.
+                    owned = (
+                        self.is_default_database and backup_path.resolve().parent == self.backup_dir
+                    )
+                if not owned and not allow_different_db:
+                    raise ValueError(
+                        "Backup belongs to another database or has unknown ownership. "
+                        "Use --allow-different-db to deliberately restore it here."
+                    )
+                check_conn.execute("DROP TABLE IF EXISTS _emdx_backup_source")
+                check_conn.commit()
                 integrity = check_conn.execute("PRAGMA integrity_check").fetchone()[0]
             finally:
                 check_conn.close()
@@ -223,7 +261,8 @@ class BackupService:
         prefix = "emdx-backup-"
         if not name.startswith(prefix):
             return None
-        date_part = name[len(prefix) :].split(".")[0]  # "2026-02-28_143022"
+        date_part = name[len(prefix) :].split(".")[0]
+        date_part = "_".join(date_part.split("_")[:2])
         try:
             return datetime.strptime(date_part, "%Y-%m-%d_%H%M%S").replace(tzinfo=timezone.utc)
         except ValueError:

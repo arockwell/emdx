@@ -14,10 +14,11 @@ from emdx.services.similarity import IndexStats, SimilarDocument, SimilarityServ
 
 
 @pytest.fixture
-def temp_cache_dir(tmp_path):
+def temp_cache_dir(tmp_path, monkeypatch):
     """Create a temporary cache directory for testing."""
     cache_dir = tmp_path / ".config" / "emdx"
     cache_dir.mkdir(parents=True)
+    monkeypatch.setattr("emdx.services.similarity.EMDX_CONFIG_DIR", cache_dir)
     return cache_dir
 
 
@@ -27,6 +28,8 @@ def similarity_service(temp_cache_dir, temp_db):
     # Patch the cache directory
     with patch.object(SimilarityService, "__init__", lambda self, db_path=None: None):
         service = object.__new__(SimilarityService)
+        service._connection = None
+        service._database_identity = ""
         service._cache_dir = temp_cache_dir
         service._cache_path = temp_cache_dir / "similarity_cache.pkl"
         service._vectorizer = None
@@ -231,12 +234,13 @@ class TestSimilarityServiceIntegration:
     def test_build_index_empty_database(self, temp_db, temp_cache_dir):
         """Test building index with empty database."""
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             # Set up mock to return empty results
             mock_conn = temp_db.get_connection()
             mock_db.get_connection.return_value.__enter__ = lambda s: mock_conn
             mock_db.get_connection.return_value.__exit__ = lambda s, *args: None
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -257,6 +261,7 @@ class TestSimilarityServiceIntegration:
         db = populated_db["db"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -268,7 +273,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -291,6 +296,7 @@ class TestSimilarityServiceIntegration:
         doc_ids = populated_db["doc_ids"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -302,7 +308,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -329,6 +335,7 @@ class TestSimilarityServiceIntegration:
         doc_ids = populated_db["doc_ids"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -340,7 +347,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -362,6 +369,7 @@ class TestSimilarityServiceIntegration:
         doc_ids = populated_db["doc_ids"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -373,7 +381,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -403,6 +411,7 @@ class TestSimilarityServiceIntegration:
         doc_ids = populated_db["doc_ids"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -414,7 +423,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -439,6 +448,7 @@ class TestSimilarityServiceIntegration:
         doc_ids = populated_db["doc_ids"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -450,7 +460,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -475,6 +485,7 @@ class TestSimilarityServiceIntegration:
         doc_ids = populated_db["doc_ids"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -486,7 +497,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None
@@ -511,6 +522,7 @@ class TestSimilarityServiceIntegration:
         db = populated_db["db"]
 
         with patch("emdx.services.similarity.db") as mock_db:
+            mock_db.db_path = temp_cache_dir / "test.db"
             mock_conn = db.get_connection()
 
             class MockContextManager:
@@ -522,7 +534,7 @@ class TestSimilarityServiceIntegration:
 
             mock_db.get_connection.return_value = MockContextManager()
 
-            service = SimilarityService.__new__(SimilarityService)
+            service = SimilarityService()
             service._cache_dir = temp_cache_dir
             service._cache_path = temp_cache_dir / "similarity_cache.pkl"
             service._vectorizer = None

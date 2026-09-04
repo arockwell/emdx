@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SessionStart hook: create a daily backup of the emdx knowledge base.
 #
-# Fast path: if today's backup exists, exits after a single glob — no Python.
+# Daily checks are scoped to the effective database by the CLI.
 # Skips environments without emdx installed.
 set -euo pipefail
 
@@ -11,14 +11,5 @@ cat > /dev/null
 # Skip if emdx not installed
 command -v emdx &>/dev/null || exit 0
 
-# Skip if no database exists yet
-DB="${HOME}/.config/emdx/knowledge.db"
-[[ -f "$DB" ]] || exit 0
-
-# Fast check: already backed up today?
-TODAY=$(date -u +%Y-%m-%d)
-BACKUP_DIR="${HOME}/.config/emdx/backups"
-ls "${BACKUP_DIR}"/emdx-backup-${TODAY}* &>/dev/null 2>&1 && exit 0
-
-# Create backup (quiet, won't block session start)
-emdx maintain backup --quiet 2>/dev/null || true
+# Resolve the effective database in the CLI; global shell globs mix different KBs.
+emdx maintain backup --daily --quiet 2>/dev/null || true

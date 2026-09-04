@@ -283,6 +283,8 @@ emdx maintain link 42 --to 57          # Manually curate a link (ranks higher in
 emdx maintain backup                   # Create compressed daily backup
 emdx maintain backup --list            # List existing backups
 emdx maintain backup --restore <file>  # Restore from a backup
+emdx maintain backup --allow-different-db --restore <file>  # Explicit cross-database restore
+emdx maintain backup --daily --quiet   # One backup per effective database per UTC day
 emdx maintain compact                  # Compact DB (VACUUM + FTS optimize)
 emdx maintain doctor                   # Scan for docs damaged by known bugs
 emdx maintain freshness                # Score document freshness (staleness)

@@ -304,7 +304,7 @@ emdx db copy-from-prod
 | `copy-from-prod` | Copy production DB to dev DB for local development |
 
 ### **emdx kb**
-Named knowledge bases: several fully isolated databases (own FTS index, embeddings, tasks, tags) under one install. `default` is the classic `~/.config/emdx/knowledge.db`; every other KB lives at `~/.config/emdx/kb/<name>.db`. Names are arbitrary — a client, a project, a domain.
+Named knowledge bases: separate databases (own FTS index, embeddings, tasks, tags) under one install. `default` is the classic `~/.config/emdx/knowledge.db`; every other KB lives at `~/.config/emdx/kb/<name>.db`. Names are arbitrary — a client, a project, a domain. Similarity caches and local backups are scoped to the database; application settings and logs remain shared by the installation.
 
 ```bash
 # See what exists and which one is active (marked *)
@@ -326,6 +326,18 @@ emdx kb use --clear
 ```
 
 **Resolution order** (first hit wins): `--kb` → `EMDX_KB` → deepest matching `kb.dirs.<name>` directory → `kb.default` → `default`. `EMDX_DB` / `EMDX_TEST_DB` and dev-checkout detection still take precedence over all of these. Selecting a KB that does not exist is an error (`emdx kb create` first) so a typo never silently creates an empty knowledge base.
+
+`kb current` reports the effective database path and the reason it was selected, including explicit database overrides and development checkout isolation. `kb list` marks a named KB active only when its path matches the effective database.
+
+If a configured KB is missing or invalid, management commands remain available to repair the selection. For example:
+
+```bash
+$ emdx kb use --clear
+Default knowledge base reset to 'default'
+$ emdx --kb default kb current
+```
+
+Similarity indexes are cached separately for each resolved database path. Existing unscoped similarity caches are rebuilt rather than reused across knowledge bases.
 
 **Subcommands:**
 
@@ -483,6 +495,8 @@ System maintenance, cleanup, embedding index, and document linking.
 #### **emdx maintain backup**
 Create, list, or restore knowledge base backups. Uses SQLite's backup API for atomic, WAL-safe copies with optional gzip compression and logarithmic retention (~19 backups covering 2 years).
 
+Backup storage, daily checks, and retention are scoped to the resolved database path. The production `default` KB keeps its legacy backup directory; other databases use separate subdirectories. Backup names are unique even when multiple backups start in the same second. Restoring a backup belonging to another database requires `--allow-different-db`.
+
 ```bash
 # Create compressed backup (default)
 emdx maintain backup
@@ -506,6 +520,8 @@ emdx maintain backup --json
 **Options:**
 - `--list, -l` - List existing backups
 - `--restore, -r TEXT` - Restore from a backup file (filename or full path)
+- `--allow-different-db` - Explicitly allow restoring a backup from another database (use with `--restore`)
+- `--daily` - Skip creating a backup when the effective database already has one for today (UTC)
 - `--no-compress` - Skip gzip compression
 - `--no-retention` - Disable automatic pruning (keep all backups)
 - `--quiet, -q` - Suppress output (for hook use)
@@ -1905,12 +1921,11 @@ title from the first markdown heading. Tags output with `subagent` and
 `agent:<type>`. If `EMDX_TASK_ID` is set, links the saved document to the task
 via `emdx save --task`.
 
-**`auto-backup.sh`** (SessionStart): Fast-path check — if today's backup
-already exists (single glob), exits immediately. Otherwise runs
-`emdx maintain backup --quiet`.
+**`auto-backup.sh`** (SessionStart): Runs `emdx maintain backup --daily --quiet`.
+The CLI checks for today's backup in the effective database's backup directory,
+so a backup of one knowledge base does not skip another knowledge base's backup.
 
 ### Agent Workflow
 
 For detailed patterns on running task-scoped agent sessions, see
 [Agent Workflow](agent-workflow.md).
-

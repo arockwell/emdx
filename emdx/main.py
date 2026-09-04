@@ -187,18 +187,14 @@ def main(
             import os
 
             os.environ["EMDX_KB"] = kb
-            # The global connection resolved its path at import time (before
-            # this flag was parsed) — re-point it so the whole process agrees.
+
+        # Configuration/repair commands must work even with a broken selection.
+        if ctx.invoked_subcommand is not None and ctx.invoked_subcommand not in {"kb", "config"}:
             from emdx.config.settings import get_db_path
-            from emdx.database import connection
+            from emdx.database import connection, db
 
-            connection.db_connection.db_path = get_db_path()
-
-        # Ensure database schema is up to date (idempotent, runs pending migrations)
-        # `emdx kb create` must be able to target a KB that doesn't exist yet.
-        if ctx.invoked_subcommand is not None and ctx.invoked_subcommand != "kb":
-            from emdx.database import db
-
+            if kb:
+                connection.db_connection.db_path = get_db_path()
             db.ensure_schema()
     except KnowledgeBaseError as e:
         typer.echo(f"Error: {e}", err=True)

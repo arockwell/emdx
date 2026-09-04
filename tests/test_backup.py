@@ -40,7 +40,9 @@ def backup_dir(tmp_path: Path) -> Path:
 @pytest.fixture
 def svc(db_path: Path, backup_dir: Path) -> BackupService:
     """BackupService with test paths."""
-    return BackupService(db_path=db_path, backup_dir=backup_dir)
+    service = BackupService(db_path=db_path, backup_dir=backup_dir)
+    service.backup_dir.mkdir(parents=True, exist_ok=True)
+    return service
 
 
 # ── BackupService tests ────────────────────────────────────────────
@@ -81,6 +83,7 @@ class TestBackupService:
         assert svc.list_backups() == []
 
     def test_list_backups_sorted(self, svc: BackupService, backup_dir: Path) -> None:
+        backup_dir = svc.backup_dir
         # Create backups with different timestamps
         (backup_dir / "emdx-backup-2026-01-01_000000.db.gz").touch()
         (backup_dir / "emdx-backup-2026-01-03_000000.db.gz").touch()
@@ -163,7 +166,7 @@ class TestBackupService:
         corrupt = tmp_path / "corrupt.db"
         corrupt.write_bytes(b"this is not a sqlite database" * 100)
 
-        result = svc.restore_backup(corrupt)
+        result = svc.restore_backup(corrupt, allow_different_db=True)
         assert not result.success
 
         # Live DB still intact and readable
@@ -211,15 +214,13 @@ class TestBackupService:
         conn.close()
         assert row[0] == "changed"
 
-    def test_restore_failure_cleans_up_temp_files(
-        self, svc: BackupService, tmp_path: Path
-    ) -> None:
+    def test_restore_failure_cleans_up_temp_files(self, svc: BackupService, tmp_path: Path) -> None:
         """Failed restores must not leak decompressed/temp DB files."""
         corrupt_gz = tmp_path / "emdx-backup-corrupt.db.gz"
         with gzip.open(corrupt_gz, "wb") as f:
             f.write(b"not a sqlite database" * 100)
 
-        result = svc.restore_backup(corrupt_gz)
+        result = svc.restore_backup(corrupt_gz, allow_different_db=True)
         assert not result.success
 
         leftovers = [
@@ -231,6 +232,7 @@ class TestBackupService:
 
     def test_retention_pruning(self, svc: BackupService, backup_dir: Path) -> None:
         """Old backups beyond retention tiers get pruned."""
+        backup_dir = svc.backup_dir
         now = datetime.now(tz=timezone.utc)
 
         # Create backups: 10 daily, should keep all within 7 days
@@ -265,6 +267,8 @@ class TestBackupService:
     def test_no_retention(self, db_path: Path, backup_dir: Path) -> None:
         """With retention=False, no pruning happens."""
         svc = BackupService(db_path=db_path, backup_dir=backup_dir, retention=False)
+        backup_dir = svc.backup_dir
+        backup_dir.mkdir(parents=True, exist_ok=True)
 
         # Create several old backups (far enough in the past to not collide with today)
         for i in range(5):
@@ -389,3 +393,182 @@ class TestBackupCLI:
         assert data["success"] is True
         assert "path" in data
         assert "size_bytes" in data
+
+
+class TestBackupIsolation:
+    def test_same_timestamp_daily_listing_and_retention_are_per_database(
+        self, db_path: Path, tmp_path: Path
+    ) -> None:
+        import shutil
+
+        other_db = tmp_path / "other.db"
+        shutil.copy2(db_path, other_db)
+        a = BackupService(db_path, backup_dir=tmp_path / "backups")
+        b = BackupService(other_db, backup_dir=tmp_path / "backups")
+        now = datetime.now(tz=timezone.utc)
+        with patch("emdx.services.backup_service.datetime") as clock:
+            clock.now.return_value = now
+            clock.strptime.side_effect = datetime.strptime
+            first = a.create_backup()
+            assert a.has_backup_today()
+            assert not b.has_backup_today()
+            second = a.create_backup()
+            third = b.create_backup()
+        assert first.success and second.success and third.success
+        assert first.path != second.path
+        assert first.path is not None and third.path is not None
+        assert first.path.parent != third.path.parent
+        assert len(a.list_backups()) == 2
+        assert len(b.list_backups()) == 1
+        old_a = a.backup_dir / "emdx-backup-2000-01-01_000000.db"
+        old_b = b.backup_dir / "emdx-backup-2000-01-01_000000.db"
+        old_a.touch()
+        old_b.touch()
+        assert a._prune_old_backups() == 1
+        assert not old_a.exists()
+        assert old_b.exists()
+
+    def test_restore_rejects_foreign_backup_even_after_copy_into_own_directory(
+        self, db_path: Path, tmp_path: Path
+    ) -> None:
+        import shutil
+
+        other_db = tmp_path / "other.db"
+        shutil.copy2(db_path, other_db)
+        with sqlite3.connect(other_db) as conn:
+            conn.execute("UPDATE docs SET title='other'")
+        a = BackupService(db_path, backup_dir=tmp_path / "backups")
+        b = BackupService(other_db, backup_dir=tmp_path / "backups")
+        result = b.create_backup()
+        assert result.success and result.path is not None
+        a.backup_dir.mkdir(parents=True)
+        copied = a.backup_dir / result.path.name
+        shutil.copy2(result.path, copied)
+        rejected = a.restore_backup(copied)
+        assert not rejected.success
+        assert "--allow-different-db" in rejected.message
+        with sqlite3.connect(db_path) as conn:
+            assert conn.execute("SELECT title FROM docs").fetchone() == ("hello",)
+        assert a.restore_backup(copied, allow_different_db=True).success
+        with sqlite3.connect(db_path) as conn:
+            assert conn.execute("SELECT title FROM docs").fetchone() == ("other",)
+            assert not conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='_emdx_backup_source'"
+            ).fetchone()
+
+    def test_default_database_keeps_legacy_backups(self, db_path: Path, tmp_path: Path) -> None:
+        import shutil
+
+        default_db = tmp_path / "knowledge.db"
+        shutil.copy2(db_path, default_db)
+        root = tmp_path / "backups"
+        root.mkdir()
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d_%H%M%S")
+        legacy = root / f"emdx-backup-{today}.db"
+        shutil.copy2(default_db, legacy)
+        with patch("emdx.services.backup_service.EMDX_CONFIG_DIR", tmp_path):
+            default = BackupService(default_db, backup_dir=root)
+            other = BackupService(db_path, backup_dir=root)
+        assert default.backup_dir == root
+        assert default.list_backups() == [legacy]
+        assert default.has_backup_today()
+        assert not other.has_backup_today()
+        assert default.restore_backup(legacy).success
+        assert not other.restore_backup(legacy).success
+
+    def test_canonical_paths_share_namespace(self, db_path: Path, tmp_path: Path) -> None:
+        alias = tmp_path / "alias.db"
+        alias.symlink_to(db_path)
+        direct = BackupService(db_path, backup_dir=tmp_path / "backups")
+        linked = BackupService(alias, backup_dir=tmp_path / "backups")
+        assert direct.backup_dir == linked.backup_dir
+        result = direct.create_backup()
+        assert result.success and result.path is not None
+        assert linked.restore_backup(result.path).success
+
+    def test_cli_daily_checks_effective_database(self, db_path: Path, tmp_path: Path) -> None:
+        import json
+        import shutil
+
+        from emdx.commands.maintain import app
+
+        other_db = tmp_path / "other.db"
+        shutil.copy2(db_path, other_db)
+        runner = CliRunner()
+        with (
+            patch("emdx.services.backup_service.EMDX_BACKUP_DIR", tmp_path / "backups"),
+            patch("emdx.config.settings.get_db_path") as get_db,
+        ):
+            get_db.return_value = db_path
+            first = runner.invoke(app, ["backup", "--daily", "--json"])
+            repeated = runner.invoke(app, ["backup", "--daily", "--json"])
+            get_db.return_value = other_db
+            other = runner.invoke(app, ["backup", "--daily", "--json"])
+        assert first.exit_code == repeated.exit_code == other.exit_code == 0
+        assert json.loads(repeated.output)["skipped"] is True
+        assert json.loads(first.output)["path"] != json.loads(other.output)["path"]
+
+    def test_backup_metadata_collision_preserves_live_table(
+        self, db_path: Path, tmp_path: Path
+    ) -> None:
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("CREATE TABLE _emdx_backup_source (important TEXT)")
+            conn.execute("INSERT INTO _emdx_backup_source VALUES ('keep me')")
+        service = BackupService(db_path, backup_dir=tmp_path / "backups")
+        result = service.create_backup()
+        assert not result.success
+        assert service.list_backups() == []
+        with sqlite3.connect(db_path) as conn:
+            assert conn.execute("SELECT important FROM _emdx_backup_source").fetchone() == (
+                "keep me",
+            )
+
+    def test_same_database_restore_removes_backup_metadata(
+        self, db_path: Path, tmp_path: Path
+    ) -> None:
+        service = BackupService(db_path, backup_dir=tmp_path / "backups")
+        backup = service.create_backup(compress=False)
+        assert backup.success and backup.path is not None
+        with sqlite3.connect(backup.path) as conn:
+            assert conn.execute("SELECT database_path FROM _emdx_backup_source").fetchone() == (
+                str(db_path.resolve()),
+            )
+        assert service.restore_backup(backup.path).success
+        with sqlite3.connect(db_path) as conn:
+            assert not conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='_emdx_backup_source'"
+            ).fetchone()
+        # Restore leaves the artifact intact and permits another backup of the live database.
+        with sqlite3.connect(backup.path) as conn:
+            assert conn.execute("SELECT database_path FROM _emdx_backup_source").fetchone()
+        assert service.create_backup().success
+
+    def test_cli_restore_requires_explicit_foreign_database_override(
+        self, db_path: Path, tmp_path: Path
+    ) -> None:
+        import json
+        import shutil
+
+        from emdx.commands.maintain import app
+
+        other_db = tmp_path / "other.db"
+        shutil.copy2(db_path, other_db)
+        with sqlite3.connect(other_db) as conn:
+            conn.execute("UPDATE docs SET title='foreign'")
+        backup = BackupService(other_db, backup_dir=tmp_path / "backups").create_backup()
+        assert backup.success and backup.path is not None
+        runner = CliRunner()
+        with patch("emdx.config.settings.get_db_path", return_value=db_path):
+            rejected = runner.invoke(app, ["backup", "--json", "--restore", str(backup.path)])
+            assert rejected.exit_code == 1
+            assert json.loads(rejected.output)["success"] is False
+            with sqlite3.connect(db_path) as conn:
+                assert conn.execute("SELECT title FROM docs").fetchone() == ("hello",)
+            accepted = runner.invoke(
+                app,
+                ["backup", "--json", "--allow-different-db", "--restore", str(backup.path)],
+            )
+        assert accepted.exit_code == 0
+        assert json.loads(accepted.output)["success"] is True
+        with sqlite3.connect(db_path) as conn:
+            assert conn.execute("SELECT title FROM docs").fetchone() == ("foreign",)
