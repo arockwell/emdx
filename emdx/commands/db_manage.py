@@ -5,7 +5,7 @@ import shutil
 import typer
 
 from ..config.constants import EMDX_CONFIG_DIR
-from ..config.settings import _is_dev_checkout, get_db_path
+from ..config.settings import get_db_path, resolve_database
 
 app = typer.Typer(help="Database management")
 
@@ -13,26 +13,15 @@ app = typer.Typer(help="Database management")
 @app.command()
 def status() -> None:
     """Show which database is active and why."""
-    import os
-
-    db_path = get_db_path()
+    selection = resolve_database()
+    db_path = selection.path
     prod_path = EMDX_CONFIG_DIR / "knowledge.db"
-
-    # Determine reason
-    if os.environ.get("EMDX_TEST_DB"):
-        reason = "EMDX_TEST_DB environment variable"
-    elif os.environ.get("EMDX_DB"):
-        reason = "EMDX_DB environment variable"
-    elif _is_dev_checkout():
-        reason = "dev checkout detected (editable install)"
+    if selection.name == "default":
+        reason = "production default"
+    elif selection.name is not None:
+        reason = f"knowledge base '{selection.name}' ({selection.reason})"
     else:
-        from ..config.knowledge_bases import DEFAULT_KB, resolve_kb
-
-        sel = resolve_kb()
-        if sel.name == DEFAULT_KB:
-            reason = "production default"
-        else:
-            reason = f"knowledge base '{sel.name}' ({sel.reason})"
+        reason = selection.reason
 
     print(f"Active DB:    {db_path}")
     print(f"Reason:       {reason}")

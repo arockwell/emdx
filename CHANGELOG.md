@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Resolve named knowledge bases after CLI options are parsed, keep management commands available for recovery, and report the effective database when an override applies.
+- Separate similarity caches and backup lifecycles by database, prevent same-second backup collisions, and require an explicit override for cross-database restores.
+
 ### 🚀 Major Features
 
 - **Named knowledge bases** — several fully isolated KBs (own FTS index, embeddings, tasks, tags) under one install. `emdx kb create <name>` / `list` / `current` / `use` / `map`; select per invocation with the global `--kb <name>` flag or `EMDX_KB`, per directory with `emdx kb map <name> <dir>` (`kb.dirs.<name>` setting), or globally with `emdx kb use <name>` (`kb.default` setting). `default` remains `~/.config/emdx/knowledge.db`, others live at `~/.config/emdx/kb/<name>.db`. Selecting a KB that doesn't exist is an error rather than a silent empty database. `emdx db status` explains which KB is active and why.

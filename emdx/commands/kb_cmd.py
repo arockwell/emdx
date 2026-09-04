@@ -24,9 +24,9 @@ from ..config.knowledge_bases import (
     kb_db_path,
     kb_exists,
     list_kbs,
-    resolve_kb,
     validate_kb_name,
 )
+from ..config.settings import resolve_database
 
 app = typer.Typer(help="Named knowledge bases (isolated databases)")
 
@@ -66,7 +66,7 @@ def list_cmd(
 ) -> None:
     """List knowledge bases and which one is active."""
     try:
-        active = resolve_kb()
+        active = resolve_database(require_exists=False)
     except KnowledgeBaseError as e:
         _fail(str(e))
         raise
@@ -78,7 +78,7 @@ def list_cmd(
             {
                 "name": name,
                 "path": str(path),
-                "active": name == active.name,
+                "active": path.resolve() == active.path.resolve(),
                 "exists": path.exists(),
                 "size": _size(path),
                 "dirs": [str(d) for d in mappings.get(name, [])],
@@ -93,7 +93,9 @@ def list_cmd(
         if r["dirs"]:
             line += f"  [{', '.join(r['dirs'])}]"
         print(line)
-    if not active.path.exists() and active.name != DEFAULT_KB:
+    if active.name is None:
+        print(f"\nActive database: {active.path} ({active.reason})")
+    elif not active.path.exists() and active.name != DEFAULT_KB:
         print(f"\nActive KB '{active.name}' does not exist yet — run: emdx kb create {active.name}")
 
 
@@ -103,7 +105,7 @@ def current(
 ) -> None:
     """Show the active knowledge base and why it was chosen."""
     try:
-        sel = resolve_kb()
+        sel = resolve_database(require_exists=False)
     except KnowledgeBaseError as e:
         _fail(str(e))
         raise
@@ -119,7 +121,7 @@ def current(
             )
         )
         return
-    print(f"Knowledge base: {sel.name}")
+    print(f"Knowledge base: {sel.name or '(database override)'}")
     print(f"Path:           {sel.path}")
     print(f"Reason:         {sel.reason}")
     if not sel.path.exists():

@@ -11,6 +11,7 @@ comparison, where k is the average number of similar documents per doc.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from collections.abc import Callable
@@ -19,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..config.constants import EMDX_CONFIG_DIR
-from ..database import db
+from ..database import DatabaseConnection, db
 from .clustering import require_sklearn as _require_sklearn
 
 logger = logging.getLogger(__name__)
@@ -70,12 +71,12 @@ class SimilarityService:
         """Initialize the similarity service.
 
         Args:
-            db_path: Optional database path (unused, kept for API compatibility)
+            db_path: Optional explicit database, otherwise follow the active connection.
         """
-        # Get cache directory - now using a directory instead of a single .pkl file
-        self._cache_dir = EMDX_CONFIG_DIR
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
-        self._cache_path = self._cache_dir / "similarity_cache"  # Directory, not .pkl file
+        self._connection = DatabaseConnection(db_path) if db_path is not None else None
+        self._cache_dir = EMDX_CONFIG_DIR / "similarity_cache"
+        self._database_identity = ""
+        self._cache_path = self._cache_dir
 
         # Index state
         self._vectorizer: TfidfVectorizer | None = None
@@ -86,6 +87,28 @@ class SimilarityService:
         self._doc_tags: list[set[str]] = []
         self._last_built: datetime | None = None
 
+    def _sync_database(self) -> None:
+        """Invalidate in-memory state when the effective database changes.
+
+        Legacy metadata at the cache root is intentionally never loaded: its
+        source database is unknown. Explicit paths and dev databases receive
+        the same isolation as named knowledge bases.
+        """
+        source = self._connection if self._connection is not None else db
+        identity = str(source.db_path.expanduser().resolve())
+        if identity == self._database_identity:
+            return
+        self._database_identity = identity
+        key = hashlib.sha256(identity.encode()).hexdigest()
+        self._cache_path = self._cache_dir / key
+        self._vectorizer = None
+        self._tfidf_matrix = None
+        self._doc_ids = []
+        self._doc_titles = []
+        self._doc_projects = []
+        self._doc_tags = []
+        self._last_built = None
+
     def _load_cache(self) -> bool:
         """Load the cached index if it exists.
 
@@ -95,6 +118,7 @@ class SimilarityService:
         Returns:
             True if cache was loaded successfully, False otherwise
         """
+        self._sync_database()
         metadata_path = self._cache_path / "metadata.json"
         matrix_path = self._cache_path / "tfidf_matrix.npz"
 
@@ -105,6 +129,9 @@ class SimilarityService:
             # Load metadata from JSON
             with open(metadata_path, encoding="utf-8") as f:
                 cache_data = json.load(f)
+
+            if cache_data.get("database_identity") != self._database_identity:
+                return False
 
             self._doc_ids = cache_data["doc_ids"]
             self._doc_titles = cache_data["doc_titles"]
@@ -182,6 +209,7 @@ class SimilarityService:
 
         # Prepare metadata (all JSON-serializable)
         cache_data = {
+            "database_identity": self._database_identity,
             "doc_ids": self._doc_ids,
             "doc_titles": self._doc_titles,
             "doc_projects": self._doc_projects,
@@ -205,6 +233,7 @@ class SimilarityService:
 
     def _ensure_index(self) -> None:
         """Ensure the index is loaded, building if necessary."""
+        self._sync_database()
         if self._vectorizer is None:
             if not self._load_cache():
                 self.build_index()
@@ -219,11 +248,13 @@ class SimilarityService:
             Statistics about the built index
         """
         _require_sklearn()
+        self._sync_database()
         if not force and self._vectorizer is not None:
             return self.get_index_stats()
 
         # Fetch all documents from database
-        with db.get_connection() as conn:
+        source = self._connection if self._connection is not None else db
+        with source.get_connection() as conn:
             cursor = conn.cursor()
 
             # Get all active documents with their content
@@ -418,6 +449,7 @@ class SimilarityService:
         Returns:
             Statistics about the index
         """
+        self._sync_database()
         cache_size = 0
         if self._cache_path.exists() and self._cache_path.is_dir():
             # Sum up all files in the cache directory
