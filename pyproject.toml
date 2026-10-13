@@ -54,7 +54,7 @@ wiki = ["python-igraph", "leidenalg"]
 [tool.poetry.group.ml.dependencies]
 scikit-learn = "^1.8.0"
 datasketch = ">=1.6,<3.0"
-fastembed = "^0.8.0"
+fastembed = ">=0.8,<0.10"
 sentence-transformers = ">=5.4,<7.0"
 numpy = "^2.4.2"
 
